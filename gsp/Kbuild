@@ -1,0 +1,52 @@
+#
+# Configurations
+#
+CONFIG_UNISOC_GSP := m
+CONFIG_DRM_SPRD_GSP_IPC_TRUSTY := n
+
+#
+# Source List
+#
+sprd-gsp-y := \
+	gsp_coef_cal.o \
+	gsp_core.o \
+	gsp_dev.o \
+	gsp_interface.o \
+	gsp_kcfg.o \
+	gsp_layer.o \
+	gsp_sync.o \
+	gsp_sysfs.o \
+	gsp_workqueue.o
+
+INCLUDE_SUBDIR = \
+	$(src)/gsp_interface/Kbuild \
+	$(src)/gsp_r8p0/Kbuild \
+	$(src)/gsp_r9p0/Kbuild
+
+include $(INCLUDE_SUBDIR)
+
+#
+# Build Options
+#
+ccflags-y := \
+	-I$(srctree)/include/linux \
+	-I$(srctree)/drivers/staging/android \
+	-I$(src)
+
+subdir-ccflags-y += -I$(srctree)/$(src)/../../../devfreq/apsys/
+
+#
+# Conditional Compilation
+#
+ifneq ($(CONFIG_UNISOC_GSP),n)
+    ccflags-y += -DCONFIG_UNISOC_GSP=$(CONFIG_UNISOC_GSP)
+endif
+
+ifeq ($(CONFIG_DRM_SPRD_GSP_IPC_TRUSTY),y)
+    sprd-gsp-y += gsp_ipc_trusty.o
+endif
+
+#
+# Final Objects
+#
+obj-$(CONFIG_UNISOC_GSP) := sprd-gsp.o
