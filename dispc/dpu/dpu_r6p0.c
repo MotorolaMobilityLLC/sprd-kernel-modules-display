@@ -3050,6 +3050,15 @@ static void dpu_enhance_reload(struct dpu_context *ctx)
 		pr_info("enhance lut3d reload\n");
 	}
 
+	if (enhance->enhance_en & BIT(9)) {
+		DPU_REG_WR(ctx->base + REG_CABC_CFG0, cabc_cfg0);
+		DPU_REG_WR(ctx->base + REG_CABC_CFG1, cabc_cfg1);
+		DPU_REG_WR(ctx->base + REG_CABC_CFG2, cabc_cfg2);
+		DPU_REG_WR(ctx->base + REG_CABC_CFG3, cabc_cfg3);
+		DPU_REG_WR(ctx->base + REG_CABC_CFG4, cabc_cfg4);
+		pr_info("enhance cabc cfg reload\n");
+	}
+
 	if (enhance->enhance_en & BIT(10)) {
 		ud = &enhance->ud_copy;
 		DPU_REG_WR(ctx->base + REG_UD_CFG0, ud->u0 | (ud->u1 << 16) | (ud->u2 << 24));
