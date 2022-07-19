@@ -3,6 +3,8 @@
 #
 CONFIG_UNISOC_DISP := m
 CONFIG_DRM_SPRD_DPU0 := y
+CONFIG_DRM_SPRD_DP := y
+CONFIG_DRM_SPRD_DPU1 := y
 CONFIG_DRM_SPRD_DSI := y
 CONFIG_TRUSTY_VIRTIO_IPC := y
 CONFIG_DRM_SPRD_DUMMY := n
@@ -18,8 +20,10 @@ sprd-drm-y := \
 	sprd_bl.o \
 	sprd_corner.o \
 	sprd_crtc.o \
+	sprd_dp.o \
 	sprd_dphy.o \
 	sprd_dpu.o \
+	sprd_dpu1.o \
 	sprd_drm.o \
 	sprd_dsi_panel.o \
 	sprd_dsi.o \
@@ -29,6 +33,7 @@ sprd-drm-y := \
 INCLUDE_SUBDIR = \
 	$(src)/dphy/Kbuild \
 	$(src)/dpu/Kbuild \
+	$(src)/dp/Kbuild \
 	$(src)/dsi/Kbuild \
 	$(src)/pike2/Kbuild \
 	$(src)/qogirl6/Kbuild \
@@ -58,6 +63,14 @@ endif
 
 ifeq ($(CONFIG_DRM_SPRD_DPU0),y)
     ccflags-y += -DCONFIG_DRM_SPRD_DPU0=$(CONFIG_DRM_SPRD_DPU0)
+endif
+
+ifeq ($(CONFIG_DRM_SPRD_DP),y)
+    ccflags-y += -DCONFIG_DRM_SPRD_DP=$(CONFIG_DRM_SPRD_DP)
+endif
+
+ifeq ($(CONFIG_DRM_SPRD_DPU1),y)
+    ccflags-y += -DCONFIG_DRM_SPRD_DPU1=$(CONFIG_DRM_SPRD_DPU1)
 endif
 
 ifeq ($(CONFIG_DRM_SPRD_DSI),y)

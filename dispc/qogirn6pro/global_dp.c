@@ -110,8 +110,8 @@ static int dp_glb_parse_dt(struct dp_context *ctx,
 		if (ret < 0 && ret != -EBUSY)
 			pr_err("gpio_request_one GPIO_EN2 failed!\n");
 	}
-	ctx->dpu1_dpi_reg = ioremap_nocache(BASE_REG_DPU1_DPI, REG_DPU1_DPI_SIZE);
-	ctx->tca_base = ioremap_nocache(BASE_REG_TCA, REG_TCA_SIZE);
+	ctx->dpu1_dpi_reg = ioremap(BASE_REG_DPU1_DPI, REG_DPU1_DPI_SIZE);
+	ctx->tca_base = ioremap(BASE_REG_TCA, REG_TCA_SIZE);
 
 	return 0;
 }

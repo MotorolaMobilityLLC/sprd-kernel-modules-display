@@ -57,6 +57,7 @@ struct sprd_plane {
 };
 
 struct sprd_plane *sprd_plane_init(struct drm_device *drm,
-					struct sprd_crtc_capability *cap);
+					struct sprd_crtc_capability *cap,
+					uint32_t possible_crtcs);
 
 #endif /* _SPRD_PLANE_H_ */

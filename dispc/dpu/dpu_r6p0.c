@@ -3,6 +3,7 @@
  * Copyright (C) 2020 Unisoc Inc.
  */
 
+#include <drm/drm_vblank.h>
 #include <linux/apsys_dvfs.h>
 #include <linux/backlight.h>
 #include <linux/dma-buf.h>
@@ -243,7 +244,7 @@
 #define BIT_DPU_INT_DONE				BIT(0)
 #define BIT_DPU_INT_TE					BIT(1)
 #define BIT_DPU_INT_ERR					BIT(2)
-#define BIT_DPU_INT_VSYNC_EN				BIT(4)
+#define BIT_DPU_INT_VSYNC				BIT(4)
 #define BIT_DPU_INT_WB_DONE_EN				BIT(5)
 #define BIT_DPU_INT_WB_ERR_EN				BIT(6)
 #define BIT_DPU_INT_FBC_PLD_ERR				BIT(7)
@@ -655,6 +656,8 @@ static u32 check_mmu_isr(struct dpu_context *ctx, u32 reg_val)
 static u32 dpu_isr(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
+	struct sprd_dpu *dpu =
+		(struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
 	u32 reg_val, int_mask = 0;
 	u32 mmu_reg_val, mmu_int_mask = 0;
 
@@ -666,7 +669,9 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		int_mask |= BIT_DPU_INT_ERR;
 
 	/* dpu vsync isr */
-	if (reg_val & BIT_DPU_INT_VSYNC_EN) {
+	if (reg_val & BIT_DPU_INT_VSYNC) {
+		drm_crtc_handle_vblank(&dpu->crtc->base);
+
 		/* write back feature */
 		if ((ctx->vsync_count == ctx->max_vsync_count) && ctx->wb_en)
 			schedule_work(&ctx->wb_work);
@@ -2115,7 +2120,7 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		/* enable dpu DONE  INT */
 		int_mask |= BIT_DPU_INT_DONE;
 		/* enable dpu dpi vsync */
-		int_mask |= BIT_DPU_INT_VSYNC_EN;
+		int_mask |= BIT_DPU_INT_VSYNC;
 		/* enable dpu TE INT */
 		int_mask |= BIT_DPU_INT_TE;
 		/* enable underflow err INT */
@@ -2151,12 +2156,12 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 
 static void enable_vsync(struct dpu_context *ctx)
 {
-	DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC_EN);
+	DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC);
 }
 
 static void disable_vsync(struct dpu_context *ctx)
 {
-	// DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC_EN);
+	// DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC);
 }
 
 static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
