@@ -33,7 +33,7 @@ ccflags-y := \
 	-I$(srctree)/drivers/staging/android \
 	-I$(src)
 
-subdir-ccflags-y += -I$(srctree)/$(src)/../../../devfreq/apsys/
+subdir-ccflags-y += -I$(srctree)/drivers/devfreq/apsys/
 
 #
 # Conditional Compilation
