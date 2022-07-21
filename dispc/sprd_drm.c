@@ -552,7 +552,7 @@ static int sprd_drm_pm_suspend(struct device *dev)
 
 	DRM_INFO("%s()\n", __func__);
 
-	if (boot_mode_check("androidboot.mode=autotest")) {
+	if (boot_mode_check("sprdboot.mode=autotest")) {
 		if (is_suspend)
 			return 0;
 
@@ -598,7 +598,7 @@ static int sprd_drm_pm_resume(struct device *dev)
 		return 0;
 	}
 
-	if (boot_mode_check("androidboot.mode=autotest")) {
+	if (boot_mode_check("sprdboot.mode=autotest")) {
 		DRM_WARN("BBAT mode not need resume\n");
 		return 0;
 	}
@@ -657,7 +657,7 @@ static int __init sprd_drm_init(void)
 	int ret;
 	bool cali_mode;
 
-	cali_mode = boot_mode_check("androidboot.mode=cali");
+	cali_mode = boot_mode_check("sprdboot.mode=cali");
 	if (cali_mode) {
 		DRM_WARN("Calibration Mode! Don't register sprd drm driver");
 		return 0;
