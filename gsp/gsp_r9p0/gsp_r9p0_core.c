@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/sprd_iommu.h>
 #include <linux/types.h>
+#include <linux/trusty/smcall.h>
 #include <drm/gsp_r9p0_cfg.h>
 #include "../gsp_core.h"
 #include "../gsp_kcfg.h"
@@ -31,6 +32,7 @@
 #include "gsp_coef_cal.h"
 #include "../gsp_interface.h"
 #include "gsp_hdr_param.h"
+#include "../drivers/trusty/trusty.h"
 
 #define CORE_STS_NO_CHG 0
 #define CORE_FROM_2_TO_1 1
@@ -38,6 +40,12 @@
 
 static int zorder_used[R9P0_IMGL_NUM + R9P0_OSDL_NUM] = {0};
 int gsp_r9p0_layer_num;
+
+enum sprd_fw_attr {
+	FW_ATTR_NON_SECURE = 0,
+	FW_ATTR_SECURE,
+	FW_ATTR_PROTECTED,
+};
 
 static void print_image_layer_cfg(struct gsp_r9p0_img_layer *layer)
 {
@@ -611,6 +619,8 @@ int gsp_r9p0_core_init(struct gsp_core *core)
 		ret = -1;
 		return ret;
 	}
+
+	core->secure_init = false;
 
 	gsp_r9p0_core_capa_init(core);
 
@@ -1981,6 +1991,20 @@ int gsp_r9p0_core_trigger(struct gsp_core *c)
 		return GSP_K_CLK_CHK_ERR;
 	}
 
+	if (cfg->misc.secure_en == 1) {
+		if (c->secure_init == false) {
+			ret = trusty_fast_call32(NULL, SMC_FC_GSP_FW_SET_SECURITY, FW_ATTR_SECURE, 0, 0);
+			if (ret)
+				pr_err("Trusty gsp fastcall set firewall failed, ret = %d\n", ret);
+		}
+		c->secure_init = true;
+	} else if (c->secure_init == true) {
+		ret = trusty_fast_call32(NULL, SMC_FC_GSP_FW_SET_SECURITY, FW_ATTR_NON_SECURE, 0, 0);
+		if (ret)
+			pr_err("Trusty gsp fastcall clear firewall failed, ret = %d\n", ret);
+		c->secure_init = false;
+	}
+
 	gsp_r9p0_core_run(c);
 
 	return 0;
@@ -1989,8 +2013,23 @@ int gsp_r9p0_core_trigger(struct gsp_core *c)
 int gsp_r9p0_core_release(struct gsp_core *c)
 {
 	struct gsp_r9p0_core *core = NULL;
+	struct gsp_kcfg *kcfg = NULL;
+	struct gsp_r9p0_cfg *cfg = NULL;
 
 	core = (struct gsp_r9p0_core *)c;
+
+	if (gsp_core_verify(c)) {
+		GSP_ERR("gsp_r9p0 core trigger params error\n");
+		return -1;
+	}
+
+	kcfg = c->current_kcfg;
+	if (gsp_kcfg_verify(kcfg)) {
+		GSP_ERR("gsp_r9p0 trigger invalidate kcfg\n");
+		return -1;
+	}
+
+	cfg = (struct gsp_r9p0_cfg *)kcfg->cfg;
 
 	return 0;
 }
