@@ -179,7 +179,7 @@ static void dpu_charger_mode(void)
 		return;
 	}
 
-	mode = strstr(cmdline, "androidboot.mode=charger");
+	mode = strstr(cmdline, "sprdboot.mode=charger");
 
 	if (mode)
 		boot_charging = 1;
