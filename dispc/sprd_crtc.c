@@ -106,8 +106,11 @@ static int sprd_crtc_atomic_check(struct drm_crtc *crtc,
 				     struct drm_atomic_state *state)
 {
 	struct sprd_crtc *sprd_crtc = to_sprd_crtc(crtc);
-	/* state->crtcs->state ? old_state? new_state? */
-	struct drm_crtc_state *crtc_state = state->crtcs->state;
+	unsigned int crtc_index = drm_crtc_index(crtc);
+	struct drm_crtc_state *crtc_state = state->crtcs[crtc_index].new_state;
+
+	if (!crtc_state)
+		return 0;
 
 	if (!crtc_state->enable)
 		return 0;
