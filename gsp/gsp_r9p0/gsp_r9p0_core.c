@@ -33,6 +33,7 @@
 #include "../gsp_interface.h"
 #include "gsp_hdr_param.h"
 #include "../drivers/trusty/trusty.h"
+#include "gsp_r9p0_dvfs.h"
 
 #define CORE_STS_NO_CHG 0
 #define CORE_FROM_2_TO_1 1
@@ -631,6 +632,8 @@ int gsp_r9p0_core_init(struct gsp_core *core)
 		gsp_r9p0_core_cfg_init(
 			(struct gsp_r9p0_cfg *)kcfg->cfg, kcfg);
 	}
+
+	gsp_dvfs_task_init(c);
 
 	return ret;
 }
@@ -1252,6 +1255,7 @@ static void gsp_r9p0_core_misc_reg_set(struct gsp_core *core,
 			struct gsp_r9p0_cfg *cfg)
 {
 	void __iomem *base = NULL;
+	struct gsp_r9p0_core *c = (struct gsp_r9p0_core *)core;
 	struct R9P0_WORK_AREA_XY_REG  work_area_xy_value;
 	struct R9P0_WORK_AREA_XY_REG work_area_xy_mask;
 	struct R9P0_WORK_AREA_SIZE_REG work_area_size_value;
@@ -1260,6 +1264,8 @@ static void gsp_r9p0_core_misc_reg_set(struct gsp_core *core,
 	struct R9P0_GSP_MOD_CFG_REG gsp_mod_cfg_mask;
 
 	base = core->base;
+
+	gsp_dvfs_tasklet_schedule(c, cfg->misc.work_freq);
 
 	gsp_mod_cfg_value.value = 0x0;
 	gsp_mod_cfg_value.CORE_NUM = cfg->misc.core_num;
@@ -2030,6 +2036,8 @@ int gsp_r9p0_core_release(struct gsp_core *c)
 	}
 
 	cfg = (struct gsp_r9p0_cfg *)kcfg->cfg;
+
+	gsp_dvfs_tasklet_schedule(core, GSP_R9P0_FREQ_256M);
 
 	return 0;
 }

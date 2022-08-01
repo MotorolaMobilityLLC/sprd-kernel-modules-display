@@ -18,4 +18,5 @@
 #
 #
 
-sprd-gsp-y += gsp_r9p0/gsp_r9p0_core.o
+sprd-gsp-y += gsp_r9p0/gsp_r9p0_core.o \
+	gsp_r9p0/gsp_r9p0_dvfs.o

@@ -8,6 +8,7 @@
 
 #include <linux/device.h>
 #include <linux/list.h>
+#include<linux/interrupt.h>
 #include <drm/gsp_cfg.h>
 #include "gsp_core.h"
 #include "gsp_debug.h"
@@ -30,6 +31,7 @@ struct gsp_r9p0_core {
 	struct clk *gsp_dpuvsp_eb;
 	struct clk *gsp_clk;
 	struct clk *gsp_clk_parent;
+	struct tasklet_struct dvfs_task;
 	/* module ctl reg base, virtual	0x31100000 */
 	void __iomem *gsp_ctl_reg_base;
 };
