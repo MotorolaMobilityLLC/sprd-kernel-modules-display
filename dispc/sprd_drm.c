@@ -165,35 +165,46 @@ static void sprd_commit_work(struct work_struct *work)
 static int sprd_atomic_wait_last_cleanup_done(struct drm_device *drm,
 						struct drm_atomic_state *state)
 {
-	struct drm_crtc *crtc;
-	struct drm_crtc_commit *commit, *last_commit = NULL;
 	int i, ret;
+	struct drm_connector *connector;
+	struct drm_connector_state *old_conn_state;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state;
+	struct drm_plane *plane;
+	struct drm_plane_state *old_plane_state;
+	struct drm_crtc_commit *commit;
 
-	drm_for_each_crtc(crtc, drm) {
-		i = 0;
-		last_commit = NULL;
-		spin_lock(&crtc->commit_lock);
-		list_for_each_entry(commit, &crtc->commit_list, commit_entry) {
-			if (i == 1) {
-				last_commit = drm_crtc_commit_get(commit);
-				break;
-			}
+	for_each_old_crtc_in_state(state, crtc, old_crtc_state, i) {
+		commit = old_crtc_state->commit;
 
-			i++;
-		}
-
-		spin_unlock(&crtc->commit_lock);
-		if (!last_commit)
+		if (!commit)
 			continue;
 
-		ret = wait_for_completion_interruptible(&last_commit->cleanup_done);
-
-		drm_crtc_commit_put(last_commit);
-		if (ret) {
-			DRM_ERROR("[CRTC:%d:%s] wait last commit cleanup_done timed out\n",
-				   crtc->base.id, crtc->name);
+		ret = wait_for_completion_interruptible(&commit->cleanup_done);
+		if (ret)
 			return ret;
-		}
+	}
+
+	for_each_old_connector_in_state(state, connector, old_conn_state, i) {
+		commit = old_conn_state->commit;
+
+		if (!commit)
+			continue;
+
+		ret = wait_for_completion_interruptible(&commit->cleanup_done);
+		if (ret)
+			return ret;
+	}
+
+	for_each_old_plane_in_state(state, plane, old_plane_state, i) {
+		commit = old_plane_state->commit;
+
+		if (!commit)
+			continue;
+
+		ret = wait_for_completion_interruptible(&commit->cleanup_done);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -224,10 +235,6 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 	if (ret)
 		return ret;
 
-	ret = drm_atomic_helper_swap_state(state, true);
-	if (ret)
-		goto err;
-
 	/*
 	 * FIXME:
 	 * Because of system heave loads or other performance issues, the procedure which after
@@ -239,6 +246,10 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 	 * up done completed to avoid the problem declared above.
 	 */
 	ret = sprd_atomic_wait_last_cleanup_done(dev, state);
+	if (ret)
+		goto err;
+
+	ret = drm_atomic_helper_swap_state(state, false);
 	if (ret)
 		goto err;
 
