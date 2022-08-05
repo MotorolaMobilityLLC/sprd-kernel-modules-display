@@ -1,8 +1,30 @@
 #
 # Configurations
 #
+ifeq ($(BSP_MODULE_DISP_VERSION),s9863a)
 CONFIG_UNISOC_GSP := m
 CONFIG_DRM_SPRD_GSP_IPC_TRUSTY := n
+endif
+
+ifeq ($(BSP_MODULE_DISP_VERSION),ums512)
+CONFIG_UNISOC_GSP := m
+CONFIG_DRM_SPRD_GSP_IPC_TRUSTY := n
+endif
+
+ifeq ($(BSP_MODULE_DISP_VERSION),ums9230)
+CONFIG_UNISOC_GSP := m
+CONFIG_DRM_SPRD_GSP_IPC_TRUSTY := n
+endif
+
+ifeq ($(BSP_MODULE_DISP_VERSION),ums9610)
+CONFIG_UNISOC_GSP := m
+CONFIG_DRM_SPRD_GSP_IPC_TRUSTY := n
+endif
+
+ifeq ($(BSP_MODULE_DISP_VERSION),ums9620)
+CONFIG_UNISOC_GSP := m
+CONFIG_DRM_SPRD_GSP_IPC_TRUSTY := n
+endif
 
 #
 # Source List
@@ -44,6 +66,7 @@ endif
 
 ifeq ($(CONFIG_DRM_SPRD_GSP_IPC_TRUSTY),y)
     sprd-gsp-y += gsp_ipc_trusty.o
+    ccflags-y += -DCONFIG_DRM_SPRD_GSP_IPC_TRUSTY=$(CONFIG_DRM_SPRD_GSP_IPC_TRUSTY)
 endif
 
 #

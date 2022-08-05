@@ -20,7 +20,5 @@
 
 sprd-drm-y += \
 	qogirn6pro/global_dpu.o \
-	qogirn6pro/global_dp.o \
-	qogirn6pro/global_dpu1.o \
 	qogirn6pro/global_dsi.o \
 	qogirn6pro/global_dphy.o
