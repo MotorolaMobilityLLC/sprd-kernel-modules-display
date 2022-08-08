@@ -926,8 +926,7 @@ static void dpu_stop(struct dpu_context *ctx)
 
 static void dpu_run(struct dpu_context *ctx)
 {
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_LAY_REG_UPDATE);
+	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4) | BIT(0));
 	ctx->stopped = false;
 
 	pr_info("dpu run\n");
