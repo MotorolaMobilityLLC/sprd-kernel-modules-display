@@ -3,11 +3,12 @@
  * Copyright (C) 2020 Unisoc Inc.
  */
 
+#include <linux/compat.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_file.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_print.h>
-//#include <uapi/drm/sprd_drm_gsp.h>
+#include <uapi/drm/sprd_drm_gsp.h>
 #include "sprd_drm_gsp.h"
 
 #define DRM_IOCTL32_DEF(n, f)[DRM_##n] = {.fn = f, .name = #n}

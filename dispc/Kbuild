@@ -46,6 +46,7 @@ CONFIG_DRM_SPRD_DSI := y
 CONFIG_DRM_SPRD_DUMMY := n
 CONFIG_DRM_SPRD_WB_DEBUG := n
 CONFIG_UNISOC_GSP := m
+CONFIG_COMPAT := y
 endif
 
 
@@ -139,7 +140,7 @@ ifneq ($(CONFIG_TRUSTY_VIRTIO_IPC),n)
 endif
 
 ifeq ($(CONFIG_COMPAT),y)
-    # sprd-drm-y += sprd_ioc32.o
+    sprd-drm-y += sprd_ioc32.o
 endif
 
 include $(INCLUDE_SUBDIR)
