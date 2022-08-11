@@ -55,7 +55,6 @@ CONFIG_DRM_SPRD_DSI := y
 CONFIG_DRM_SPRD_DUMMY := n
 CONFIG_DRM_SPRD_WB_DEBUG := n
 CONFIG_UNISOC_GSP := m
-CONFIG_COMPAT := y
 endif
 
 
@@ -64,21 +63,11 @@ endif
 #
 sprd-drm-y := \
 	disp_lib.o \
-	sprd_bl.o \
-	sprd_corner.o \
-	sprd_crtc.o \
-	sprd_dphy.o \
-	sprd_dpu.o \
 	sprd_drm.o \
-	sprd_dsi_panel.o \
-	sprd_dsi.o \
 	sprd_gem.o \
 	sprd_plane.o
 
 INCLUDE_SUBDIR = \
-	$(src)/dphy/Kbuild \
-	$(src)/dpu/Kbuild \
-	$(src)/dsi/Kbuild \
 	$(src)/pike2/Kbuild \
 	$(src)/qogirl6/Kbuild \
 	$(src)/qogirn6pro/Kbuild \
@@ -86,7 +75,6 @@ INCLUDE_SUBDIR = \
 	$(src)/sharkl5/Kbuild \
 	$(src)/sharkl5pro/Kbuild \
 	$(src)/sharkle/Kbuild \
-	$(src)/sysfs/Kbuild
 
 #
 # Build Options
@@ -106,6 +94,14 @@ ifneq ($(CONFIG_UNISOC_DISP),n)
 endif
 
 ifeq ($(CONFIG_DRM_SPRD_DPU0),y)
+	sprd-drm-y += \
+		sprd_crtc.o \
+		sprd_dpu.o \
+		sprd_bl.o \
+		sprd_corner.o
+	INCLUDE_SUBDIR += \
+		$(src)/dpu/Kbuild \
+		$(src)/sysfs/Kbuild
     ccflags-y += -DCONFIG_DRM_SPRD_DPU0=$(CONFIG_DRM_SPRD_DPU0)
 endif
 
@@ -126,6 +122,13 @@ ifeq ($(CONFIG_DRM_SPRD_DPU1),y)
 endif
 
 ifeq ($(CONFIG_DRM_SPRD_DSI),y)
+	sprd-drm-y += \
+		sprd_dsi.o \
+		sprd_dphy.o \
+		sprd_dsi_panel.o
+	INCLUDE_SUBDIR += \
+		$(src)/dphy/Kbuild \
+		$(src)/dsi/Kbuild
     ccflags-y += -DCONFIG_DRM_SPRD_DSI=$(CONFIG_DRM_SPRD_DSI)
 endif
 

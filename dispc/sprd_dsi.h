@@ -217,7 +217,12 @@ struct sprd_dsi {
 	struct dsi_context ctx;
 };
 
+#ifdef CONFIG_DRM_SPRD_DSI
 void sprd_dsi_encoder_disable_force(struct drm_encoder *encoder);
+#else
+static inline void sprd_dsi_encoder_disable_force(struct drm_encoder *encoder) {}
+#endif
+
 int dsi_panel_set_dpms_mode(struct sprd_dsi *dsi);
 
 extern const struct dsi_core_ops dsi_ctrl_r1p0_ops;
