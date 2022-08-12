@@ -664,9 +664,14 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_INT_STS);
 	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
 
-	/* disable err interrupt */
-	if (reg_val & BIT_DPU_INT_ERR)
-		int_mask |= BIT_DPU_INT_ERR;
+	int_mask = reg_val & (BIT_DPU_INT_FBC_PLD_ERR |
+				BIT_DPU_INT_FBC_HDR_ERR | BIT_DPU_INT_ERR);
+	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, reg_val);
+	DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, int_mask);
+
+	mmu_int_mask |= check_mmu_isr(ctx, mmu_reg_val);
+	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
+	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu_int_mask);
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
@@ -746,24 +751,12 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	/* dpu afbc payload error isr */
-	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR) {
-		int_mask |= BIT_DPU_INT_FBC_PLD_ERR;
+	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR)
 		pr_err("dpu afbc payload error\n");
-	}
 
 	/* dpu afbc header error isr */
-	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR) {
-		int_mask |= BIT_DPU_INT_FBC_HDR_ERR;
+	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR)
 		pr_err("dpu afbc header error\n");
-	}
-
-	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, reg_val);
-	DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, int_mask);
-
-	mmu_int_mask |= check_mmu_isr(ctx, mmu_reg_val);
-
-	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
-	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu_int_mask);
 
 	return reg_val;
 }
