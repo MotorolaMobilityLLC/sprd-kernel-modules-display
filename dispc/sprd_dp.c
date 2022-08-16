@@ -378,8 +378,8 @@ static int sprd_dp_connector_atomic_check(struct drm_connector *connector,
 	struct drm_connector_state *old_con_state =
 		drm_atomic_get_old_connector_state(state, connector);
 	struct sprd_dp *dp = connector_to_dp(connector);
-	struct sprd_crtc *crtc = to_sprd_crtc(dp->encoder.crtc);
-	struct sprd_dpu *dpu = crtc->priv;
+	struct device *dpu_dev = sprd_disp_pipe_get_input(&dp->dev);
+	struct sprd_dpu *dpu = dev_get_drvdata(dpu_dev);
 	int ret;
 
 	if (is_hdr_metadata_different(old_con_state, new_con_state)) {
