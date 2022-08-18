@@ -13,6 +13,7 @@
 
 
 #define GSP_QOGIRN6PRO "qogirn6pro"
+#define GSP1_QOGIRN6PRO "r4p0-qogirn6pro"
 
 #define QOGIRN6PRO_DPU_VSP_EB_NAME	  ("clk_dpuvsp_eb")
 

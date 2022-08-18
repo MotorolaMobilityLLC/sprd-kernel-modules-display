@@ -217,6 +217,36 @@ static struct coef_entry *gsp_r9p0_coef_cache_hit_check(
 	return NULL;
 }
 
+static struct coef_entry *gsp_lite_r4p0_coef_cache_hit_check(
+		struct gsp_lite_r4p0_core *core,
+		uint16_t in_w, uint16_t in_h,
+		uint16_t out_w, uint16_t out_h,
+		uint16_t hor_tap, uint16_t ver_tap)
+{
+	static uint32_t total_cnt = 1;
+	static uint32_t hit_cnt = 1;
+	struct coef_entry *pos = NULL;
+
+	total_cnt++;
+	list_for_each_entry(pos, &core->coef_list, list) {
+		if (pos->in_w == in_w
+		   && pos->in_h == in_h
+		   && pos->out_w == out_w
+		   && pos->out_h == out_h
+		   && pos->hor_tap == hor_tap
+		   && pos->ver_tap == ver_tap) {
+			hit_cnt++;
+			GSP_DEBUG("hit, hit_ratio:%d percent.\n",
+				hit_cnt * 100 / total_cnt);
+
+			return pos;
+		}
+	}
+	GSP_DEBUG("miss.\n");
+
+	return NULL;
+}
+
 static inline void gsp_r8p0_coef_cache_move_to_head(
 		struct gsp_r8p0_core *core,
 		struct coef_entry *entry)
@@ -228,6 +258,14 @@ static inline void gsp_r8p0_coef_cache_move_to_head(
 static inline void gsp_r9p0_coef_cache_move_to_head(
 		struct gsp_r9p0_core *core,
 		struct coef_entry *entry)
+{
+	list_del(&entry->list);
+	list_add(&entry->list, &core->coef_list);
+}
+
+static inline void gsp_lite_r4p0_coef_cache_move_to_head(
+					struct gsp_lite_r4p0_core *core,
+					struct coef_entry *entry)
 {
 	list_del(&entry->list);
 	list_add(&entry->list, &core->coef_list);
@@ -581,3 +619,89 @@ uint32_t *gsp_r9p0_gen_block_scaler_coef(struct gsp_r9p0_core *core,
 	return entry->coef;
 }
 
+uint32_t *gsp_lite_r4p0_gen_block_scaler_coef(struct gsp_lite_r4p0_core *core,
+				 uint32_t in_sz_x,
+				 uint32_t in_sz_y,
+				 uint32_t ouf_sz_x,
+				 uint32_t ouf_sz_y,
+				 uint32_t hor_tap,
+				 uint32_t ver_tap)
+{
+	struct GSC_MEM_POOL pool = { 0 };
+	struct coef_entry *entry = NULL;
+	int32_t icnt = 0;
+	int32_t jcnt = 0;
+	int32_t (*coeff_array_hor)[MAX_TAP] = NULL;
+	int32_t (*coeff_array_ver)[MAX_TAP] = NULL;
+	int32_t (*scaling_reg_buf_hor)[MAX_TAP / 2] = NULL;
+	int32_t (*scaling_reg_buf_ver)[MAX_TAP / 2] = NULL;
+
+	if (core->cache_coef_init_flag == 1) {
+		entry = gsp_lite_r4p0_coef_cache_hit_check(core,
+			in_sz_x, in_sz_y, ouf_sz_x, ouf_sz_y, hor_tap, ver_tap);
+		if (entry) {
+			gsp_lite_r4p0_coef_cache_move_to_head(core, entry);
+			return entry->coef;
+		}
+	}
+
+	/* init pool and allocate static array */
+	if (!_InitPool(core->coef_buf_pool, MIN_POOL_SIZE, &pool)) {
+		GSP_ERR("GSP_Gen_Block_Ccaler_Coef: _InitPool error!\n");
+		return NULL;
+	}
+
+	coeff_array_hor = (int32_t (*)[MAX_TAP])
+		_Allocate((MAX_PHASE * MAX_TAP * sizeof(int32_t)), 2, &pool);
+	coeff_array_ver = (int32_t (*)[MAX_TAP])
+		_Allocate((MAX_PHASE * MAX_TAP * sizeof(int32_t)), 2, &pool);
+
+	calc_coef(8 - 2 * hor_tap, coeff_array_hor, in_sz_x, ouf_sz_x, &pool);
+	calc_coef(8 - 2 * ver_tap, coeff_array_ver, in_sz_y, ouf_sz_y, &pool);
+
+	scaling_reg_buf_hor = (int32_t (*)[MAX_TAP / 2])_Allocate
+		((MAX_PHASE * MAX_TAP / 2 * sizeof(int32_t)), 2, &pool);
+	scaling_reg_buf_ver = (int32_t (*)[MAX_TAP / 2])_Allocate
+		((MAX_PHASE * MAX_TAP / 2 * sizeof(int32_t)), 2, &pool);
+
+	for (icnt = 0; icnt < MAX_PHASE; icnt++)
+		for (jcnt = 0; jcnt < MAX_TAP; jcnt += 2)
+			scaling_reg_buf_hor[icnt][jcnt / 2] =
+			(coeff_array_hor[icnt][jcnt] & 0xFFFF) |
+			((coeff_array_hor[icnt][jcnt + 1] & 0xFFFF) << 16);
+
+	for (icnt = 0; icnt < MAX_PHASE; icnt++)
+		for (jcnt = 0; jcnt < MAX_TAP; jcnt += 2)
+			scaling_reg_buf_ver[icnt][jcnt / 2] =
+			(coeff_array_ver[icnt][jcnt] & 0xFFFF) |
+			((coeff_array_ver[icnt][jcnt + 1] & 0xFFFF) << 16);
+
+	if (core->cache_coef_init_flag == 1) {
+		entry = list_entry(core->coef_list.prev,
+				struct coef_entry, list);
+		if (entry->in_w == 0)
+			GSP_DEBUG("add.\n");
+		else
+			GSP_DEBUG("swap.\n");
+
+		if ((ulong)scaling_reg_buf_hor & MEM_OPS_ADDR_ALIGN_MASK
+			|| (ulong)&entry->coef[0] & MEM_OPS_ADDR_ALIGN_MASK) {
+			GSP_DEBUG("memcpy use none 8B alignment address.");
+		}
+		memcpy((void *)&entry->coef[0], (void *)scaling_reg_buf_hor,
+				MAX_PHASE * MAX_TAP * 4 / 2);
+
+		if ((ulong)scaling_reg_buf_ver & MEM_OPS_ADDR_ALIGN_MASK
+			|| (ulong)&entry->coef[64] & MEM_OPS_ADDR_ALIGN_MASK) {
+			GSP_DEBUG("memcpy use none 8B alignment address.");
+		}
+		memcpy((void *)&entry->coef[64], (void *)scaling_reg_buf_ver,
+			MAX_PHASE * MAX_TAP * 4 / 2);
+		gsp_lite_r4p0_coef_cache_move_to_head(core, entry);
+
+		LIST_SET_ENTRY_KEY(entry, in_sz_x, in_sz_y, ouf_sz_x, ouf_sz_y,
+			hor_tap, ver_tap);
+	}
+
+	return entry->coef;
+}

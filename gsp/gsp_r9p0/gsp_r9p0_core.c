@@ -840,6 +840,14 @@ int gsp_r9p0_core_alloc(struct gsp_core **core, struct device_node *node)
 	return 0;
 }
 
+int gsp_r9p0_core_devset(struct device *drm_gsp[GSP_MAX_NUM], struct device *gspdev)
+{
+	GSP_INFO("gsp_r9p0_core_devset 0");
+	drm_gsp[0] = gspdev;
+
+	return 0;
+}
+
 /* FIXME: because of whitelist this function temporarily unavailable*/
 /*
 static bool gsp_r9p0_core_checkpower(struct gsp_core *core)
@@ -1028,13 +1036,13 @@ static int gsp_r9p0_core_parse_clk(struct gsp_r9p0_core *core)
 	int status = 0;
 
 	core->gsp_eb = of_clk_get_by_name(core->common.node,
-			"clk_gsp_eb");
+			"clk_gsp0_eb");
 
 	core->gsp_dpuvsp_eb = of_clk_get_by_name(core->common.node,
 			"clk_dpuvsp_eb");
 
 	core->gsp_clk = of_clk_get_by_name(core->common.node,
-			"clk_gsp");
+			"clk_gsp0");
 
 	core->gsp_clk_parent = of_clk_get_by_name(core->common.node,
 			"clk_src_512m");

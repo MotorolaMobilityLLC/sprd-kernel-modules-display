@@ -47,6 +47,7 @@ sprd-gsp-y := \
 
 INCLUDE_SUBDIR = \
 	$(src)/gsp_interface/Kbuild \
+	$(src)/gsp_lite_r4p0/Kbuild \
 	$(src)/gsp_r8p0/Kbuild \
 	$(src)/gsp_r9p0/Kbuild
 

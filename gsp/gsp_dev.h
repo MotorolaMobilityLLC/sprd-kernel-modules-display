@@ -6,12 +6,12 @@
 #ifndef _GSP_DEV_H
 #define _GSP_DEV_H
 
+#include <drm/drm_drv.h>
+
 #include <linux/list.h>
 #include <linux/miscdevice.h>
 #include <linux/device.h>
 #include <linux/fs.h>
-
-#include <drm/drm_drv.h>
 
 struct gsp_core;
 struct gsp_dev;
@@ -26,11 +26,12 @@ struct gsp_sync_timeline;
 #define GSP_MAX_IO_CNT(gsp)	((gsp)->io_cnt)
 
 #define GSP_DEVICE_NAME		"sprd-gsp"
+#define GSP_MAX_NUM 2
 
 struct sprd_drm {
-	struct drm_device *drm;
-	struct device *gsp_dev;
 	struct drm_atomic_state *state;
+	struct drm_device *drm;
+	struct device *gsp_dev[GSP_MAX_NUM];
 };
 
 struct gsp_dev {

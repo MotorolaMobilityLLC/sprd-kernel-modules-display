@@ -93,7 +93,7 @@ int gsp_interface_attach(struct gsp_interface **interface, struct gsp_dev *gsp)
 		}
 		memset(*interface, 0, sizeof(struct gsp_interface_sharkl5pro));
 		(*interface)->ops = &gsp_interface_sharkl5pro_ops;
-	} else if (strcmp(GSP_QOGIRN6PRO, name) == 0) {
+	} else if (strcmp(GSP_QOGIRN6PRO, name) == 0 || (strcmp(GSP1_QOGIRN6PRO, name) == 0)) {
 		*interface = kzalloc(sizeof(struct gsp_interface_qogirn6pro),
 					GFP_KERNEL);
 		if (IS_ERR_OR_NULL(*interface)) {
