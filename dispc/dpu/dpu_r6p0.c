@@ -809,8 +809,11 @@ static int dpu_wait_update_done(struct dpu_context *ctx)
 	int rc;
 
 	/* clear the event flag before wait */
+	ctx->evt_update = false;
 	if (!ctx->stopped)
-		ctx->evt_update = false;
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
+	else
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0) | BIT(4));
 
 	/* wait for reg update done interrupt */
 	rc = wait_event_interruptible_timeout(ctx->wait_queue, ctx->evt_update,
@@ -1009,7 +1012,6 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 	}
 
 	if (debug || ctx->wb_size_changed) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
 		dpu_wait_update_done(ctx);
 		ctx->wb_size_changed = false;
 	}
@@ -1027,7 +1029,6 @@ static void dpu_wb_flip(struct dpu_context *ctx)
 	dpu_clean_all(ctx);
 	dpu_layer(ctx, &ctx->wb_layer);
 
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
 	dpu_wait_update_done(ctx);
 	pr_debug("write back flip\n");
 }
@@ -1104,7 +1105,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
 	}
 
-	ctx->max_vsync_count = 0;
+	ctx->max_vsync_count = 4;
 	ctx->wb_configed = true;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
@@ -1706,7 +1707,6 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
 		ctx->stopped = false;
 	} else if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_LAY_REG_UPDATE);
 		dpu_wait_update_done(ctx);
 	}
 }
@@ -1881,9 +1881,6 @@ static int dpu_vrr(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_H_TIMING), reg_val);
 	}
 	sprd_dsi_vrr_timing(dpu->dsi);
-	reg_val = DPU_REG_RD(ctx->base + REG_DPU_CTRL);
-	reg_val |= BIT(0) | BIT(4);
-	DPU_REG_WR(ctx->base + REG_DPU_CTRL, reg_val);
 	dpu_wait_update_done(ctx);
 	ctx->stopped = false;
 	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
@@ -2040,7 +2037,6 @@ static void dpu_flip(struct dpu_context *ctx,
 				dpu_wait_all_update_done(ctx);
 				enhance->first_frame = false;
 			} else {
-				DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_LAY_REG_UPDATE);
 				if ((!layer->secure_en) && secure_val && (!ctx->fastcall_en)) {
 					dpu_wait_update_done(ctx);
 					ctx->tos_msg->cmd = TA_FIREWALL_CLR;
