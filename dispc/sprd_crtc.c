@@ -351,6 +351,7 @@ static int sprd_crtc_create_properties(struct sprd_crtc *crtc, const char *versi
 	struct drm_property *prop;
 	struct drm_property_blob *blob;
 	size_t blob_size;
+	struct drm_mode_config *config;
 
 	blob_size = strlen(version) + 1;
 
@@ -395,6 +396,9 @@ static int sprd_crtc_create_properties(struct sprd_crtc *crtc, const char *versi
 		return -ENOMEM;
 	drm_object_attach_property(&crtc->base.base, prop, 0);
 	crtc->frame_rate_property = prop;
+
+	config = &crtc->base.dev->mode_config;
+	drm_object_attach_property(&crtc->base.base, config->ctm_property, 0);
 
 	return 0;
 }
