@@ -1051,7 +1051,13 @@ static void dpu_wb_work_func(struct work_struct *data)
 		return;
 	}
 
-	if (ctx->wb_en && (ctx->vsync_count > ctx->max_vsync_count))
+	if (ctx->wb_pending) {
+		up(&ctx->lock);
+		pr_warn("display mode is going on changing\n");
+		return;
+	}
+
+	if ((ctx->wb_en && (ctx->vsync_count > ctx->max_vsync_count)) || ctx->wb_size_changed)
 		dpu_wb_trigger(ctx, 1, false);
 	else if (!ctx->wb_en)
 		dpu_wb_flip(ctx);
@@ -3173,6 +3179,8 @@ static void dpu_sr_config(struct dpu_context *ctx)
 		DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
 	else
 		DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+
+	ctx->wb_pending = false;
 }
 
 static int dpu_modeset(struct dpu_context *ctx,
@@ -3200,6 +3208,8 @@ static int dpu_modeset(struct dpu_context *ctx,
 			scale_cfg->need_scale = true;
 		else
 			scale_cfg->need_scale = false;
+
+		ctx->wb_pending = true;
 	}
 
 	if (state->frame_rate_change) {

@@ -170,6 +170,7 @@ struct dpu_context {
 	void *wb_addr_v;
 	size_t wb_buf_size;
 	bool wb_configed;
+	bool wb_pending;
 
 	/* te check parameters */
 	wait_queue_head_t te_wq;
