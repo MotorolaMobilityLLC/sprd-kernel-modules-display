@@ -1163,7 +1163,7 @@ static ssize_t hsv_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0 || count > attr->size)
 		return -EINVAL;
 
 	down(&ctx->lock);

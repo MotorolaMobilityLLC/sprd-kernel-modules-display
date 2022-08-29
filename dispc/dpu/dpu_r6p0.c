@@ -13,7 +13,6 @@
 #include <linux/workqueue.h>
 #include <linux/dma-mapping.h>
 #include <linux/trusty/smcall.h>
-#include <asm/cacheflush.h>
 #include "sprd_bl.h"
 #include "sprd_dpu.h"
 #include "dpu_enhance_param.h"
@@ -2486,8 +2485,11 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 				p32 += 4;
 			}
 		}
+		DPU_REG_WR(ctx->base + REG_HSV_LUT_BASE_ADDR, enhance->dpu_luts_paddr +
+			DPU_LUTS_HSV_OFFSET + enhance->hsv_lut_index * 4096);
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(1));
-		pr_info("enhance hsv set\n");
+		DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(2) | BIT(0));
+		pr_info("enhance hsv_lut update\n");
 		break;
 	case ENHANCE_CFG_ID_CM:
 		memcpy(&enhance->cm_copy, param, sizeof(enhance->cm_copy));
@@ -2566,8 +2568,12 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 				gamma->b[j];
 			p32 += 2;
 		}
+		DPU_REG_WR(ctx->base + REG_GAMMA_LUT_BASE_ADDR,
+			enhance->dpu_luts_paddr + DPU_LUTS_GAMMA_OFFSET +
+			enhance->gamma_lut_index * 4096);
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(3) | BIT(5));
-		pr_info("enhance gamma set\n");
+		DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(1) | BIT(0));
+		pr_info("enhance gamma_lut update\n");
 		break;
 	case ENHANCE_CFG_ID_EPF:
 		memcpy(&enhance->epf_copy, param, sizeof(enhance->epf_copy));
@@ -2580,9 +2586,6 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		memcpy(&enhance->rgb_arr_copy, param, sizeof(enhance->rgb_arr_copy));
 		lut3d = &enhance->rgb_arr_copy;
 
-		if (lut3d_table_index == 8)
-			lut3d_table_index = 0;
-
 		p32 = (u32 *)enhance->lut_lut3d_vaddr +
 			lut3d_table_index + enhance->lut3d_index * 6 * 1024;
 		tmp32 = p32;
@@ -2591,8 +2594,19 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 			p32 += 8;
 		}
 		lut3d_table_index++;
-		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(4));
-		pr_info("enhance lut3d set\n");
+		/*
+		 * In LUT3D mode, the lut tables need to be written to ddr in 8 times.
+		 * The REG_THREED_LUT_BASE_ADDR need to be setted when the lut tables are all
+		 * written.
+		 */
+		if (lut3d_table_index == 8) {
+			lut3d_table_index = 0;
+			DPU_REG_WR(ctx->base + REG_THREED_LUT_BASE_ADDR, enhance->dpu_luts_paddr +
+				DPU_LUTS_LUT3D_OFFSET + enhance->lut3d_index * 4096 * 6);
+			DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(4));
+			DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(3) | BIT(0));
+		}
+		pr_info("enhance lut3d lut update\n");
 		enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 		break;
 	case ENHANCE_CFG_ID_CABC_MODE:
