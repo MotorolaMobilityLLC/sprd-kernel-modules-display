@@ -198,6 +198,16 @@ static ssize_t gen_write_store(struct device *dev,
 	for (i = 0; i < sysfs->input_len; i++)
 		pr_info("param[%d] = 0x%x\n", i, sysfs->input_param[i]);
 
+	/*
+	 * lcd can config te frequency by modifing panel's 0x35 register
+	 * if 0x35 register setted to 0x1, te may occur per line by driver ic.
+	 * too much te signal may cause too much interrupts and cause interrupt storm.
+	 */
+	if (sysfs->input_param[0] == 0x35) {
+		pr_info("modify te register may cause too much te interrupts\n");
+		return count;
+	}
+
 	mipi_dsi_generic_write(dsi->slave, sysfs->input_param, sysfs->input_len);
 
 	return count;
@@ -317,6 +327,16 @@ static ssize_t dcs_write_store(struct device *dev,
 
 	for (i = 0; i < sysfs->input_len; i++)
 		pr_info("param[%d] = 0x%x\n", i, sysfs->input_param[i]);
+
+	/*
+	 * lcd can config te frequency by modifing panel's 0x35 register
+	 * if 0x35 register setted to 0x1, te may occur per line by driver ic.
+	 * too much te signal may cause too much interrupts and cause interrupt storm.
+	 */
+	if (sysfs->input_param[0] == 0x35) {
+		pr_info("modify te register may cause too much te interrupts\n");
+		return count;
+	}
 
 	mipi_dsi_dcs_write_buffer(dsi->slave, sysfs->input_param, sysfs->input_len);
 

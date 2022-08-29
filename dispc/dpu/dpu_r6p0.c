@@ -578,7 +578,6 @@ struct dpu_enhance {
 	u8 hsv_lut_index;
 	u8 lut3d_index;
 	int cabc_state;
-	struct scale_cfg scale_copy;
 	struct cm_cfg cm_copy;
 	struct slp_cfg slp_copy;
 	struct gamma_lut gamma_copy;
@@ -2314,11 +2313,6 @@ static void dpu_enhance_backup(struct dpu_context *ctx, u32 id, void *param)
 		enhance->enhance_en &= ~(*p);
 		pr_info("enhance module disable backup: 0x%x\n", *p);
 		break;
-	case ENHANCE_CFG_ID_SCL:
-		memcpy(&enhance->scale_copy, param, sizeof(enhance->scale_copy));
-		enhance->enhance_en |= BIT(13);
-		pr_info("enhance scaling backup\n");
-		break;
 	case ENHANCE_CFG_ID_HSV:
 		memcpy(&enhance->hsv_lut_copy, param, sizeof(enhance->hsv_lut_copy));
 		enhance->enhance_en |= BIT(1);
@@ -2437,7 +2431,6 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct scale_cfg *scale;
 	struct cm_cfg cm;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
@@ -2470,14 +2463,6 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		p32 = param;
 		DPU_REG_CLR(ctx->base + REG_DPU_ENHANCE_CFG, *p32);
 		pr_info("enhance module disable: 0x%x\n", *p32);
-		break;
-	case ENHANCE_CFG_ID_SCL:
-		memcpy(&enhance->scale_copy, param, sizeof(enhance->scale_copy));
-		scale = &enhance->scale_copy;
-		DPU_REG_WR(ctx->base + REG_BLEND_SIZE, (scale->in_h << 16) | scale->in_w);
-		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(13));
-		DPU_REG_SET(ctx->base + REG_SCL_EN, BIT(0));
-		pr_info("enhance scaling: %ux%u\n", scale->in_w, scale->in_h);
 		break;
 	case ENHANCE_CFG_ID_HSV:
 		memcpy(&enhance->hsv_offset_copy, param, sizeof(enhance->hsv_offset_copy));
@@ -2736,7 +2721,6 @@ static void dpu_luts_copyto_user(u32 *param, struct dpu_enhance *enhance)
 static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct scale_cfg *scale;
 	struct epf_cfg *epf;
 	struct slp_cfg *slp;
 	struct cm_cfg *cm;
@@ -2756,13 +2740,6 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 		p32 = param;
 		*p32 = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 		pr_info("enhance module enable get\n");
-		break;
-	case ENHANCE_CFG_ID_SCL:
-		scale = param;
-		val = DPU_REG_RD(ctx->base + REG_BLEND_SIZE);
-		scale->in_w = val & 0xffff;
-		scale->in_h = val >> 16;
-		pr_info("enhance scaling get\n");
 		break;
 	case ENHANCE_CFG_ID_EPF:
 		epf = param;
@@ -2986,7 +2963,6 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 static void dpu_enhance_reload(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct scale_cfg *scale;
 	struct cm_cfg *cm;
 	struct slp_cfg *slp;
 	struct epf_cfg *epf;
@@ -2999,14 +2975,6 @@ static void dpu_enhance_reload(struct dpu_context *ctx)
 		*p16++ = slp_lut[i];
 
 	DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(4));
-
-	if (enhance->enhance_en & BIT(13)) {
-		scale = &enhance->scale_copy;
-		DPU_REG_WR(ctx->base + REG_BLEND_SIZE, (scale->in_h << 16) | scale->in_w);
-		DPU_REG_SET(ctx->base + REG_SCL_EN, BIT(0));
-		pr_info("enhance scaling from %ux%u to %ux%u\n", scale->in_w,
-			scale->in_h, ctx->vm.hactive, ctx->vm.vactive);
-	}
 
 	if (enhance->enhance_en & BIT(0)) {
 		epf = &enhance->epf_copy;
