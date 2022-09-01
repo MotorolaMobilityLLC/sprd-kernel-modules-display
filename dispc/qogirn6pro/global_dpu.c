@@ -347,6 +347,18 @@ static void dpu_glb_enable(struct dpu_context *ctx)
 
 static void dpu_glb_disable(struct dpu_context *ctx)
 {
+	if (!IS_ERR(vau_reset)) {
+		reset_control_assert(vau_reset);
+		udelay(10);
+		reset_control_deassert(vau_reset);
+	}
+
+	if (!IS_ERR(ctx_reset)) {
+		reset_control_assert(ctx_reset);
+		udelay(10);
+		reset_control_deassert(ctx_reset);
+	}
+
 	clk_disable_unprepare(clk_dpuvsp_disp_eb);
 	clk_disable_unprepare(clk_dpuvsp_eb);
 }
