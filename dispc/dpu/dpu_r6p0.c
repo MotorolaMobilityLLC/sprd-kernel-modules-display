@@ -1970,6 +1970,8 @@ static void dpu_scaling(struct dpu_context *ctx,
 					DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
 				} else {
 					DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+					layer_state->dst_w = layer_state->src_w;
+					layer_state->dst_h = layer_state->src_h;
 				}
 			}
 		} else {
