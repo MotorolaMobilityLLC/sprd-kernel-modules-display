@@ -436,6 +436,13 @@ struct dptx *dptx_init(struct device *dev, struct drm_device *drm_dev)
 		goto fail;
 	}
 
+	/**
+	 * change sys/class/extcon/extcon3 to sys/class/extcon/audio3.
+	 * the index of "audio[x]" must in the same as "extcon[x]",
+	 * index is 3 in this case.
+	*/
+	device_rename(&dptx->hdmi_edev->dev, "audio3");
+
 	dptx_init_hwparams(dptx);
 
 	retval = dptx_core_init(dptx);

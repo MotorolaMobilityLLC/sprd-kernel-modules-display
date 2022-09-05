@@ -33,6 +33,31 @@
 #define DPTX_DEFAULT_LINK_RATE DPTX_MAX_LINK_RATE
 #define DPTX_DEFAULT_LINK_LANES DPTX_MAX_LINK_LANES
 
+struct extcon_dev {
+	/* Optional user initializing data */
+	const char *name;
+	const unsigned int *supported_cable;
+	const u32 *mutually_exclusive;
+
+	/* Internal data. Please do not set. */
+	struct device dev;
+	struct raw_notifier_head nh_all;
+	struct raw_notifier_head *nh;
+	struct list_head entry;
+	int max_supported;
+	spinlock_t lock;	/* could be called by irq handler */
+	u32 state;
+
+	/* /sys/class/extcon/.../cable.n/... */
+	struct device_type extcon_dev_type;
+	struct extcon_cable *cables;
+
+	/* /sys/class/extcon/.../mutually_exclusive/... */
+	struct attribute_group attr_g_muex;
+	struct attribute **attrs_muex;
+	struct device_attribute *d_attrs_muex;
+};
+
 enum sprd_dp_hpd_status {
 	DP_HOT_UNPLUG = 0,
 	DP_HOT_PLUG,
