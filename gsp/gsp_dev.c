@@ -60,6 +60,8 @@ static struct of_device_id gsp_dt_ids[] = {
 	 .data = (void *)&gsp_r8p0_core_ops},
 	{.compatible = "sprd,gsp-r9p0-qogirn6pro",
 	.data = (void *)&gsp_r9p0_core_ops},
+	{.compatible = "sprd,gsp-r9p0-qogirn6l",
+	.data = (void *)&gsp_r9p0_core_ops},
 	{},
 };
 MODULE_DEVICE_TABLE(of, gsp_dt_ids);
