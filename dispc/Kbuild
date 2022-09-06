@@ -71,6 +71,7 @@ INCLUDE_SUBDIR = \
 	$(src)/pike2/Kbuild \
 	$(src)/qogirl6/Kbuild \
 	$(src)/qogirn6pro/Kbuild \
+	$(src)/qogirn6lite/Kbuild \
 	$(src)/sharkl3/Kbuild \
 	$(src)/sharkl5/Kbuild \
 	$(src)/sharkl5pro/Kbuild \

@@ -24,4 +24,5 @@ sprd-drm-y += \
 	dpu/dpu_r2p0.o \
 	dpu/dpu_r4p0.o \
 	dpu/dpu_r5p0.o \
-	dpu/dpu_r6p0.o
+	dpu/dpu_r6p0.o \
+	dpu/dpu_r6p1.o

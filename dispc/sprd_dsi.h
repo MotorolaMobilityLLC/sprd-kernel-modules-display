@@ -226,6 +226,7 @@ static inline void sprd_dsi_encoder_disable_force(struct drm_encoder *encoder) {
 int dsi_panel_set_dpms_mode(struct sprd_dsi *dsi);
 
 extern const struct dsi_core_ops dsi_ctrl_r1p0_ops;
+extern const struct dsi_core_ops dsi_ctrl_r1p1_ops;
 extern const struct dsi_glb_ops sharkle_dsi_glb_ops;
 extern const struct dsi_glb_ops pike2_dsi_glb_ops;
 extern const struct dsi_glb_ops sharkl3_dsi_glb_ops;
@@ -233,4 +234,5 @@ extern const struct dsi_glb_ops sharkl5_dsi_glb_ops;
 extern const struct dsi_glb_ops sharkl5pro_dsi_glb_ops;
 extern const struct dsi_glb_ops qogirl6_dsi_glb_ops;
 extern const struct dsi_glb_ops qogirn6pro_dsi_glb_ops;
+extern const struct dsi_glb_ops qogirn6lite_dsi_glb_ops;
 #endif /* _SPRD_DSI_H_ */

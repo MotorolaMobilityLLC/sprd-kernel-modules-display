@@ -870,6 +870,11 @@ static const struct sprd_dsi_ops qogirn6pro_dsi = {
 	.glb = &qogirn6pro_dsi_glb_ops
 };
 
+static const struct sprd_dsi_ops qogirn6lite_dsi = {
+	.core = &dsi_ctrl_r1p1_ops,
+	.glb = &qogirn6lite_dsi_glb_ops
+};
+
 static const struct of_device_id dsi_match_table[] = {
 	{ .compatible = "sprd,sharkle-dsi-host",
 	  .data = &sharkle_dsi },
@@ -885,6 +890,8 @@ static const struct of_device_id dsi_match_table[] = {
 	  .data = &qogirl6_dsi },
 	{ .compatible = "sprd,qogirn6pro-dsi-host",
 	  .data = &qogirn6pro_dsi },
+	{ .compatible = "sprd,qogirn6lite-dsi-host",
+	  .data = &qogirn6lite_dsi },
 	{ /* sentinel */ },
 };
 

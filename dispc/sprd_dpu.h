@@ -237,6 +237,7 @@ void sprd_dpu_run(struct sprd_dpu *dpu);
 void sprd_dpu_stop(struct sprd_dpu *dpu);
 void sprd_dpu_resume(struct sprd_dpu *dpu);
 extern int dpu_r6p0_enable_div6_clk(struct dpu_context *ctx);
+extern int dpu_r6p1_enable_div6_clk(struct dpu_context *ctx);
 
 #ifdef CONFIG_DRM_SPRD_DPU0
 void sprd_dpu_atomic_disable_force(struct drm_crtc *crtc);
@@ -271,5 +272,8 @@ extern const struct dpu_core_ops dpu_r6p0_core_ops;
 extern const struct dpu_clk_ops qogirn6pro_dpu_clk_ops;
 extern const struct dpu_glb_ops qogirn6pro_dpu_glb_ops;
 
+extern const struct dpu_core_ops dpu_r6p1_core_ops;
+extern const struct dpu_clk_ops qogirn6lite_dpu_clk_ops;
+extern const struct dpu_glb_ops qogirn6lite_dpu_glb_ops;
 
 #endif /* _SPRD_DPU_H_ */

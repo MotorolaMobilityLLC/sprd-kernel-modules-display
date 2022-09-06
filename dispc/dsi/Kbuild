@@ -21,4 +21,6 @@
 sprd-drm-y += \
 	dsi/sprd_dsi_api.o \
 	dsi/core/dsi_ctrl_r1p0.o \
-	dsi/core/dsi_ctrl_r1p0_ppi.o
+	dsi/core/dsi_ctrl_r1p1.o \
+	dsi/core/dsi_ctrl_r1p0_ppi.o \
+	dsi/core/dsi_ctrl_r1p1_ppi.o
