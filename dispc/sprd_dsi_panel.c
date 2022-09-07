@@ -303,6 +303,8 @@ static int sprd_panel_get_modes(struct drm_panel *p, struct drm_connector *conne
 			mode = sprd_panel_create_sr_mode(connector->dev,
 						&panel->info.buildin_modes[i], sr_width, sr_height);
 			mode->type = DRM_MODE_TYPE_DRIVER;
+			mode->width_mm = panel->info.mode.width_mm;
+			mode->height_mm = panel->info.mode.height_mm;
 			drm_mode_probed_add(connector, mode);
 			mode_count++;
 		}
@@ -316,9 +318,9 @@ static int sprd_panel_get_modes(struct drm_panel *p, struct drm_connector *conne
 		vm.hactive = surface_width;
 		vm.vactive = surface_height;
 		vm.pixelclock = surface_width * surface_height * 60;
-
 		mode = drm_mode_create(connector->dev);
-
+		mode->width_mm = panel->info.mode.width_mm;
+		mode->height_mm = panel->info.mode.height_mm;
 		mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_USERDEF;
 		drm_display_mode_from_videomode(&vm, mode);
 		drm_mode_probed_add(connector, mode);
