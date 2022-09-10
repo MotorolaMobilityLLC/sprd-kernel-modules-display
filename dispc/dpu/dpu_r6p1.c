@@ -75,6 +75,9 @@
 #define REG_SCL_EN						0x20
 #define REG_BG_COLOR					0x24
 
+/* DPU Secure reg */
+#define REG_DPU_SECURE					0x14
+
 /* Layer enable */
 #define REG_LAYER_ENABLE				0x2c
 
@@ -110,6 +113,7 @@
 #define REG_DPI_S_VFP					0x270
 
 /* DPU STS */
+#define REG_DPU_STS_20					0x750
 #define REG_DPU_STS_21					0x754
 #define REG_DPU_STS_22					0x758
 
@@ -535,7 +539,7 @@ struct dpu_enhance {
 	struct device_node *g_np;
 };
 
-//static void dpu_sr_config(struct dpu_context *ctx);
+static void dpu_sr_config(struct dpu_context *ctx);
 static void dpu_clean_all(struct dpu_context *ctx);
 static void dpu_layer(struct dpu_context *ctx,
 		    struct sprd_layer_state *hwlayer);
@@ -603,11 +607,14 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	u32 mmu_reg_val, mmu_int_mask = 0;
 
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_INT_STS);
-	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
+	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, reg_val);
+	int_mask = reg_val & (BIT_DPU_INT_FBC_PLD_ERR |
+				BIT_DPU_INT_FBC_HDR_ERR | BIT_DPU_INT_ERR);
+	DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, int_mask);
 
-	/* disable err interrupt */
-	if (reg_val & BIT_DPU_INT_ERR)
-		int_mask |= BIT_DPU_INT_ERR;
+	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
+	mmu_int_mask |= check_mmu_isr(ctx, mmu_reg_val);
+	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
@@ -687,24 +694,12 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	/* dpu afbc payload error isr */
-	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR) {
-		int_mask |= BIT_DPU_INT_FBC_PLD_ERR;
+	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR)
 		pr_err("dpu afbc payload error\n");
-	}
 
 	/* dpu afbc header error isr */
-	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR) {
-		int_mask |= BIT_DPU_INT_FBC_HDR_ERR;
+	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR)
 		pr_err("dpu afbc header error\n");
-	}
-
-	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, reg_val);
-	DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, int_mask);
-
-	mmu_int_mask |= check_mmu_isr(ctx, mmu_reg_val);
-
-	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
-	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu_int_mask);
 
 	return reg_val;
 }
@@ -755,9 +750,11 @@ static int dpu_wait_update_done(struct dpu_context *ctx)
 {
 	int rc;
 
-	/* clear the event flag before wait */
+	ctx->evt_update = false;
 	if (!ctx->stopped)
-		ctx->evt_update = false;
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
+	else
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0) | BIT(4));
 
 	/* wait for reg update done interrupt */
 	rc = wait_event_interruptible_timeout(ctx->wait_queue, ctx->evt_update,
@@ -866,8 +863,7 @@ static void dpu_stop(struct dpu_context *ctx)
 
 static void dpu_run(struct dpu_context *ctx)
 {
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_LAY_REG_UPDATE);
+	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4) | BIT(0));
 	ctx->stopped = false;
 
 	pr_info("dpu run\n");
@@ -931,38 +927,41 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 	int mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
 	int mode_height = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) >> 16;
 
-	ctx->wb_layer.dst_w = mode_width;
-	ctx->wb_layer.dst_h = mode_height;
-	ctx->wb_layer.src_w = mode_width;
-	ctx->wb_layer.src_h = mode_height;
-	ctx->wb_layer.pitch[0] = ALIGN(mode_width, 16) * 4;
-	ctx->wb_layer.fbc_hsize_r = XFBC8888_HEADER_SIZE(mode_width,
-						mode_height) / 128;
-	DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
-
-	ctx->wb_layer.xfbc = ctx->wb_xfbc_en;
-
-	if (ctx->wb_xfbc_en) {
-		DPU_REG_WR(ctx->base + REG_WB_CFG, (ctx->wb_layer.fbc_hsize_r << 16) | BIT(0));
-		DPU_REG_WR(ctx->base + REG_WB_BASE_ADDR, ctx->wb_layer.addr[0] +
-				ctx->wb_layer.fbc_hsize_r);
+	if (ctx->wb_size_changed) {
+		ctx->wb_layer.dst_w = mode_width;
+		ctx->wb_layer.dst_h = mode_height;
+		ctx->wb_layer.src_w = mode_width;
+		ctx->wb_layer.src_h = mode_height;
+		ctx->wb_layer.pitch[0] = ALIGN(mode_width, 16) * 4;
+		ctx->wb_layer.fbc_hsize_r = XFBC8888_HEADER_SIZE(mode_width,
+							mode_height) / 128;
+		DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
+		if (ctx->wb_xfbc_en) {
+			DPU_REG_WR(ctx->base + REG_WB_CFG, (ctx->wb_layer.fbc_hsize_r << 16) | BIT(0));
+		} else {
+			DPU_REG_WR(ctx->base + REG_WB_CFG, 0);
 		}
-	else {
-		DPU_REG_WR(ctx->base + REG_WB_CFG, 0);
-		DPU_REG_WR(ctx->base + REG_WB_BASE_ADDR, ctx->wb_layer.addr[0]);
-		}
+	}
 
 	DPU_REG_WR(ctx->base + REG_WB_PITCH, ctx->vm.hactive);
+
+	if (debug) {
+		/* writeback debug trigger */
+		mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
+		DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
+		DPU_REG_WR(ctx->base + REG_WB_CFG, 0);
+	}
+
+	if (debug || ctx->wb_size_changed) {
+		dpu_wait_update_done(ctx);
+		ctx->wb_size_changed = false;
+	}
 
 	if (debug)
 		/* writeback debug trigger */
 		DPU_REG_WR(ctx->base + REG_WB_CTRL, BIT(1));
 	else
 		DPU_REG_SET(ctx->base + REG_WB_CTRL, BIT(0));
-
-	/* update trigger */
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
-	dpu_wait_update_done(ctx);
 
 	pr_debug("write back trigger\n");
 }
@@ -972,7 +971,6 @@ static void dpu_wb_flip(struct dpu_context *ctx)
 	dpu_clean_all(ctx);
 	dpu_layer(ctx, &ctx->wb_layer);
 
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
 	dpu_wait_update_done(ctx);
 	pr_debug("write back flip\n");
 }
@@ -996,7 +994,13 @@ static void dpu_wb_work_func(struct work_struct *data)
 		return;
 	}
 
-	if (ctx->wb_en && (ctx->vsync_count > ctx->max_vsync_count))
+	if (ctx->wb_pending) {
+		up(&ctx->lock);
+		pr_warn("display mode is going on changing\n");
+		return;
+	}
+
+	if ((ctx->wb_en && (ctx->vsync_count > ctx->max_vsync_count)) || ctx->wb_size_changed)
 		dpu_wb_trigger(ctx, 1, false);
 	else if (!ctx->wb_en)
 		dpu_wb_flip(ctx);
@@ -1598,13 +1602,144 @@ static void dpu_layer(struct dpu_context *ctx,
 				hwlayer->src_w, hwlayer->src_h);
 }
 
+static int dpu_vrr(struct dpu_context *ctx)
+{
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+			struct sprd_dpu, ctx);
+	u32 reg_val;
+
+	dpu_stop(ctx);
+	reg_val = (ctx->vm.vsync_len << 0) |
+		(ctx->vm.vback_porch << 8) |
+		(ctx->vm.vfront_porch << 20);
+	DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
+
+	reg_val = (ctx->vm.hsync_len << 0) |
+		(ctx->vm.hback_porch << 8) |
+		(ctx->vm.hfront_porch << 20);
+	DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
+
+	if (ctx->dsc_en) {
+		reg_val = (ctx->vm.vsync_len << 0) |
+			(ctx->vm.vback_porch  << 8) |
+			(ctx->vm.vfront_porch << 20);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
+
+		reg_val = (ctx->vm.hsync_len << 0) |
+			(ctx->vm.hback_porch << 8) |
+			(ctx->vm.hfront_porch << 20);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_H_TIMING), reg_val);
+	}
+	sprd_dsi_vrr_timing(dpu->dsi);
+	dpu_wait_update_done(ctx);
+	ctx->stopped = false;
+	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
+	dpu->crtc->fps_mode_changed = false;
+
+	return 0;
+}
+
+static void dpu_scaling(struct dpu_context *ctx,
+		struct sprd_plane planes[], u8 count)
+{
+	int i;
+	u16 src_w;
+	u16 src_h;
+	u32 reg_val;
+	struct sprd_layer_state *layer_state;
+	struct sprd_plane_state *plane_state;
+	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+
+	if (dpu->crtc->sr_mode_changed) {
+		pr_debug("------------------------------------\n");
+		for (i = 0; i < count; i++) {
+			plane_state = to_sprd_plane_state(planes[i].base.state);
+			layer_state = &plane_state->layer;
+			pr_debug("layer[%d] : %dx%d --- (%d)\n", i,
+					layer_state->dst_w, layer_state->dst_h,
+					scale_cfg->in_w);
+			if (layer_state->dst_w != scale_cfg->in_w) {
+				scale_cfg->skip_layer_index = i;
+				break;
+			}
+		}
+
+		plane_state = to_sprd_plane_state(planes[count - 1].base.state);
+		layer_state = &plane_state->layer;
+		if  (layer_state->dst_w <= scale_cfg->in_w) {
+			dpu_sr_config(ctx);
+			dpu->crtc->sr_mode_changed = false;
+			pr_info("do scaling enhance, bottom layer(%dx%d)\n",
+					layer_state->dst_w, layer_state->dst_h);
+		}
+	} else {
+		if (count == 1) {
+			plane_state = to_sprd_plane_state(planes[count - 1].base.state);
+			layer_state = &plane_state->layer;
+			// btm_layer = &layers[count - 1];
+			if (layer_state->rotation & (DRM_MODE_ROTATE_90 |
+						DRM_MODE_ROTATE_270)) {
+				src_w = layer_state->src_h;
+				src_h = layer_state->src_w;
+			} else {
+				src_w = layer_state->src_w;
+				src_h = layer_state->src_h;
+			}
+			if (src_w == layer_state->dst_w
+					&& src_h == layer_state->dst_h) {
+				reg_val = (scale_cfg->in_h << 16) |
+					scale_cfg->in_w;
+				DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
+				if (!scale_cfg->need_scale) {
+					DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+				} else {
+					DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+				}
+			} else {
+				/*
+				 * When the layer src size is not euqal to the
+				 * dst size, screened by dpu hal,the single
+				 * layer need to scaling-up. Regardless of
+				 * whether the SR function is turned on, dpu
+				 * blend size should be set to the layer src
+				 * size.
+				 */
+				reg_val = (src_h << 16) | src_w;
+				DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
+				/*
+				 * When the layer src size is equal to panel
+				 * size, close dpu scaling-up function.
+				 */
+				if (src_h == ctx->vm.vactive &&
+						src_w == ctx->vm.hactive) {
+					DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+				} else {
+					DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+					layer_state->dst_w = layer_state->src_w;
+					layer_state->dst_h = layer_state->src_h;
+				}
+			}
+		} else {
+			reg_val = (scale_cfg->in_h << 16) |
+				scale_cfg->in_w;
+			DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
+			if (!scale_cfg->need_scale)
+				DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+			else
+				DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+		}
+	}
+}
+
 static void dpu_flip(struct dpu_context *ctx,
 		     struct sprd_plane planes[], u8 count)
 {
 	int i;
-	u32 reg_val;
+	u32 reg_val, secure_val;
 	struct sprd_plane_state *state;
-//	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct sprd_layer_state *layer;
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct dpu_enhance *enhance = ctx->enhance;
 
 	ctx->vsync_count = 0;
@@ -1622,15 +1757,15 @@ static void dpu_flip(struct dpu_context *ctx,
 	DPU_REG_WR(ctx->base + REG_BG_COLOR, 0x00);
 
 	 /* to check if dpu need change the frame rate */
-//	if (dpu->crtc->fps_mode_changed)
-//		dpu_vrr(ctx);
+	if (dpu->crtc->fps_mode_changed)
+		dpu_vrr(ctx);
 
 	/* disable all the layers */
 	dpu_clean_all(ctx);
 
 	/* to check if dpu need scaling the frame for SR */
-//	if (!dpu->dsi->ctx.surface_mode)
-//		dpu_scaling(ctx, planes, count);
+	if (!dpu->dsi->ctx.surface_mode)
+		dpu_scaling(ctx, planes, count);
 
 	/* start configure dpu layers */
 	for (i = 0; i < count; i++) {
@@ -1646,12 +1781,21 @@ static void dpu_flip(struct dpu_context *ctx,
 		ctx->stopped = false;
 	} else if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		if (!ctx->stopped) {
+			secure_val = DPU_REG_RD(ctx->base + REG_DPU_SECURE);
+			state = to_sprd_plane_state(planes[0].base.state);
+			layer = &state->layer;
 			if (enhance->first_frame == true) {
 				DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_ALL_UPDATE);
 				dpu_wait_all_update_done(ctx);
 				enhance->first_frame = false;
 			} else {
-			  dpu_wait_update_done(ctx);
+				if ((!layer->secure_en) && secure_val && (!ctx->fastcall_en)) {
+					dpu_wait_update_done(ctx);
+					ctx->tos_msg->cmd = TA_FIREWALL_CLR;
+					disp_ca_write(&(ctx->tos_msg), sizeof(ctx->tos_msg));
+					disp_ca_wait_response();
+				} else
+					dpu_wait_update_done(ctx);
 			}
 		}
 
@@ -1669,9 +1813,6 @@ static void dpu_flip(struct dpu_context *ctx,
 
 static void dpu_dpi_init(struct dpu_context *ctx)
 {
-	//struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
-	//struct sprd_dsi *dsi = dpu->dsi;
-	//struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
 	u32 int_mask = 0;
 	u32 reg_val;
 
@@ -2784,19 +2925,81 @@ static int dpu_cabc_trigger(struct dpu_context *ctx)
 	return 0;
 }
 
+static void dpu_sr_config(struct dpu_context *ctx)
+{
+	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
+	u32 reg_val;
+
+	reg_val = (scale_cfg->in_h << 16) | scale_cfg->in_w;
+	DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
+	if (scale_cfg->need_scale)
+		DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+	else
+		DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+
+	ctx->wb_pending = false;
+}
 
 static int dpu_modeset(struct dpu_context *ctx,
 		struct drm_display_mode *mode)
 {
 	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	struct sprd_crtc_state *state = to_sprd_crtc_state(dpu->crtc->base.state);
+	struct sprd_dsi *dsi = dpu->dsi;
+	static unsigned int now_vtotal;
+	static unsigned int now_htotal;
+	struct drm_display_mode *actual_mode;
+	u32 mode_vrefresh, temp_vrefresh;
+	int i;
 
 	scale_cfg->in_w = mode->hdisplay;
 	scale_cfg->in_h = mode->vdisplay;
+	mode_vrefresh = drm_mode_vrefresh(mode);
+	actual_mode = mode;
 
+	if (state->resolution_change) {
 		if ((mode->hdisplay != ctx->vm.hactive) || (mode->vdisplay != ctx->vm.vactive))
 			scale_cfg->need_scale = true;
 		else
 			scale_cfg->need_scale = false;
+		ctx->wb_pending = true;
+	}
+
+	if (state->frame_rate_change) {
+		if ((mode->hdisplay != ctx->vm.hactive) || (mode->vdisplay != ctx->vm.vactive)) {
+			for (i = 0; i <= panel->info.display_mode_count; i++) {
+				temp_vrefresh = drm_mode_vrefresh(&panel->info.buildin_modes[i]);
+				if ((panel->info.buildin_modes[i].hdisplay == ctx->vm.hactive) &&
+					(panel->info.buildin_modes[i].vdisplay == ctx->vm.vactive) &&
+					(temp_vrefresh == mode_vrefresh)) {
+					actual_mode = &(panel->info.buildin_modes[i]);
+					break;
+				}
+			}
+		}
+
+		if (!now_htotal && !now_vtotal) {
+			now_htotal = ctx->vm.hactive + ctx->vm.hfront_porch +
+				ctx->vm.hback_porch + ctx->vm.hsync_len;
+			now_vtotal = ctx->vm.vactive + ctx->vm.vfront_porch +
+				ctx->vm.vback_porch + ctx->vm.vsync_len;
+		}
+
+		if ((actual_mode->vtotal + actual_mode->htotal) !=
+			(now_htotal + now_vtotal)) {
+			drm_display_mode_to_videomode(actual_mode, &ctx->vm);
+			drm_display_mode_to_videomode(actual_mode, &dsi->ctx.vm);
+			now_htotal = ctx->vm.hactive + ctx->vm.hfront_porch +
+				ctx->vm.hback_porch + ctx->vm.hsync_len;
+			now_vtotal = ctx->vm.vactive + ctx->vm.vfront_porch +
+				ctx->vm.vback_porch + ctx->vm.vsync_len;
+		}
+	}
+
+	ctx->wb_size_changed = true;
 	pr_info("begin switch to %u x %u\n", mode->hdisplay, mode->vdisplay);
 
 	return 0;

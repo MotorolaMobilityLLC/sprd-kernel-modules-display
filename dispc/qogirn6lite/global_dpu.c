@@ -28,6 +28,7 @@ static struct clk *clk_dpuvsp_disp_eb;
 static struct clk *clk_master_div6_eb;
 
 static struct dpu_clk_context {
+	struct clk *clk_src_200m;
 	struct clk *clk_src_256m;
 	struct clk *clk_src_307m2;
 	struct clk *clk_src_312m5;
@@ -40,6 +41,7 @@ static struct dpu_clk_context {
 	struct clk *clk_src_614m4;
 	struct clk *clk_dpu_core;
 	struct clk *clk_dpu_dpi;
+	struct clk *clk_dpu_dsc;
 } dpu_clk_ctx;
 
 enum {
@@ -57,6 +59,7 @@ static const u32 dpu_core_clk[] = {
 };
 
 static const u32 dpi_clk_src[] = {
+	200000000,
 	256000000,
 	307200000,
 	312500000,
@@ -95,8 +98,8 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 {
 	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
 
-
-
+	clk_ctx->clk_src_200m =
+		of_clk_get_by_name(np, "clk_src_200m");
 	clk_ctx->clk_src_256m =
 		of_clk_get_by_name(np, "clk_src_256m");
 	clk_ctx->clk_src_307m2 =
@@ -120,7 +123,14 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 	clk_ctx->clk_dpu_core =
 		of_clk_get_by_name(np, "clk_dpu_core");
 	clk_ctx->clk_dpu_dpi =
-		of_clk_get_by_name(np, "clk_dpu_dpi");
+		of_clk_get_by_name(np, "clk_dpu_dsc");
+	clk_ctx->clk_dpu_dpi =
+		of_clk_get_by_name(np, "clk_dpu_dsc");
+
+	if (IS_ERR(clk_ctx->clk_src_200m)) {
+		pr_warn("read clk_src_200m failed\n");
+		clk_ctx->clk_src_200m = NULL;
+	}
 
 	if (IS_ERR(clk_ctx->clk_src_256m)) {
 		pr_warn("read clk_src_256m failed\n");
@@ -182,6 +192,11 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 		clk_ctx->clk_dpu_dpi = NULL;
 	}
 
+	if (IS_ERR(clk_ctx->clk_dpu_dsc)) {
+		pr_warn("read clk_dpu_dsc failed\n");
+		clk_ctx->clk_dpu_dsc = NULL;
+	}
+
 	return 0;
 }
 
@@ -215,17 +230,23 @@ static struct clk *div_to_clk(struct dpu_clk_context *clk_ctx, u32 clk_div)
 		return NULL;
 	}
 }
+
 static int dpu_clk_init(struct dpu_context *ctx)
 {
 
 	int ret;
+	int dsc_core;
 	u32 dpu_core_val;
 	u32 dpi_src_val;
 	struct clk *clk_src;
 	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 				struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+				(struct sprd_panel *)container_of(dpu->dsi->panel,
+				struct sprd_panel, base);
 
+	dsc_core = ctx->vm.hactive / panel->info.slice_height;
 	dpu_core_val = calc_dpu_core_clk();
 
 	if (dpu->dsi->ctx.dpi_clk_div) {
@@ -253,10 +274,17 @@ static int dpu_clk_init(struct dpu_context *ctx)
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
 		if (ret)
 			pr_warn("set dpi clk source failed\n");
-
 		ret = clk_set_rate(clk_ctx->clk_dpu_dpi, ctx->vm.pixelclock);
 		if (ret)
 			pr_err("dpu update dpi clk rate failed\n");
+		if (panel->info.dsc_en) {
+				ret = clk_set_parent(clk_ctx->clk_dpu_dsc, clk_src);
+				if (ret)
+				pr_warn("set dpi clk source failed\n");
+				ret = clk_set_rate(clk_ctx->clk_dpu_dsc,  ctx->vm.pixelclock/dsc_core);
+				if (ret)
+				pr_err("dpu update dpi clk rate failed\n");
+			}
 	}
 
 	return ret;
@@ -270,6 +298,9 @@ static int dpu_clk_enable(struct dpu_context *ctx)
 	static bool div6_uboot_enable = true;
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 				struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+				(struct sprd_panel *)container_of(dpu->dsi->panel,
+				struct sprd_panel, base);
 
 	ret = clk_prepare_enable(clk_ctx->clk_dpu_core);
 	if (ret) {
@@ -282,6 +313,15 @@ static int dpu_clk_enable(struct dpu_context *ctx)
 		pr_err("enable clk_dpu_dpi error\n");
 		clk_disable_unprepare(clk_ctx->clk_dpu_core);
 		return ret;
+	}
+
+	if (panel->info.dsc_en) {
+		ret = clk_prepare_enable(clk_ctx->clk_dpu_dsc);
+		if (ret) {
+			pr_err("enable clk_dpu_dpi error\n");
+			clk_disable_unprepare(clk_ctx->clk_dpu_dsc);
+			return ret;
+		}
 	}
 
 	if (dpu->dsi->ctx.dpi_clk_div) {
@@ -321,12 +361,24 @@ int dpu_r6p1_enable_div6_clk(struct dpu_context *ctx)
 static int dpu_clk_disable(struct dpu_context *ctx)
 {
 	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+				(struct sprd_panel *)container_of(dpu->dsi->panel,
+				struct sprd_panel, base);
 
 	clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
 	clk_disable_unprepare(clk_ctx->clk_dpu_core);
 
 	clk_set_parent(clk_ctx->clk_dpu_dpi, clk_ctx->clk_src_256m);
 	clk_set_parent(clk_ctx->clk_dpu_core, clk_ctx->clk_src_307m2);
+
+	if (panel->info.dsc_en) {
+		clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
+
+		clk_set_parent(clk_ctx->clk_dpu_dpi, clk_ctx->clk_src_256m);
+
+	}
 
 	return 0;
 }
