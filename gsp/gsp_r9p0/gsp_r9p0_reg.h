@@ -132,7 +132,17 @@ struct GSP_QOS_REG_STRUCT {
 
 };
 
-struct GSP_QOS_REG_STRUCT  r9p0_gsp_mtx_qos[] = {
+struct GSP_QOS_REG_STRUCT r9p0_gsp_mtx_qos_qogirn6lite[] = {
+	{ 0x0000, 0x00000001, 0x00000001},
+	{ 0x0004, 0xffffffff, 0x84889090},
+	{ 0x0008, 0x3f3f3f3f, 0x02050302},
+	{ 0x000C, 0x3f3fffff, 0x10040402},
+	{ 0x0060, 0x80000003, 0x00000003},
+	{ 0x0064, 0x3fff3fff, 0x06660666},
+	{ 0x0068, 0x00000701, 0x00000001},
+};
+
+struct GSP_QOS_REG_STRUCT  r9p0_gsp_mtx_qos_qogirn6pro[] = {
 	{ 0x0000, 0x00000001, 0x00000001},
 	{ 0x0004, 0xffffffff, 0x02020202},
 	{ 0x0008, 0x3f3f3f3f, 0x02020202},

@@ -360,12 +360,26 @@ exit:
 	return ret;
 }
 
+void gsp_dev_copy_name(const char *orig, char *dst)
+{
+	int i = 0;
+
+	for (i = 0; i < 2; i++) {
+		while (*orig != '-')
+			orig++;
+		orig++;
+	}
+
+	strcpy(dst, orig);
+}
+
 static int gsp_dev_alloc(struct device *dev, struct gsp_dev **gsp)
 {
 	int ret = -1;
 	int i;
 	u32 cnt = 0;
 	const char *name = NULL;
+	const char *tmp = NULL;
 	struct device_node *np = NULL;
 	struct device_node *child = NULL;
 	struct gsp_core *core = NULL;
@@ -405,6 +419,12 @@ static int gsp_dev_alloc(struct device *dev, struct gsp_dev **gsp)
 	GSP_DEV_INFO(dev, "io count: %d\n", cnt);
 	(*gsp)->io_cnt = cnt;
 
+	ret = of_property_read_string(np, "compatible", &tmp);
+	if (ret) {
+		GSP_ERR("read compatible name failed\n");
+		return ret;
+	}
+
 	ops = gsp_dev_to_core_ops(*gsp);
 	if (IS_ERR_OR_NULL(ops)) {
 		GSP_DEV_ERR(dev, "dev to core ops failed\n");
@@ -426,6 +446,8 @@ static int gsp_dev_alloc(struct device *dev, struct gsp_dev **gsp)
 				gsp_core_to_id(core));
 		gsp_dev_add_core(*gsp, core);
 	}
+
+	gsp_dev_copy_name(tmp, core->board_version);
 
 	return ret;
 }

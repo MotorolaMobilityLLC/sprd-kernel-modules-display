@@ -417,13 +417,19 @@ void gsp_r9p0_core_dump(struct gsp_core *c)
 	}
 }
 
-static void gsp_r9p0_soc_qos_init(struct gsp_r9p0_core *core)
+static void gsp_r9p0_soc_qos_init(struct gsp_core *c, struct gsp_r9p0_core *core)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(r9p0_gsp_mtx_qos); i++)
-		gsp_core_reg_update((core->gsp_qos_reg_base + r9p0_gsp_mtx_qos[i].offset),
-			r9p0_gsp_mtx_qos[i].value, r9p0_gsp_mtx_qos[i].mask);
+	if (strcmp(GSP_QOGIRN6PRO, c->board_version) == 0) {
+		for (i = 0; i < ARRAY_SIZE(r9p0_gsp_mtx_qos_qogirn6pro); i++)
+			gsp_core_reg_update((core->gsp_qos_reg_base + r9p0_gsp_mtx_qos_qogirn6pro[i].offset),
+				r9p0_gsp_mtx_qos_qogirn6pro[i].value, r9p0_gsp_mtx_qos_qogirn6pro[i].mask);
+	} else if (strcmp(GSP_QOGIRN6L, c->board_version) == 0) {
+		for (i = 0; i < ARRAY_SIZE(r9p0_gsp_mtx_qos_qogirn6lite); i++)
+			gsp_core_reg_update((core->gsp_qos_reg_base + r9p0_gsp_mtx_qos_qogirn6lite[i].offset),
+				r9p0_gsp_mtx_qos_qogirn6lite[i].value, r9p0_gsp_mtx_qos_qogirn6lite[i].mask);
+	}
 }
 
 static void gsp_r9p0_core_cfg_reinit(struct gsp_r9p0_cfg *cfg)
@@ -1004,7 +1010,7 @@ int gsp_r9p0_core_enable(struct gsp_core *c)
 	mmu_r1p0_int_clear(c);
 	mmu_r1p0_int_enable(c);
 
-	gsp_r9p0_soc_qos_init(core);
+	gsp_r9p0_soc_qos_init(c, core);
 
 	sprd_iommu_restore(c->dev);
 

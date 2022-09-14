@@ -107,6 +107,7 @@ enum gsp_core_suspend_state {
  */
 struct gsp_core {
 	char name[32];
+	char board_version[32];
 	int id;
 	int kcfg_num;
 	bool secure_init;

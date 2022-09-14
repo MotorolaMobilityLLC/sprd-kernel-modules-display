@@ -18,6 +18,9 @@
 #define MIN_POOL_SIZE			(6 * 1024)
 #define GSP_COEF_CACHE_MAX		32
 
+#define GSP_QOGIRN6PRO "qogirn6pro"
+#define GSP_QOGIRN6L "qogirn6l"
+
 struct gsp_r9p0_core {
 	struct gsp_core common;
 	struct list_head coef_list;
