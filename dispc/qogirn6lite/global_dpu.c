@@ -21,8 +21,10 @@
 #include <linux/of_address.h>
 #include <linux/reset.h>
 
+#include "global_dpu_qos.h"
 #include "sprd_dpu.h"
 
+static void __iomem *dpu_qos_base;
 static struct clk *clk_dpuvsp_eb;
 static struct clk *clk_dpuvsp_disp_eb;
 static struct clk *clk_master_div6_eb;
@@ -386,6 +388,8 @@ static int dpu_clk_disable(struct dpu_context *ctx)
 static int dpu_glb_parse_dt(struct dpu_context *ctx,
 				struct device_node *np)
 {
+	struct resource r;
+
 	struct platform_device *pdev = of_find_device_by_node(np);
 
 	ctx_reset = devm_reset_control_get(&pdev->dev, "dpu_ctx_rst");
@@ -421,6 +425,16 @@ static int dpu_glb_parse_dt(struct dpu_context *ctx,
 		clk_master_div6_eb = NULL;
 	}
 
+	if (of_address_to_resource(np, 1, &r))
+		DRM_ERROR("parse dt soc qos base address failed\n");
+	else {
+
+		dpu_qos_base = ioremap(r.start,
+				resource_size(&r));
+		if (!dpu_qos_base)
+			pr_warn("dpu_qos_base ioremap fail\n");
+	}
+
 	return 0;
 }
 
@@ -433,7 +447,23 @@ static void dpu_glb_disable(struct dpu_context *ctx)
 	clk_disable_unprepare(clk_dpuvsp_disp_eb);
 	clk_disable_unprepare(clk_dpuvsp_eb);
 }
+#if 0
+static void dpu_soc_qos_config(void)
+{
+	unsigned int i;
 
+	if (!dpu_qos_base) {
+		pr_warn("dpu_qos_base is NULL\n");
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(dpu_mtx_qos); i++)
+		writel_bits_relaxed(dpu_mtx_qos[i].mask,
+			dpu_mtx_qos[i].value,
+			dpu_qos_base + dpu_mtx_qos[i].offset);
+
+}
+#endif
 static void dpu_reset(struct dpu_context *ctx)
 {
 	if (!IS_ERR(ctx_reset)) {
@@ -447,6 +477,9 @@ static void dpu_reset(struct dpu_context *ctx)
 		udelay(10);
 		reset_control_deassert(vau_reset);
 	}
+#if 0
+	dpu_soc_qos_config();
+#endif
 }
 
 static void dpu_power_domain(struct dpu_context *ctx, int enable)
