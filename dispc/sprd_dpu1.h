@@ -133,6 +133,13 @@ struct dpu_context {
 
 	/* qos config parameters */
 	struct dpu_qos_cfg qos_cfg;
+
+	/* blend size limit config parameters */
+	uint32_t supported_vfrefresh_count;
+	uint32_t default_layer_count_limit;
+	uint32_t *vrefresh_limit;
+	uint32_t *blend_layer_count_limit;
+	bool vrr_supported;
 };
 
 struct sprd_dpu_ops {

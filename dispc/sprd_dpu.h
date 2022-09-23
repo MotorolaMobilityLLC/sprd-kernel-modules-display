@@ -214,6 +214,9 @@ struct dpu_context {
 
 	/* qos config parameters */
 	struct dpu_qos_cfg qos_cfg;
+
+	/* blend size limit config parameters */
+	uint32_t max_cap_layers;
 };
 
 struct sprd_dpu_ops {

@@ -173,6 +173,25 @@ static int sprd_dpu_enable_vblank(struct sprd_crtc *crtc)
 	return 0;
 }
 
+static int sprd_dpu_atomic_get_property(struct sprd_crtc *crtc,
+					const struct drm_crtc_state *crtc_state,
+					struct drm_property *property, uint64_t *val)
+{
+	struct sprd_dpu *dpu = crtc->priv;
+	struct dpu_context *ctx = &dpu->ctx;
+
+	if (property == crtc->blend_limit_property) {
+		*val = ctx->default_layer_count_limit;
+	} else if (property == crtc->vrr_enabled_property) {
+		*val = false;
+	} else {
+		DRM_ERROR("property %s is invalid\n", property->name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void sprd_dpu_disable_vblank(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
@@ -194,6 +213,7 @@ static const struct sprd_crtc_ops sprd_dpu_ops = {
 	.disable_vblank	= sprd_dpu_disable_vblank,
 	.prepare_fb = sprd_dpu_prepare_fb,
 	.cleanup_fb = sprd_dpu_cleanup_fb,
+	.atomic_get_property = sprd_dpu_atomic_get_property,
 };
 
 void sprd_dpu1_run(struct sprd_dpu *dpu)
@@ -349,12 +369,14 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 	struct sprd_dpu *dpu = dev_get_drvdata(dev);
 	struct sprd_crtc_capability cap = {};
 	struct sprd_plane *planes;
+	struct dpu_context *ctx = &dpu->ctx;
 
 	DRM_INFO("%s()\n", __func__);
 
 	dpu->core->version(&dpu->ctx);
 	dpu->core->capability(&dpu->ctx, &cap);
 
+	ctx->default_layer_count_limit = cap.max_layers;
 	planes = sprd_plane_init(drm, &cap, 0xff);
 	if (IS_ERR_OR_NULL(planes))
 		return PTR_ERR(planes);

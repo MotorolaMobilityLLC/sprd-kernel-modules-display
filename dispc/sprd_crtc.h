@@ -60,6 +60,8 @@ struct sprd_crtc {
 	bool sr_mode_changed;
 	struct drm_property *resolution_property;
 	struct drm_property *frame_rate_property;
+	struct drm_property *blend_limit_property;
+	struct drm_property *vrr_enabled_property;
 };
 
 struct sprd_crtc_ops {
@@ -80,7 +82,10 @@ struct sprd_crtc_ops {
 	void (*cleanup_fb)(struct sprd_crtc *crtc,
 			   struct drm_plane_state *old_state);
 	void (*atomic_update)(struct sprd_crtc *crtc,
-			     struct drm_plane *plane);
+			struct drm_plane *plane);
+	int (*atomic_get_property)(struct sprd_crtc *crtc,
+				const struct drm_crtc_state *state,
+				struct drm_property *property, uint64_t *val);
 };
 
 int sprd_crtc_iommu_map(struct device *dev, struct sprd_gem_obj *sprd_gem);

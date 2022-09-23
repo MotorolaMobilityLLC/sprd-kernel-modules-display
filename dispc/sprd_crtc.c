@@ -11,6 +11,7 @@
 #include <drm/drm_vblank.h>
 
 #include "sprd_drm.h"
+#include "sprd_dpu.h"
 #include "sprd_gem.h"
 #include "sprd_crtc.h"
 #include "sprd_plane.h"
@@ -246,11 +247,13 @@ static int sprd_crtc_atomic_get_property(struct drm_crtc *drm_crtc,
 
 	DRM_DEBUG("%s() name = %s\n", __func__, property->name);
 
-	if (property == crtc->resolution_property)
+	if (property == crtc->resolution_property) {
 		*val = state->resolution_change;
-	else if (property == crtc->frame_rate_property)
+	} else if (property == crtc->frame_rate_property) {
 		*val = state->frame_rate_change;
-	else {
+	} else if (crtc->ops->atomic_get_property) {
+		return crtc->ops->atomic_get_property(crtc, crtc_state, property, val);
+	} else {
 		DRM_ERROR("property %s is invalid\n", property->name);
 		return -EINVAL;
 	}
@@ -275,6 +278,10 @@ static int sprd_crtc_atomic_set_property(struct drm_crtc *drm_crtc,
 	} else if (property == crtc->frame_rate_property) {
 		state->frame_rate_change = val;
 		crtc->fps_mode_changed = val;
+	} else if (property == crtc->blend_limit_property){
+		DRM_DEBUG("do not allow change blend limit property value.\n");
+	} else if (property == crtc->vrr_enabled_property) {
+		DRM_DEBUG("do not allow change vrr enabled property value.\n");
 	} else {
 		DRM_ERROR("property %s is invalid\n", property->name);
 		return -EINVAL;
@@ -396,6 +403,22 @@ static int sprd_crtc_create_properties(struct sprd_crtc *crtc, const char *versi
 		return -ENOMEM;
 	drm_object_attach_property(&crtc->base.base, prop, 0);
 	crtc->frame_rate_property = prop;
+
+	/* create dpu blend layer count limit property */
+	prop = drm_property_create_range(crtc->base.dev, 0,
+			"blend layer limit", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	drm_object_attach_property(&crtc->base.base, prop, 0);
+	crtc->blend_limit_property = prop;
+
+	/* create vrr enabled property */
+	prop = drm_property_create_range(crtc->base.dev, 0,
+				"vrr enabled", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	drm_object_attach_property(&crtc->base.base, prop, 0);
+	crtc->vrr_enabled_property = prop;
 
 	config = &crtc->base.dev->mode_config;
 	drm_object_attach_property(&crtc->base.base, config->ctm_property, 0);

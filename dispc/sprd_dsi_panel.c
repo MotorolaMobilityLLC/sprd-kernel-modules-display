@@ -996,6 +996,31 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	return 0;
 }
 
+static void sprd_parse_vrr_config(struct sprd_panel *panel)
+{
+	struct panel_info *info = &panel->info;
+	struct device_node *lcd_node = info->of_node;
+	int rc;
+	u32 val;
+
+	if (of_property_read_bool(lcd_node, "sprd,vrr-enabled")) {
+		DRM_INFO("vrr supported and config %d modes\n", info->num_buildin_modes);
+		info->vrr_enabled = true;
+	} else {
+		info->vrr_enabled = false;
+		info->vrr_max_layers = 0;
+	}
+
+	rc = of_property_read_u32(lcd_node, "sprd,vrr-max-layers", &val);
+	if (!rc) {
+		DRM_INFO("dpu support no more than %d layers blending\n", val);
+		info->vrr_max_layers = val;
+	} else {
+		DRM_DEBUG("no blend limit config found\n");
+		info->vrr_max_layers = 0;
+	}
+}
+
 static int sprd_panel_parse_dt(struct device_node *np, struct sprd_panel *panel)
 {
 	struct device_node *lcd_node, *cmdline_node;
@@ -1025,6 +1050,8 @@ static int sprd_panel_parse_dt(struct device_node *np, struct sprd_panel *panel)
 	rc = sprd_panel_parse_lcddtb(lcd_node, panel);
 	if (rc)
 		return rc;
+
+	sprd_parse_vrr_config(panel);
 
 	return 0;
 }
