@@ -138,6 +138,7 @@ struct dpu_context {
 	u8 if_type;
 	struct videomode vm;
 	struct semaphore lock;
+	struct semaphore wb_lock;
 	bool enabled;
 	bool stopped;
 	bool flip_pending;
@@ -164,6 +165,7 @@ struct dpu_context {
 	int wb_xfbc_en;
 	int max_vsync_count;
 	int vsync_count;
+	int wb_backup;
 	struct sprd_layer_state wb_layer;
 	struct work_struct wb_work;
 	dma_addr_t wb_addr_p;
@@ -171,6 +173,7 @@ struct dpu_context {
 	size_t wb_buf_size;
 	bool wb_configed;
 	bool wb_pending;
+	bool wb_idle_flag;
 
 	/* te check parameters */
 	wait_queue_head_t te_wq;

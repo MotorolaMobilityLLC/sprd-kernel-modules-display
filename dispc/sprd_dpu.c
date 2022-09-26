@@ -296,6 +296,7 @@ void sprd_dpu_stop(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 
+	down(&ctx->wb_lock);
 	down(&ctx->lock);
 
 	if (!ctx->enabled) {
@@ -384,6 +385,7 @@ static void sprd_dpu_disable(struct sprd_dpu *dpu)
 	ctx->enabled = false;
 	up(&ctx->cabc_lock);
 	up(&ctx->lock);
+	up(&ctx->wb_lock);
 }
 
 static irqreturn_t sprd_dpu_isr(int irq, void *data)
@@ -576,6 +578,7 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	of_get_logo_memory_info(dpu, np);
 
 	sema_init(&ctx->lock, 1);
+	sema_init(&ctx->wb_lock, 1);
 	sema_init(&ctx->cabc_lock, 1);
 	init_waitqueue_head(&ctx->wait_queue);
 
