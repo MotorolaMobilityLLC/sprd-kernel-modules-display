@@ -195,7 +195,14 @@ static void sprd_crtc_atomic_flush(struct drm_crtc *crtc,
 
 	spin_lock_irq(&crtc->dev->event_lock);
 	if (crtc->state->event) {
-		drm_crtc_send_vblank_event(crtc, crtc->state->event);
+		/*
+		 * FIXME:
+		 * Crtc vblank is updated by dpu vsync isr handle function.
+		 * When each vsync occured, dpu isr function update vblank timestamp and count.
+		 * Just need to handle event and fence after crtc flush.
+		 * Update vsync here will cause fence timestamp be modified to other value.
+		 */
+		drm_send_event_timestamp_locked(crtc->dev, &crtc->state->event->base, 0);
 		crtc->state->event = NULL;
 	}
 	spin_unlock_irq(&crtc->dev->event_lock);
