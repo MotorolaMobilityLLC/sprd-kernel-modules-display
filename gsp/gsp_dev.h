@@ -38,6 +38,7 @@ struct gsp_dev {
 	char name[32];
 	u32 core_cnt;
 	u32 io_cnt;
+	bool pm_runtime_ready;
 
 	struct miscdevice mdev;
 	struct device *dev;

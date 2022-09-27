@@ -696,6 +696,7 @@ int sprd_gsp_trigger_ioctl(struct drm_device *drm_dev, void *data,
 
 	pm_runtime_mark_last_busy(gsp->dev);
 	pm_runtime_get_sync(gsp->dev);
+	gsp->pm_runtime_ready = true;
 
 	if (gsp_dev_resume_wait(gsp))
 		goto kcfg_list_release;
@@ -821,12 +822,6 @@ static int sprd_gsp_bind(struct device *dev, struct device *master, void *data)
 
 	gsp_drm_dev_set(drm_dev, gsp);
 
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, PM_RUNTIME_DELAY_MS);
-	pm_runtime_use_autosuspend(&pdev->dev);
-
-	pm_runtime_enable(&pdev->dev);
-
 	GSP_DEV_INFO(dev, "dev bind success\n");
 
 	return ret;
@@ -877,6 +872,12 @@ static int gsp_dev_probe(struct platform_device *pdev)
 	}
 
 	gsp_dev_set(gsp, pdev);
+
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, PM_RUNTIME_DELAY_MS);
+	pm_runtime_use_autosuspend(&pdev->dev);
+
+	pm_runtime_enable(&pdev->dev);
 
 	GSP_DEV_INFO(gsp->dev, "probe success\n");
 
@@ -1113,11 +1114,23 @@ static int gsp_dev_pm_resume(struct device *dev)
 #ifdef CONFIG_PM
 static int gsp_dev_runtime_suspend(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	struct gsp_dev *gsp = platform_get_drvdata(pdev);
+
+	if(!gsp->pm_runtime_ready)
+		return 0;
+
 	return gsp_dev_suspend(dev);
 }
 
 static int gsp_dev_runtime_resume(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	struct gsp_dev *gsp = platform_get_drvdata(pdev);
+
+	if(!gsp->pm_runtime_ready)
+		return 0;
+
 	return gsp_dev_resume(dev);
 }
 
