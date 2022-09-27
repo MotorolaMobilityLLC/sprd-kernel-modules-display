@@ -3270,6 +3270,7 @@ static int dpu_cabc_trigger(struct dpu_context *ctx)
 			enhance->cabc_bl_set = true;
 			enhance->frame_no = 0;
 			enhance->cabc_state = CABC_DISABLED;
+			enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 			enhance->enhance_en &= ~(BIT(9));
 			DPU_REG_WR(ctx->base + REG_DPU_ENHANCE_CFG, enhance->enhance_en);
 			pr_info("enhance cabc disable\n");
