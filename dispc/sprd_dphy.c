@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 
 #include "sprd_dphy.h"
+#include "sprd_dsi.h"
 #include "dphy/sprd_dphy_api.h"
 #include "sysfs/sysfs_display.h"
 
@@ -36,7 +37,14 @@ static int regmap_tst_io_write(void *context, u32 reg, u32 val)
 static int regmap_tst_io_read(void *context, u32 reg, u32 *val)
 {
 	struct sprd_dphy *dphy = context;
+	struct device *dsi_dev = sprd_disp_pipe_get_input(dphy->dev.parent);
+	struct sprd_dsi *dsi = dev_get_drvdata(dsi_dev);
 	int ret;
+
+	if (!dsi->ctx.enabled) {
+		pr_err("dphy is suspended, stop access\n");
+		return -EINVAL;
+	}
 
 	if (reg > 0xff)
 		return -EINVAL;
