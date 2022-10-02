@@ -1351,11 +1351,11 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 y2r_coef,
 	case DRM_FORMAT_RGBA8888:
 		/* RGBA8888 -> ABGR8888 */
 		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0;
-		/* FALLTHRU */
+		fallthrough;
 	case DRM_FORMAT_ABGR8888:
 		/* rb switch */
 		reg_val |= BIT_DPU_LAY_RGB888_RB_SWITCH;
-		/* FALLTHRU */
+		fallthrough;
 	case DRM_FORMAT_ARGB8888:
 		if (compression)
 			/* XFBC-ARGB8888 */
@@ -1366,7 +1366,7 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 y2r_coef,
 	case DRM_FORMAT_XBGR8888:
 		/* rb switch */
 		reg_val |= BIT_DPU_LAY_RGB888_RB_SWITCH;
-		/* FALLTHRU */
+		fallthrough;
 	case DRM_FORMAT_XRGB8888:
 		if (compression)
 			/* XFBC-ARGB8888 */
@@ -1377,7 +1377,7 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 y2r_coef,
 	case DRM_FORMAT_BGR565:
 		/* rb switch */
 		reg_val |= BIT_DPU_LAY_RGB565_RB_SWITCH;
-		/* FALLTHRU */
+		fallthrough;
 	case DRM_FORMAT_RGB565:
 		if (compression)
 			/* XFBC-RGB565 */
@@ -1537,8 +1537,6 @@ static void dpu_layer(struct dpu_context *ctx,
 				(rot == DPU_LAYER_ROTATION_90_M) || (rot == DPU_LAYER_ROTATION_270_M))
 				dst_size = (hwlayer->dst_h & 0xffff) | ((hwlayer->dst_w) << 16);
 		}
-
-				tmp.ctrl = BIT(24);
 
 		for (i = 0; i < hwlayer->planes; i++) {
 			if (hwlayer->addr[i] % 16)
