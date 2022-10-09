@@ -184,7 +184,7 @@ static ssize_t max_vsync_count_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	ctx->max_vsync_count = max_vsync_count;
+	ctx->max_vsync_count = 0;
 
 	return count;
 }

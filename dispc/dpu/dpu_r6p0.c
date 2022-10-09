@@ -730,7 +730,6 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu write back done isr */
 	if (reg_val & BIT_DPU_INT_WB_DONE_EN) {
-		ctx->wb_idle_flag = true;
 		/*
 		 * The write back is a time-consuming operation. If there is a
 		 * flip occurs before write back done, the write back buffer is
@@ -918,38 +917,6 @@ static int dpu_wait_all_update_done(struct dpu_context *ctx)
 
 static void dpu_stop(struct dpu_context *ctx)
 {
-	int i;
-
-	ctx->wb_backup = ctx->max_vsync_count;
-	ctx->max_vsync_count = 0;
-
-	if (!ctx->wb_idle_flag) {
-		for (i = 1; ; i++) {
-			if (ctx->wb_idle_flag) {
-				pr_info("dpu wb is idle, prepare to stop\n");
-				goto wb_is_idle;
-			}
-			mdelay(1);
-			if (i > 16) {
-				pr_err("wait wb done over 16ms, change to wait wb err bit\n");
-				break;
-			}
-		}
-
-		for (i = 1; ; i++) {
-			if (DPU_REG_RD(ctx->base + REG_DPU_STS_20) & BIT(26))
-				mdelay(1);
-			else {
-				pr_info("dpu wb err disappeared, prepare to stop\n");
-				break;
-			}
-			if (!(i % 3000)) {
-				pr_err("wait for dpu wb err disappeared %d ms timeout\n", i);
-			}
-		}
-	}
-
-wb_is_idle:
 	if (ctx->if_type == SPRD_DPU_IF_DPI)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_STOP);
 
@@ -960,7 +927,6 @@ wb_is_idle:
 
 static void dpu_run(struct dpu_context *ctx)
 {
-	ctx->max_vsync_count = ctx->wb_backup;
 	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4) | BIT(0));
 	ctx->stopped = false;
 
@@ -1041,6 +1007,8 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 		}
 	}
 
+	DPU_REG_WR(ctx->base + REG_WB_PITCH, ctx->vm.hactive);
+
 	if (debug) {
 		/* writeback debug trigger */
 		mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
@@ -1057,8 +1025,6 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 		DPU_REG_WR(ctx->base + REG_WB_CTRL, BIT(1));
 	else
 		DPU_REG_SET(ctx->base + REG_WB_CTRL, BIT(0));
-
-	ctx->wb_idle_flag = false;
 
 	pr_debug("write back trigger\n");
 }
@@ -1077,26 +1043,22 @@ static void dpu_wb_work_func(struct work_struct *data)
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, wb_work);
 
-	down(&ctx->wb_lock);
 	down(&ctx->lock);
 
 	if (!ctx->enabled) {
 		up(&ctx->lock);
-		up(&ctx->wb_lock);
 		pr_err("dpu is not initialized\n");
 		return;
 	}
 
 	if (ctx->flip_pending) {
 		up(&ctx->lock);
-		up(&ctx->wb_lock);
 		pr_warn("dpu flip is disabled\n");
 		return;
 	}
 
 	if (ctx->wb_pending) {
 		up(&ctx->lock);
-		up(&ctx->wb_lock);
 		pr_warn("display mode is going on changing\n");
 		return;
 	}
@@ -1107,7 +1069,6 @@ static void dpu_wb_work_func(struct work_struct *data)
 		dpu_wb_flip(ctx);
 
 	up(&ctx->lock);
-	up(&ctx->wb_lock);
 }
 
 static int dpu_write_back_config(struct dpu_context *ctx)
@@ -1155,9 +1116,8 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
 	}
 
-	ctx->max_vsync_count = 4;
+	ctx->max_vsync_count = 0;
 	ctx->wb_configed = true;
-	ctx->wb_idle_flag = true;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
 
