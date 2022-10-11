@@ -126,7 +126,7 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 		of_clk_get_by_name(np, "clk_dpu_core");
 	clk_ctx->clk_dpu_dpi =
 		of_clk_get_by_name(np, "clk_dpu_dpi");
-	clk_ctx->clk_dpu_dpi =
+	clk_ctx->clk_dpu_dsc =
 		of_clk_get_by_name(np, "clk_dpu_dsc");
 
 	if (IS_ERR(clk_ctx->clk_src_200m)) {
@@ -376,10 +376,9 @@ static int dpu_clk_disable(struct dpu_context *ctx)
 	clk_set_parent(clk_ctx->clk_dpu_core, clk_ctx->clk_src_307m2);
 
 	if (panel->info.dsc_en) {
-		clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
+		clk_disable_unprepare(clk_ctx->clk_dpu_dsc);
 
-		clk_set_parent(clk_ctx->clk_dpu_dpi, clk_ctx->clk_src_256m);
-
+		clk_set_parent(clk_ctx->clk_dpu_dsc, clk_ctx->clk_src_256m);
 	}
 
 	return 0;

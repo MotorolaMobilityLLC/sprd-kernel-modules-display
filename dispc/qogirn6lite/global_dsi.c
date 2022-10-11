@@ -24,8 +24,6 @@ static struct clk *clk_dsi0_eb;
 static struct clk *clk_dsi1_eb;
 static struct clk *clk_dpu_dpi;
 static struct clk *clk_src_384m;
-static struct clk *clk_dpuvsp_eb;
-static struct clk *clk_dpuvsp_disp_eb;
 
 static struct reset_control *ctx_reset, *s_ctx_reset;
 
@@ -53,20 +51,6 @@ static int dsi_glb_parse_dt(struct dsi_context *ctx,
 	if (IS_ERR(clk_src_384m)) {
 		pr_warn("read clk_src_384m failed\n");
 		clk_src_384m = NULL;
-	}
-
-	clk_dpuvsp_eb =
-		of_clk_get_by_name(np, "clk_dpuvsp_eb");
-	if (IS_ERR(clk_dpuvsp_eb)) {
-		pr_warn("read clk_dpuvsp_eb failed\n");
-		clk_dpuvsp_eb = NULL;
-	}
-
-	clk_dpuvsp_disp_eb =
-		of_clk_get_by_name(np, "clk_dpuvsp_disp_eb");
-	if (IS_ERR(clk_dpuvsp_disp_eb)) {
-		pr_warn("read clk_dpuvsp_disp_eb failed\n");
-		clk_dpuvsp_disp_eb = NULL;
 	}
 
 	ctx_reset = devm_reset_control_get(&pdev->dev, "dsi_rst");
@@ -122,19 +106,6 @@ static void dsi_glb_enable(struct dsi_context *ctx)
 {
 	int ret;
 
-	if (!ctx->is_esd_rst) {
-		ret = clk_prepare_enable(clk_dpuvsp_eb);
-		if (ret) {
-			pr_err("enable clk_dpuvsp_eb failed!\n");
-			return;
-		}
-
-		ret = clk_prepare_enable(clk_dpuvsp_disp_eb);
-		if (ret) {
-			pr_err("enable clk_dpuvsp_disp_eb failed!\n");
-			return;
-		}
-	}
 	ret = clk_prepare_enable(clk_dsi0_eb);
 	if (ret)
 		pr_err("enable clk_dsi0_eb failed!\n");

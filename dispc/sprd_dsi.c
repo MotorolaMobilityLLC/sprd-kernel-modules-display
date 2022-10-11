@@ -137,7 +137,7 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 		return;
 	}
 
-	if (!strcmp(dpu->ctx.version, "dpu-r6p0"))
+	if (!strcmp(dpu->ctx.version, "dpu-r6p0") || !strcmp(dpu->ctx.version, "dpu-r6p1"))
 		pm_runtime_get_sync(dsi->dev.parent);
 
 	sprd_dsi_enable(dsi);
@@ -267,7 +267,7 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 	sprd_dphy_disable(dsi->phy);
 	sprd_dsi_disable(dsi);
 
-	if (!strcmp(dpu->ctx.version, "dpu-r6p0"))
+	if (!strcmp(dpu->ctx.version, "dpu-r6p0") || !strcmp(dpu->ctx.version, "dpu-r6p1"))
 		pm_runtime_put(dsi->dev.parent);
 
 	dsi->ctx.enabled = false;
