@@ -125,7 +125,7 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 	clk_ctx->clk_dpu_core =
 		of_clk_get_by_name(np, "clk_dpu_core");
 	clk_ctx->clk_dpu_dpi =
-		of_clk_get_by_name(np, "clk_dpu_dsc");
+		of_clk_get_by_name(np, "clk_dpu_dpi");
 	clk_ctx->clk_dpu_dpi =
 		of_clk_get_by_name(np, "clk_dpu_dsc");
 
@@ -462,7 +462,7 @@ static void dpu_glb_disable(struct dpu_context *ctx)
 	clk_disable_unprepare(clk_dpuvsp_disp_eb);
 	clk_disable_unprepare(clk_dpuvsp_eb);
 }
-#if 0
+
 static void dpu_soc_qos_config(void)
 {
 	unsigned int i;
@@ -478,7 +478,7 @@ static void dpu_soc_qos_config(void)
 			dpu_qos_base + dpu_mtx_qos[i].offset);
 
 }
-#endif
+
 static void dpu_reset(struct dpu_context *ctx)
 {
 	if (!IS_ERR(ctx_reset)) {
@@ -492,9 +492,9 @@ static void dpu_reset(struct dpu_context *ctx)
 		udelay(10);
 		reset_control_deassert(vau_reset);
 	}
-#if 0
+
 	dpu_soc_qos_config();
-#endif
+
 }
 
 static void dpu_power_domain(struct dpu_context *ctx, int enable)
