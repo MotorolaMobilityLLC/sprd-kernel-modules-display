@@ -453,6 +453,7 @@ struct dptx *dptx_init(struct device *dev, struct drm_device *drm_dev)
 	dptx->aux_dev.name = "DP-AUX";
 	dptx->aux_dev.transfer = dptx_dpaux_transfer;
 	dptx->aux_dev.dev = &pdev->dev;
+	dptx->aux_dev.drm_dev = drm_dev;
 
 	retval = drm_dp_aux_register(&dptx->aux_dev);
 	if (retval)
