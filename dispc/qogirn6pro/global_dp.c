@@ -156,6 +156,7 @@ static void dp_detect(struct dp_context *ctx, int hpd_status)
 		reg |= MASK_USB_DP_AUX_PHY_PWDNB;
 		regmap_write(ctx->ipa_usb31_dp, REG_USB_DP_AUX_PHY_CFG, reg);
 
+#if 0
 		/* usb eb and usb ref eb :0x25000004 */
 		mask = MASK_IPA_APB_USB_EB | MASK_IPA_APB_USB_REF_EB;
 		regmap_update_bits(ctx->ipa_apb, REG_IPA_APB_IPA_EB, mask, mask);
@@ -188,12 +189,14 @@ static void dp_detect(struct dp_context *ctx, int hpd_status)
 				break;
 			udelay(1);
 		}
+#endif
 
 		/* workaround dpi porlarity issue */
 		writel(0x3, ctx->dpu1_dpi_reg);
 
 		dptx_core_init(dp->snps_dptx);
 
+#if 0
 		/* clear TCA INT status */
 		writel(0xffff, ctx->tca_base + REG_TCA_INTR_STS);
 
@@ -217,6 +220,16 @@ static void dp_detect(struct dp_context *ctx, int hpd_status)
 		/* tca config dp mode */
 		reg = 0x12 | (~(reg >> 8) & 0x4);
 		writel(reg, ctx->tca_base + REG_TCA_TCPC);
+#endif
+
+		/* type-c switch port */
+		regmap_read(ctx->aon_apb, REG_AON_APB_BOOT_MODE, &reg);
+		if (reg & BIT(10))
+			gpio_set_value(ctx->gpio_en2, 0);
+		else
+			gpio_set_value(ctx->gpio_en2, 1);
+
+		gpio_set_value(ctx->gpio_en1, 0);
 
 		/* generate HOT_PLUG interrupt */
 		mask = MASK_DISPC1_GLB_APB_HPD_STATE | MASK_DISPC1_GLB_APB_DPTX_CONFIG_EN;
