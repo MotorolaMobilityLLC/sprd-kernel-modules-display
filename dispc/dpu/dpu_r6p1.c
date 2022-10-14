@@ -4,6 +4,7 @@
  */
 
 #include <drm/drm_vblank.h>
+#include <linux/apsys_dvfs.h>
 #include <linux/backlight.h>
 #include <linux/dma-buf.h>
 #include <linux/delay.h>
@@ -615,6 +616,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
 	mmu_int_mask |= check_mmu_isr(ctx, mmu_reg_val);
 	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
+	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu_int_mask);
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
@@ -634,7 +636,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	/* dpu update done isr */
 	if (reg_val & BIT_DPU_INT_LAY_REG_UPDATE_DONE) {
 		/* dpu dvfs feature */
-	//	tasklet_schedule(&ctx->dvfs_task);
+		tasklet_schedule(&ctx->dvfs_task);
 
 		ctx->evt_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
@@ -1200,14 +1202,123 @@ static int dpu_luts_alloc(struct dpu_context *ctx)
 	return 0;
 }
 
+static void dpu_dvfs_task_func(unsigned long data)
+{
+	struct dpu_context *ctx = (struct dpu_context *)data;
+	struct layer_info layer, layers[8];
+	int i, j, max_x, max_y, min_x, min_y;
+	int layer_en, max, maxs[8], count = 0;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	u32 dvfs_freq, reg_val;
+
+	if (!ctx->enabled) {
+		pr_err("dpu is not initialized\n");
+		return;
+	}
+
+	/*
+	 * Count the current total number of active layers
+	 * and the corresponding pos_x, pos_y, size_x and size_y.
+	 */
+	for (i = 0; i < 8; i++) {
+		layer_en = DPU_REG_RD(ctx->base + REG_LAYER_ENABLE) & BIT(i);
+		if (layer_en) {
+			reg_val = DPU_REG_RD(ctx->base + DPU_LAY_REG(REG_LAY_POS, i));
+			layers[count].dst_x = reg_val & 0xffff;
+			layers[count].dst_y = reg_val >> 16;
+
+			reg_val = DPU_REG_RD(ctx->base + DPU_LAY_REG(REG_LAY_DES_SIZE, i));
+			layers[count].dst_w = reg_val & 0xffff;
+			layers[count].dst_h = reg_val >> 16;
+			count++;
+		}
+	}
+
+	/*
+	 * Calculate the number of overlaps between each
+	 * layer with other layers, not include itself.
+	 */
+	for (i = 0; i < count; i++) {
+		layer.dst_x = layers[i].dst_x;
+		layer.dst_y = layers[i].dst_y;
+		layer.dst_w = layers[i].dst_w;
+		layer.dst_h = layers[i].dst_h;
+		maxs[i] = 1;
+
+		for (j = 0; j < count; j++) {
+			if (layer.dst_x + layer.dst_w > layers[j].dst_x &&
+				layers[j].dst_x + layers[j].dst_w > layer.dst_x &&
+				layer.dst_y + layer.dst_h > layers[j].dst_y &&
+				layers[j].dst_y + layers[j].dst_h > layer.dst_y &&
+				i != j) {
+				max_x = max(layers[i].dst_x, layers[j].dst_x);
+				max_y = max(layers[i].dst_y, layers[j].dst_y);
+				min_x = min(layers[i].dst_x + layers[i].dst_w,
+					layers[j].dst_x + layers[j].dst_w);
+				min_y = min(layers[i].dst_y + layers[i].dst_h,
+					layers[j].dst_y + layers[j].dst_h);
+
+				layer.dst_x = max_x;
+				layer.dst_y = max_y;
+				layer.dst_w = min_x - max_x;
+				layer.dst_h = min_y - max_y;
+
+				maxs[i]++;
+			}
+		}
+	}
+
+	/* take the maximum number of overlaps */
+	max = maxs[0];
+	for (i = 1; i < count; i++) {
+		if (maxs[i] > max)
+			max = maxs[i];
+	}
+
+	/*
+	 * Determine which frequency to use based on the
+	 * maximum number of overlaps.
+	 * Every IP here may be different, so need to modify it
+	 * according to the actual dpu core clock.
+	 */
+	if (max <= 2)
+		dvfs_freq = 409600000;
+	else if (max == 3)
+		dvfs_freq = 512000000;
+	else if (max == 4)
+		dvfs_freq = 614400000;
+	else
+		dvfs_freq = 614400000;
+
+	if (panel->info.vrr_enabled)
+		dvfs_freq = 614400000;
+
+	dpu_dvfs_notifier_call_chain(&dvfs_freq);
+}
+
+static void dpu_dvfs_task_init(struct dpu_context *ctx)
+{
+	static int need_config = 1;
+
+	if (!need_config)
+		return;
+
+	need_config = 0;
+	tasklet_init(&ctx->dvfs_task, dpu_dvfs_task_func,
+			(unsigned long)ctx);
+}
+
 static int dpu_init(struct dpu_context *ctx)
 {
 	u32 reg_val, size;
+	u32 dvfs_freq;
 	int ret;
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
 	struct dpu_enhance *enhance = ctx->enhance;
-//	struct sprd_panel *panel =
-//		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 
 	//calc_dsc_params(&ctx->dsc_init);
 
@@ -1249,6 +1360,8 @@ static int dpu_init(struct dpu_context *ctx)
 
 	dpu_write_back_config(ctx);
 
+	dpu_dvfs_task_init(ctx);
+
 	enhance->frame_no = 0;
 
 	if (ctx->fastcall_en) {
@@ -1257,14 +1370,26 @@ static int dpu_init(struct dpu_context *ctx)
 			pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
 	}
 
+	if (panel->info.vrr_enabled) {
+		dvfs_freq = 614400000;
+		dpu_dvfs_notifier_call_chain(&dvfs_freq);
+	}
+
 	return 0;
 }
 
 static void dpu_fini(struct dpu_context *ctx)
 {
+	int ret;
 
 	DPU_REG_WR(ctx->base + REG_DPU_INT_EN, 0x00);
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xff);
+
+	if (ctx->fastcall_en) {
+		ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_NON_SECURE, 0, 0);
+		if (ret)
+			pr_err("Trusty fastcall clear firewall failed, ret = %d\n", ret);
+	}
 
 	ctx->panel_ready = false;
 }
@@ -1811,6 +1936,9 @@ static void dpu_flip(struct dpu_context *ctx,
 
 static void dpu_dpi_init(struct dpu_context *ctx)
 {
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct sprd_dsi *dsi = dpu->dsi;
+	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
 	u32 int_mask = 0;
 	u32 reg_val;
 
@@ -1831,7 +1959,8 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
 
 		reg_val = ctx->vm.vsync_len << 0 |
-			  ctx->vm.vback_porch << 8;
+			  ctx->vm.vback_porch << 8 |
+			  ctx->vm.vfront_porch << 20;
 		DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
 
 		reg_val = ctx->vm.vfront_porch;
@@ -1852,7 +1981,8 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		/* enable dpu dpi vsync */
 		int_mask |= BIT_DPU_INT_VSYNC;
 		/* enable dpu TE INT */
-		int_mask |= BIT_DPU_INT_TE;
+		if (panel->info.esd_check_mode == ESD_MODE_TE_CHECK)
+			int_mask |= BIT_DPU_INT_TE;
 		/* enable underflow err INT */
 		int_mask |= BIT_DPU_INT_ERR;
 		/* enable write back done INT */
