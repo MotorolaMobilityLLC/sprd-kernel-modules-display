@@ -26,6 +26,8 @@
 
 static void __iomem *dpu_qos_base;
 static struct clk *clk_dpuvsp_eb;
+static struct clk *clk_dpu_dsc0_eb;
+static struct clk *clk_dpu_dsc1_eb;
 static struct clk *clk_dpuvsp_disp_eb;
 static struct clk *clk_master_div6_eb;
 
@@ -248,7 +250,7 @@ static int dpu_clk_init(struct dpu_context *ctx)
 				(struct sprd_panel *)container_of(dpu->dsi->panel,
 				struct sprd_panel, base);
 
-	dsc_core = ctx->vm.hactive / panel->info.slice_height;
+	dsc_core = ctx->vm.hactive / panel->info.slice_width;
 	dpu_core_val = calc_dpu_core_clk();
 
 	if (dpu->dsi->ctx.dpi_clk_div) {
@@ -280,13 +282,16 @@ static int dpu_clk_init(struct dpu_context *ctx)
 		if (ret)
 			pr_err("dpu update dpi clk rate failed\n");
 		if (panel->info.dsc_en) {
-				ret = clk_set_parent(clk_ctx->clk_dpu_dsc, clk_src);
-				if (ret)
-				pr_warn("set dpi clk source failed\n");
-				ret = clk_set_rate(clk_ctx->clk_dpu_dsc,  ctx->vm.pixelclock/dsc_core);
-				if (ret)
-				pr_err("dpu update dpi clk rate failed\n");
-			}
+			ret = clk_set_parent(clk_ctx->clk_dpu_dsc, clk_src);
+			if (ret)
+				pr_warn("set dsc clk source failed\n");
+			ret = clk_set_rate(clk_ctx->clk_dpu_dsc,  ctx->vm.pixelclock/dsc_core);
+			if (ret)
+				pr_err("dpu update dsc clk rate failed\n");
+
+			pr_info("clk_dpu_dsc_src = %u, clk_dpu_dsc = %u, dsc_core = %d\n",
+				dpi_src_val, ctx->vm.pixelclock/dsc_core, dsc_core);
+		}
 	}
 
 	return ret;
@@ -377,7 +382,6 @@ static int dpu_clk_disable(struct dpu_context *ctx)
 
 	if (panel->info.dsc_en) {
 		clk_disable_unprepare(clk_ctx->clk_dpu_dsc);
-
 		clk_set_parent(clk_ctx->clk_dpu_dsc, clk_ctx->clk_src_256m);
 	}
 
@@ -410,6 +414,20 @@ static int dpu_glb_parse_dt(struct dpu_context *ctx,
 		clk_dpuvsp_eb = NULL;
 	}
 
+	clk_dpu_dsc0_eb =
+		of_clk_get_by_name(np, "clk_dpu_dsc0_eb");
+	if (IS_ERR(clk_dpu_dsc0_eb)) {
+		pr_err("read clk_dpu_dsc0_eb failed\n");
+		clk_dpu_dsc0_eb = NULL;
+	}
+
+	clk_dpu_dsc1_eb =
+		of_clk_get_by_name(np, "clk_dpu_dsc1_eb");
+	if (IS_ERR(clk_dpu_dsc1_eb)) {
+		pr_err("read clk_dpu_dsc1_eb failed\n");
+		clk_dpu_dsc1_eb = NULL;
+	}
+
 	clk_dpuvsp_disp_eb =
 		of_clk_get_by_name(np, "clk_dpuvsp_disp_eb");
 	if (IS_ERR(clk_dpuvsp_disp_eb)) {
@@ -440,12 +458,30 @@ static int dpu_glb_parse_dt(struct dpu_context *ctx,
 static void dpu_glb_enable(struct dpu_context *ctx)
 {
 	int ret;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+				(struct sprd_panel *)container_of(dpu->dsi->panel,
+				struct sprd_panel, base);
+
 	ret = clk_prepare_enable(clk_dpuvsp_eb);
 	ret = clk_prepare_enable(clk_dpuvsp_disp_eb);
+
+	if (panel->info.dsc_en) {
+		ret = clk_prepare_enable(clk_dpu_dsc0_eb);
+		if (ret)
+			pr_err("clk dpu dsc0 eb failed\n");
+	}
 }
 
 static void dpu_glb_disable(struct dpu_context *ctx)
 {
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+				(struct sprd_panel *)container_of(dpu->dsi->panel,
+				struct sprd_panel, base);
+
 	if (!IS_ERR(vau_reset)) {
 		reset_control_assert(vau_reset);
 		udelay(10);
@@ -456,6 +492,10 @@ static void dpu_glb_disable(struct dpu_context *ctx)
 		reset_control_assert(ctx_reset);
 		udelay(10);
 		reset_control_deassert(ctx_reset);
+	}
+
+	if (panel->info.dsc_en) {
+		clk_disable_unprepare(clk_dpu_dsc0_eb);
 	}
 
 	clk_disable_unprepare(clk_dpuvsp_disp_eb);

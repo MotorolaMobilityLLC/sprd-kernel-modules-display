@@ -24,6 +24,7 @@
 #include "sprd_dsi_panel.h"
 #include "dsi/sprd_dsi_api.h"
 #include "dsi/sprd_dsi_hal.h"
+#include "sprd_dsc.h"
 
 #define cabc_cfg0			268439552
 #define cabc_cfg1			268439552
@@ -198,6 +199,8 @@ struct dpu_context {
 	bool wb_size_changed;
 
 	/* dsc config parameters */
+	struct dsc_cfg dsc_cfg;
+	struct dsc_init_param dsc_init;
 	bool dual_dsi_en;
 	bool dsc_en;
 	int  dsc_mode;

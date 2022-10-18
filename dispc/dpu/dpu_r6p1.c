@@ -258,6 +258,7 @@
 #define BIT_DPU_INT_PQ_LUT_UPDATE_DONE			BIT(20)
 
 /* DPI control bits */
+#define BIT_DPU_VRR_EN					BIT(2)
 #define BIT_DPU_EDPI_TE_EN				BIT(8)
 #define BIT_DPU_EDPI_FROM_EXTERNAL_PAD			BIT(10)
 #define BIT_DPU_DPI_HALT_EN				BIT(16)
@@ -1071,7 +1072,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 
 	return 0;
 }
-/*
+
 static int dpu_config_dsc_param(struct dpu_context *ctx)
 {
 	u32 reg_val;
@@ -1161,17 +1162,16 @@ static int dpu_config_dsc_param(struct dpu_context *ctx)
 		if (dpu->dsi->ctx.work_mode == DSI_MODE_CMD)
 			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CTRL), 0x2000010b);
 		else
-			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CTRL), 0x2000000b);
+			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CTRL), 0x2000040b);
 	}
 
 	if (dpu->dsi->ctx.work_mode == DSI_MODE_CMD)
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CTRL), 0x2000010b);
 	else
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CTRL), 0x2000000b);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CTRL), 0x2000040b);
 
 	return 0;
 }
-*/
 
 static int dpu_luts_alloc(struct dpu_context *ctx)
 {
@@ -1325,13 +1325,13 @@ static int dpu_init(struct dpu_context *ctx)
 	struct sprd_panel *panel =
 		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 
-	//calc_dsc_params(&ctx->dsc_init);
+	calc_dsc_params(&ctx->dsc_init);
 
-//	if (panel->info.dual_dsi_en)
-//		DPU_REG_WR(ctx->base + REG_DPU_MODE, BIT(0));
+	if (panel->info.dual_dsi_en)
+		DPU_REG_WR(ctx->base + REG_DPU_MODE, BIT(0));
 
-	//if (panel->info.dsc_en)
-	//	dpu_config_dsc_param(ctx);
+	if (panel->info.dsc_en)
+		dpu_config_dsc_param(ctx);
 
 	/* set bg color */
 	DPU_REG_WR(ctx->base + REG_BG_COLOR, 0x00);
@@ -1342,7 +1342,7 @@ static int dpu_init(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_BLEND_SIZE, size);
 
 	DPU_REG_WR(ctx->base + REG_DPU_CFG0, 0x00);
-	if (dpu->dsi->ctx.work_mode == DSI_MODE_CMD ) {
+	if (dpu->dsi->ctx.work_mode == DSI_MODE_CMD && panel->info.dsc_en) {
 		DPU_REG_SET(ctx->base + REG_DPU_CFG0, BIT(1));
 		ctx->is_single_run = true;
 	}
@@ -1626,11 +1626,9 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
 		ctx->stopped = false;
 	} else if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_LAY_REG_UPDATE);
 		dpu_wait_update_done(ctx);
 	}
 }
-
 
 static void dpu_layer(struct dpu_context *ctx,
 		    struct sprd_layer_state *hwlayer)
@@ -1773,20 +1771,23 @@ static int dpu_vrr(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 			struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 	u32 reg_val;
 
 	dpu_stop(ctx);
 	reg_val = (ctx->vm.vsync_len << 0) |
-		(ctx->vm.vback_porch << 8) |
-		(ctx->vm.vfront_porch << 20);
+		(ctx->vm.vback_porch << 8);
 	DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
+	reg_val = ctx->vm.vfront_porch;
+	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
 
 	reg_val = (ctx->vm.hsync_len << 0) |
 		(ctx->vm.hback_porch << 8) |
 		(ctx->vm.hfront_porch << 20);
 	DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
 
-	if (ctx->dsc_en) {
+	if (panel->info.dsc_en) {
 		reg_val = (ctx->vm.vsync_len << 0) |
 			(ctx->vm.vback_porch  << 8) |
 			(ctx->vm.vfront_porch << 20);
@@ -1797,7 +1798,6 @@ static int dpu_vrr(struct dpu_context *ctx)
 			(ctx->vm.hfront_porch << 20);
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_H_TIMING), reg_val);
 	}
-	sprd_dsi_vrr_timing(dpu->dsi);
 	dpu_wait_update_done(ctx);
 	ctx->stopped = false;
 	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
@@ -1986,6 +1986,9 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 	u32 int_mask = 0;
 	u32 reg_val;
 
+	if (panel->info.vrr_enabled)
+		DPU_REG_SET(ctx->base + REG_DPI_CTRL, BIT_DPU_VRR_EN);
+
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		/* use dpi as interface */
 		DPU_REG_CLR(ctx->base + REG_DPU_CFG0, BIT_DPU_IF_EDPI);
@@ -2003,8 +2006,7 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
 
 		reg_val = ctx->vm.vsync_len << 0 |
-			  ctx->vm.vback_porch << 8 |
-			  ctx->vm.vfront_porch << 20;
+			  ctx->vm.vback_porch << 8;
 		DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
 
 		reg_val = ctx->vm.vfront_porch;

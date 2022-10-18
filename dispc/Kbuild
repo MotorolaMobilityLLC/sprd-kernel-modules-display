@@ -64,6 +64,7 @@ endif
 sprd-drm-y := \
 	disp_lib.o \
 	sprd_drm.o \
+	sprd_dsc.o \
 	sprd_gem.o \
 	sprd_plane.o
 
