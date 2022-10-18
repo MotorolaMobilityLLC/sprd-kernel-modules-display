@@ -1019,6 +1019,11 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	struct drm_device *drm = dpu->crtc->base.dev;
 	int mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
 
+	if (ctx->fastcall_en) {
+		pr_info("widevine use fastcall, not support write back\n");
+		return 0;
+	}
+
 	if (!need_config) {
 		pr_debug("no need to open wb function\n");
 		return 0;
@@ -1045,7 +1050,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		return -ENOMEM;
 	}
 
-	// ctx->wb_xfbc_en = 1;
+	//ctx->wb_xfbc_en = 1;
 	ctx->wb_layer.index = 7;
 	ctx->wb_layer.planes = 1;
 	ctx->wb_layer.alpha = 0xff;
@@ -1632,11 +1637,11 @@ static void dpu_layer(struct dpu_context *ctx,
 {
 	const struct drm_format_info *info;
 	struct layer_reg tmp = {};
-	u32 dst_size, src_size, offset, wd, rot;
+	u32 dst_size, src_size, offset, wd, rot, secure_val;
 	int i;
 
 	/* for secure displaying, just use layer 7 as secure layer */
-	if (hwlayer->secure_en || ctx->secure_debug)
+	if ((hwlayer->secure_en || ctx->secure_debug) && ctx->fastcall_en)
 		hwlayer->index = 7;
 
 	offset = (hwlayer->dst_x & 0xffff) | ((hwlayer->dst_y) << 16);
@@ -1661,6 +1666,18 @@ static void dpu_layer(struct dpu_context *ctx,
 			if ((rot == DPU_LAYER_ROTATION_90) || (rot == DPU_LAYER_ROTATION_270) ||
 				(rot == DPU_LAYER_ROTATION_90_M) || (rot == DPU_LAYER_ROTATION_270_M))
 				dst_size = (hwlayer->dst_h & 0xffff) | ((hwlayer->dst_w) << 16);
+		}
+		/*
+		 * FIXME:
+		 * Bypass dst and src same size scaling to avoid causing performance problem.
+		 * Dst and src frame in same size will still be scaling in current version.
+		 * It will be bypassed by digital ip in next version.
+		 */
+		if (!(hwlayer->secure_en || ctx->secure_debug)) {
+			if (src_size != dst_size)
+				tmp.ctrl = BIT(24);
+			else
+				tmp.ctrl = 0;
 		}
 
 		for (i = 0; i < hwlayer->planes; i++) {
@@ -1692,6 +1709,33 @@ static void dpu_layer(struct dpu_context *ctx,
 
 		tmp.ctrl |= dpu_img_ctrl(hwlayer->format, hwlayer->blending,
 				hwlayer->xfbc, hwlayer->y2r_coef, hwlayer->rotation);
+	}
+
+	if (!ctx->fastcall_en) {
+		secure_val = DPU_REG_RD(ctx->base + REG_DPU_SECURE);
+		if (hwlayer->secure_en || ctx->secure_debug) {
+			if (!secure_val) {
+				disp_ca_connect();
+				mdelay(5);
+			}
+			ctx->tos_msg->cmd = TA_FIREWALL_SET;
+			ctx->tos_msg->version = DPU_R6P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+
+			memcpy(ctx->tos_msg + 1, &tmp, sizeof(tmp));
+
+			ctx->tos_msg->cmd = TA_REG_SET;
+			ctx->tos_msg->version = DPU_R6P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg) + sizeof(tmp));
+			disp_ca_wait_response();
+			return;
+		} else if (secure_val) {
+			ctx->tos_msg->cmd = TA_REG_CLR;
+			ctx->tos_msg->version = DPU_R6P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+		}
 	}
 
 	for (i = 0; i < hwlayer->planes; i++)
@@ -2048,6 +2092,14 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		}
 	} else {
 		pr_warn("dpu backlight node not found\n");
+	}
+
+	if (of_property_read_bool(np, "sprd,widevine-use-fastcall")) {
+		ctx->fastcall_en = true;
+		pr_info("read widevine-use-fastcall success, fastcall_en = true\n");
+	} else {
+		ctx->fastcall_en = false;
+		pr_info("read widevine-use-fastcall failed, fastcall_en = false\n");
 	}
 
 	qos_np = of_parse_phandle(np, "sprd,qos", 0);
