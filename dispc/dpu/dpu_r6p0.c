@@ -957,7 +957,7 @@ static void dpu_cabc_work_func(struct work_struct *data)
 	if (ctx->enabled) {
 		dpu_cabc_trigger(ctx);
 		DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
-		dpu_wait_pq_update_done(ctx);
+		//dpu_wait_pq_update_done(ctx);
 	}
 	up(&ctx->cabc_lock);
 }
