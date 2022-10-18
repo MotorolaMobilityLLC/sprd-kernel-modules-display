@@ -246,18 +246,18 @@ struct gamma_lut {
 };
 
 struct cm_cfg {
-	short coef00;
-	short coef01;
-	short coef02;
-	short coef03;
-	short coef10;
-	short coef11;
-	short coef12;
-	short coef13;
-	short coef20;
-	short coef21;
-	short coef22;
-	short coef23;
+	u16 coef00;
+	u16 coef01;
+	u16 coef02;
+	u16 coef03;
+	u16 coef10;
+	u16 coef11;
+	u16 coef12;
+	u16 coef13;
+	u16 coef20;
+	u16 coef21;
+	u16 coef22;
+	u16 coef23;
 };
 
 struct slp_cfg {
@@ -271,12 +271,19 @@ struct slp_cfg {
 
 struct dpu_enhance {
 	u32 enhance_en;
+	bool ctm_set;
 
 	struct slp_cfg slp_copy;
 	struct epf_cfg epf_copy;
 	struct cm_cfg cm_copy;
+	struct cm_cfg ctm_copy;
 	struct hsv_lut hsv_copy;
 	struct gamma_lut gamma_copy;
+};
+
+enum {
+	CM_CTM,
+	CM_PQ,
 };
 
 static struct wb_region region[3];
@@ -940,6 +947,101 @@ static void dpu_layer(struct dpu_context *ctx,
 				hwlayer->src_w, hwlayer->src_h);
 }
 
+static void cm_multi(struct cm_cfg* cm_final, struct cm_cfg* cm_pq, struct cm_cfg* cm_ctm)
+{
+	int i, j, k;
+	int16_t *cm_final_p, *cm_pq_p, *cm_ctm_p;
+	cm_pq_p = (int16_t *)cm_pq;
+	cm_ctm_p = (int16_t *)cm_ctm;
+
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 4; j++) {
+			cm_final_p = (int16_t *)cm_final;
+			for (k = 0; k < 3; k++)
+				cm_final_p[i * 4 + j] += (cm_pq_p[i * 4 + k] * cm_ctm_p[k * 4 + j]) / 10000;
+			cm_final_p[i * 4 + j] += cm_pq_p[i * 4 + 3];
+		}
+	}
+}
+
+static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
+{
+	struct dpu_enhance *enhance = ctx->enhance;
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct cm_cfg cm_final;
+	int i, j;
+	int k = 0;
+
+	if (cm_status == CM_PQ) {
+		if (enhance->ctm_set) {
+			cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
+		} else {
+			memcpy(&cm_final, &enhance->cm_copy, sizeof(struct cm_cfg));
+		}
+	} else if (cm_status == CM_CTM) {
+		int16_t ctm_hwc[16];
+		int16_t ctm_unisoc[12];
+		struct cm_cfg ctm_new = {};
+		struct drm_color_ctm *ctm = (struct drm_color_ctm *)dpu->crtc->base.state->ctm->data;
+
+		if (!dpu->crtc->base.state->ctm)
+			return;
+
+		/*
+		 * ctm->matrix[8] means if ctm changed, 0 means samed as last
+		 */
+		if (!ctm->matrix[8])
+			return;
+		ctm->matrix[8] = 0;
+
+		/*
+		 * ctm->matrix[j] is combined by two elements of colorMatrix in hwc hal,
+		 * so need to be parsed here
+		 */
+		for (j = 0; j < 16; j += 2) {
+			ctm_hwc[j] = (int16_t)(ctm->matrix[j / 2] & 0xffff);
+			ctm_hwc[j+1] = (int16_t)((ctm->matrix[j / 2] >> 16) & 0xffff);
+		}
+
+		/*
+		 * there are 16 elements in colorMatrix from hwc hal,
+		 * however only 12 elements in unisoc colorMatrix
+		 */
+		for (i = 0; i < 16; i++) {
+			if ((i + 1) % 4 == 0)
+				continue;
+			ctm_unisoc[k] = ctm_hwc[i];
+			k++;
+		}
+
+		ctm_new.coef00 = ctm_unisoc[0];
+		ctm_new.coef10 = ctm_unisoc[1];
+		ctm_new.coef20 = ctm_unisoc[2];
+		ctm_new.coef01 = ctm_unisoc[3];
+		ctm_new.coef11 = ctm_unisoc[4];
+		ctm_new.coef21 = ctm_unisoc[5];
+		ctm_new.coef02 = ctm_unisoc[6];
+		ctm_new.coef12 = ctm_unisoc[7];
+		ctm_new.coef22 = ctm_unisoc[8];
+		ctm_new.coef03 = ctm_unisoc[9];
+		ctm_new.coef13 = ctm_unisoc[10];
+		ctm_new.coef23 = ctm_unisoc[11];
+
+		pr_info("ctm changed!\n");
+		memcpy(&(enhance->ctm_copy), &ctm_new, sizeof(struct cm_cfg));
+		cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
+		enhance->ctm_set = 1;
+	}
+
+	DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm_final.coef01 << 16) | cm_final.coef00);
+	DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm_final.coef03 << 16) | cm_final.coef02);
+	DPU_REG_WR(ctx->base + REG_CM_COEF11_10, (cm_final.coef11 << 16) | cm_final.coef10);
+	DPU_REG_WR(ctx->base + REG_CM_COEF13_12, (cm_final.coef13 << 16) | cm_final.coef12);
+	DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm_final.coef21 << 16) | cm_final.coef20);
+	DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm_final.coef23 << 16) | cm_final.coef22);
+	DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(3));
+}
+
 static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 count)
 {
 	int i;
@@ -970,6 +1072,8 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 		state = to_sprd_plane_state(planes[i].base.state);
 		dpu_layer(ctx, &state->layer);
 	}
+
+	dpu_cm_set(ctx, CM_CTM);
 
 	/* update trigger and wait */
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {
@@ -1214,7 +1318,6 @@ static void dpu_epf_set(struct dpu_context *ctx, struct epf_cfg *epf)
 static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct cm_cfg *cm;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
 	struct hsv_lut *hsv;
@@ -1253,14 +1356,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		break;
 	case ENHANCE_CFG_ID_CM:
 		memcpy(&enhance->cm_copy, param, sizeof(enhance->cm_copy));
-		cm = &enhance->cm_copy;
-		DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm->coef01 << 16) | cm->coef00);
-		DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm->coef03 << 16) | cm->coef02);
-		DPU_REG_WR(ctx->base + REG_CM_COEF11_10, (cm->coef11 << 16) | cm->coef10);
-		DPU_REG_WR(ctx->base + REG_CM_COEF13_12, (cm->coef13 << 16) | cm->coef12);
-		DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm->coef21 << 16) | cm->coef20);
-		DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm->coef23 << 16) | cm->coef22);
-		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(3));
+		dpu_cm_set(ctx, CM_PQ);
 		pr_info("enhance cm set\n");
 		break;
 	case ENHANCE_CFG_ID_SLP:
@@ -1406,7 +1502,6 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 static void dpu_enhance_reload(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct cm_cfg *cm;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
 	struct hsv_lut *hsv;
@@ -1431,13 +1526,7 @@ static void dpu_enhance_reload(struct dpu_context *ctx)
 	}
 
 	if (enhance->enhance_en & BIT(3)) {
-		cm = &enhance->cm_copy;
-		DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm->coef01 << 16) | cm->coef00);
-		DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm->coef03 << 16) | cm->coef02);
-		DPU_REG_WR(ctx->base + REG_CM_COEF11_10, (cm->coef11 << 16) | cm->coef10);
-		DPU_REG_WR(ctx->base + REG_CM_COEF13_12, (cm->coef13 << 16) | cm->coef12);
-		DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm->coef21 << 16) | cm->coef20);
-		DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm->coef23 << 16) | cm->coef22);
+		dpu_cm_set(ctx, CM_PQ);
 		pr_info("enhance cm reload\n");
 	}
 
