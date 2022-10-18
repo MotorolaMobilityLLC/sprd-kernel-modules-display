@@ -1037,7 +1037,7 @@ void gsp_r9p0_core_disable(struct gsp_core *c)
 	clk_disable_unprepare(core->gsp_dpuvsp_eb);
 }
 
-static int gsp_r9p0_core_parse_clk(struct gsp_r9p0_core *core)
+static int gsp_r9p0_core_parse_clk(struct gsp_core *c, struct gsp_r9p0_core *core)
 {
 	int status = 0;
 
@@ -1050,8 +1050,12 @@ static int gsp_r9p0_core_parse_clk(struct gsp_r9p0_core *core)
 	core->gsp_clk = of_clk_get_by_name(core->common.node,
 			"clk_gsp0");
 
-	core->gsp_clk_parent = of_clk_get_by_name(core->common.node,
+	if (strcmp(GSP_QOGIRN6PRO, c->board_version) == 0)
+		core->gsp_clk_parent = of_clk_get_by_name(core->common.node,
 			"clk_src_512m");
+	else if (strcmp(GSP_QOGIRN6L, c->board_version) == 0)
+		core->gsp_clk_parent = of_clk_get_by_name(core->common.node,
+			"clk_src_614m4");
 
 	if (IS_ERR_OR_NULL(core->gsp_eb)
 	       || IS_ERR_OR_NULL(core->gsp_dpuvsp_eb)
@@ -1107,7 +1111,7 @@ int gsp_r9p0_core_parse_dt(struct gsp_core *core)
 		return ret;
 	}
 
-	gsp_r9p0_core_parse_clk(r9p0_core);
+	gsp_r9p0_core_parse_clk(core, r9p0_core);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (IS_ERR_OR_NULL(res)) {
