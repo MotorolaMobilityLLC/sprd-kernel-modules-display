@@ -14,7 +14,8 @@ enum {
 	DPU_R3P0,
 	DPU_R4P0,
 	DPU_R5P0,
-	DPU_R6P0
+	DPU_R6P0,
+	DPU_R6P1
 };
 
 enum disp_command {

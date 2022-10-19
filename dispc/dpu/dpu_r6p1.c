@@ -1724,20 +1724,20 @@ static void dpu_layer(struct dpu_context *ctx,
 				mdelay(5);
 			}
 			ctx->tos_msg->cmd = TA_FIREWALL_SET;
-			ctx->tos_msg->version = DPU_R6P0;
+			ctx->tos_msg->version = DPU_R6P1;
 			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
 			disp_ca_wait_response();
 
 			memcpy(ctx->tos_msg + 1, &tmp, sizeof(tmp));
 
 			ctx->tos_msg->cmd = TA_REG_SET;
-			ctx->tos_msg->version = DPU_R6P0;
+			ctx->tos_msg->version = DPU_R6P1;
 			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg) + sizeof(tmp));
 			disp_ca_wait_response();
 			return;
 		} else if (secure_val) {
 			ctx->tos_msg->cmd = TA_REG_CLR;
-			ctx->tos_msg->version = DPU_R6P0;
+			ctx->tos_msg->version = DPU_R6P1;
 			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
 			disp_ca_wait_response();
 		}
