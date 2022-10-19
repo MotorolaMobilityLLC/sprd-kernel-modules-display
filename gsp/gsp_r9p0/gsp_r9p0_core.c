@@ -495,6 +495,7 @@ static int gsp_r9p0_core_capa_init(struct gsp_core *core)
 	capa->common.buf_type = GSP_ADDR_TYPE_IOVIRTUAL;
 
 	/* private information initialize */
+	strcpy(capa->board, core->board_version);
 	capa->scale_range_up = 64;
 	capa->scale_range_down = 1;
 	capa->yuv_xywh_even = 0;
