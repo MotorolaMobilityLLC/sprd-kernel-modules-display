@@ -1563,9 +1563,21 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 
 static void dpu_dpi_init(struct dpu_context *ctx)
 {
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct sprd_dsi *dsi = dpu->dsi;
+	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
+	struct videomode vm;
 	u32 int_mask = 0;
 	u32 mmu_int_mask = 0;
 	u32 reg_val;
+
+	if (dpu->crtc->fps_mode_changed && (dpu->mode.type == DRM_MODE_TYPE_DRIVER)) {
+		drm_display_mode_to_videomode(&panel->info.mode, &vm);
+	} else if (dpu->mode.type & DRM_MODE_TYPE_USERDEF) {
+		drm_display_mode_to_videomode(&panel->info.mode, &vm);
+	} else {
+		drm_display_mode_to_videomode(&dpu->actual_mode, &vm);
+	}
 
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		/* use dpi as interface */
@@ -1576,17 +1588,17 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 
 
 		/* set dpi timing */
-		reg_val = ctx->vm.hsync_len << 0 |
-			  ctx->vm.hback_porch << 8 |
-			  ctx->vm.hfront_porch << 20;
+		reg_val = vm.hsync_len << 0 |
+			  vm.hback_porch << 8 |
+			  vm.hfront_porch << 20;
 		DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
 
-		reg_val = ctx->vm.vsync_len << 0 |
-			  ctx->vm.vback_porch << 8 |
-			  ctx->vm.vfront_porch << 20;
+		reg_val = vm.vsync_len << 0 |
+			  vm.vback_porch << 8 |
+			  vm.vfront_porch << 20;
 		DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
 
-		if (ctx->vm.vsync_len + ctx->vm.vback_porch < 32)
+		if (vm.vsync_len + vm.vback_porch < 32)
 			pr_warn("Warning: (vsync + vbp) < 32, "
 				"underflow risk!\n");
 
@@ -2359,55 +2371,21 @@ static int dpu_modeset(struct dpu_context *ctx,
 	struct sprd_panel *panel =
 		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 	struct sprd_crtc_state *state = to_sprd_crtc_state(dpu->crtc->base.state);
-	struct sprd_dsi *dsi = dpu->dsi;
-	static unsigned int now_vtotal;
-	static unsigned int now_htotal;
-	struct drm_display_mode *actual_mode;
-	u32 mode_vrefresh, temp_vrefresh;
-	int i;
+	u32 mode_vrefresh;
 
 	scale_cfg->in_w = mode->hdisplay;
 	scale_cfg->in_h = mode->vdisplay;
 	mode_vrefresh = drm_mode_vrefresh(mode);
-	actual_mode = mode;
 
 	if (state->resolution_change) {
-		if ((mode->hdisplay != ctx->vm.hactive) || (mode->vdisplay != ctx->vm.vactive))
+		if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.hdisplay))
 			scale_cfg->need_scale = true;
 		else
 			scale_cfg->need_scale = false;
+		ctx->wb_pending = true;
 	}
 
-	if (state->frame_rate_change) {
-		if ((mode->hdisplay != ctx->vm.hactive) || (mode->vdisplay != ctx->vm.vactive)) {
-			for (i = 0; i <= panel->info.display_mode_count; i++) {
-				temp_vrefresh = drm_mode_vrefresh(&panel->info.buildin_modes[i]);
-				if ((panel->info.buildin_modes[i].hdisplay == ctx->vm.hactive) &&
-					(panel->info.buildin_modes[i].vdisplay == ctx->vm.vactive) &&
-					(temp_vrefresh == mode_vrefresh)) {
-					actual_mode = &(panel->info.buildin_modes[i]);
-					break;
-				}
-			}
-		}
-
-		if (!now_htotal && !now_vtotal) {
-			now_htotal = ctx->vm.hactive + ctx->vm.hfront_porch +
-				ctx->vm.hback_porch + ctx->vm.hsync_len;
-			now_vtotal = ctx->vm.vactive + ctx->vm.vfront_porch +
-				ctx->vm.vback_porch + ctx->vm.vsync_len;
-		}
-
-		if ((actual_mode->vtotal + actual_mode->htotal) !=
-			(now_htotal + now_vtotal)) {
-			drm_display_mode_to_videomode(actual_mode, &ctx->vm);
-			drm_display_mode_to_videomode(actual_mode, &dsi->ctx.vm);
-			now_htotal = ctx->vm.hactive + ctx->vm.hfront_porch +
-				ctx->vm.hback_porch + ctx->vm.hsync_len;
-			now_vtotal = ctx->vm.vactive + ctx->vm.vfront_porch +
-				ctx->vm.vback_porch + ctx->vm.vsync_len;
-		}
-	}
+	ctx->wb_size_changed = true;
 
 	pr_info("begin switch to %u x %u\n", mode->hdisplay, mode->vdisplay);
 

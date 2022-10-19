@@ -117,17 +117,50 @@ static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 	}
 }
 
+static void sprd_drm_mode_copy(struct drm_display_mode *dst, const struct drm_display_mode *src)
+{
+	struct list_head head = dst->head;
+
+	*dst = *src;
+	dst->head = head;
+}
+
 static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
+	struct sprd_dsi *dsi = dpu->dsi;
 	struct drm_display_mode *mode = &crtc->base.state->adjusted_mode;
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	int i;
 
-	DRM_INFO("%s() set mode: %s\n", __func__, dpu->mode->name);
+	DRM_INFO("%s() mode: "DRM_MODE_FMT"\n", __func__, DRM_MODE_ARG(mode));
 
 	if (dpu->dsi->ctx.work_mode == DSI_MODE_VIDEO)
 		dpu->ctx.if_type = SPRD_DPU_IF_DPI;
 	else
 		dpu->ctx.if_type = SPRD_DPU_IF_EDPI;
+
+	sprd_drm_mode_copy(&dpu->mode, mode);
+	sprd_drm_mode_copy(&dpu->actual_mode, mode);
+
+	if (mode->type & DRM_MODE_TYPE_USERDEF) {
+		drm_display_mode_to_videomode(&panel->info.mode, &dpu->ctx.vm);
+		drm_display_mode_to_videomode(&panel->info.mode, &dsi->ctx.vm);
+	} else {
+		if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.vdisplay)) {
+			for (i = 0; i < panel->info.display_mode_count; i++) {
+				if ((panel->info.buildin_modes[i].hdisplay == panel->info.mode.hdisplay) &&
+					(panel->info.buildin_modes[i].vdisplay == panel->info.mode.vdisplay) &&
+					(drm_mode_vrefresh(&panel->info.buildin_modes[i]) == drm_mode_vrefresh(mode))) {
+					sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
+					break;
+				}
+			}
+		}
+		drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
+		drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);
+	}
 
 	if (dpu->core->modeset && crtc->base.state->mode_changed)
 		dpu->core->modeset(&dpu->ctx, mode);
@@ -136,20 +169,7 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 static enum drm_mode_status sprd_dpu_mode_valid(struct sprd_crtc *crtc,
 					const struct drm_display_mode *mode)
 {
-	struct sprd_dpu *dpu = crtc->priv;
-
 	DRM_INFO("%s() mode: "DRM_MODE_FMT"\n", __func__, DRM_MODE_ARG(mode));
-
-	if (mode->type == DRM_MODE_TYPE_DRIVER)
-		dpu->mode = (struct drm_display_mode *)mode;
-
-	if (mode->type & DRM_MODE_TYPE_USERDEF)
-		dpu->mode = (struct drm_display_mode *)mode;
-
-	if (mode->type & DRM_MODE_TYPE_PREFERRED) {
-		dpu->mode = (struct drm_display_mode *)mode;
-		drm_display_mode_to_videomode(dpu->mode, &dpu->ctx.vm);
-	}
 
 	return MODE_OK;
 }
@@ -597,6 +617,11 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	if (!ctx->base) {
 		DRM_ERROR("ioremap base address failed\n");
 		return -EFAULT;
+	}
+
+	if (of_property_read_bool(np, "sprd,initial-stop-state")) {
+		DRM_WARN("DPU is not initialized before entering kernel\n");
+		ctx->stopped = true;
 	}
 
 	of_get_logo_memory_info(dpu, np);

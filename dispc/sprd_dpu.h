@@ -235,7 +235,8 @@ struct sprd_dpu {
 	const struct dpu_core_ops *core;
 	const struct dpu_clk_ops *clk;
 	const struct dpu_glb_ops *glb;
-	struct drm_display_mode *mode;
+	struct drm_display_mode mode;
+	struct drm_display_mode actual_mode;
 	struct sprd_dsi *dsi;
 };
 
