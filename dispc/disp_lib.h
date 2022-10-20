@@ -16,6 +16,8 @@
 
 int str_to_u32_array(const char *p, u32 base, u32 array[], u8 size);
 int str_to_u8_array(const char *p, u32 base, u8 array[], u8 size);
+void colorMatrix_multi(int16_t cm_final[12], int16_t cm_pq[12], int16_t cm_ctm[12]);
+bool parse_ctm(int16_t ctm_final[12], struct drm_color_ctm *ctm);
 
 #ifdef CONFIG_DRM_SPRD_WB_DEBUG
 int dump_bmp32(const char *p, u32 width, u32 height,

@@ -2021,19 +2021,12 @@ static void dpu_scaling(struct dpu_context *ctx,
 
 static void cm_multi(struct cm_cfg* cm_final, struct cm_cfg* cm_pq, struct cm_cfg* cm_ctm)
 {
-	int i, j, k;
 	int16_t *cm_final_p, *cm_pq_p, *cm_ctm_p;
+	cm_final_p = (int16_t *)cm_final;
 	cm_pq_p = (int16_t *)cm_pq;
 	cm_ctm_p = (int16_t *)cm_ctm;
 
-	for (i = 0; i < 3; i++) {
-		for (j = 0; j < 4; j++) {
-			cm_final_p = (int16_t *)cm_final;
-			for (k = 0; k < 3; k++)
-				cm_final_p[i * 4 + j] += (cm_pq_p[i * 4 + k] * cm_ctm_p[k * 4 + j]) / 10000;
-			cm_final_p[i * 4 + j] += cm_pq_p[i * 4 + 3];
-		}
-	}
+	colorMatrix_multi(cm_final_p, cm_pq_p, cm_ctm_p);
 }
 
 static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
@@ -2041,8 +2034,6 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct cm_cfg cm_final;
-	int i, j;
-	int k = 0;
 
 	if (cm_status == CM_PQ) {
 		if (enhance->ctm_set) {
@@ -2051,56 +2042,20 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 			memcpy(&cm_final, &enhance->cm_copy, sizeof(struct cm_cfg));
 		}
 	} else if (cm_status == CM_CTM) {
-		int16_t ctm_hwc[16];
-		int16_t ctm_unisoc[12];
-		struct cm_cfg ctm_new = {};
-		struct drm_color_ctm *ctm = (struct drm_color_ctm *)dpu->crtc->base.state->ctm->data;
+		bool ret;
+		int16_t ctm_final[12] = {0};
+		struct drm_color_ctm *ctm;
 
 		if (!dpu->crtc->base.state->ctm)
 			return;
 
-		/*
-		 * ctm->matrix[8] means if ctm changed, 0 means samed as last
-		 */
-		if (!ctm->matrix[8])
+		ctm = (struct drm_color_ctm *)dpu->crtc->base.state->ctm->data;
+		ret = parse_ctm(ctm_final, ctm);
+		if (ret)
 			return;
-		ctm->matrix[8] = 0;
-
-		/*
-		 * ctm->matrix[j] is combined by two elements of colorMatrix in hwc hal,
-		 * so need to be parsed here
-		 */
-		for (j = 0; j < 16; j += 2) {
-			ctm_hwc[j] = (int16_t)(ctm->matrix[j / 2] & 0xffff);
-			ctm_hwc[j+1] = (int16_t)((ctm->matrix[j / 2] >> 16) & 0xffff);
-		}
-
-		/*
-		 * there are 16 elements in colorMatrix from hwc hal,
-		 * however only 12 elements in unisoc colorMatrix
-		 */
-		for (i = 0; i < 16; i++) {
-			if ((i + 1) % 4 == 0)
-				continue;
-			ctm_unisoc[k] = ctm_hwc[i];
-			k++;
-		}
-
-		ctm_new.c00 = ctm_unisoc[0];
-		ctm_new.c10 = ctm_unisoc[1];
-		ctm_new.c20 = ctm_unisoc[2];
-		ctm_new.c01 = ctm_unisoc[3];
-		ctm_new.c11 = ctm_unisoc[4];
-		ctm_new.c21 = ctm_unisoc[5];
-		ctm_new.c02 = ctm_unisoc[6];
-		ctm_new.c12 = ctm_unisoc[7];
-		ctm_new.c22 = ctm_unisoc[8];
-		ctm_new.c03 = ctm_unisoc[9];
-		ctm_new.c13 = ctm_unisoc[10];
-		ctm_new.c23 = ctm_unisoc[11];
 
 		pr_info("ctm changed!\n");
-		memcpy(&(enhance->ctm_copy), &ctm_new, sizeof(struct cm_cfg));
+		memcpy(&(enhance->ctm_copy), ctm_final, sizeof(struct cm_cfg));
 		cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
 		enhance->ctm_set = 1;
 	}
