@@ -488,6 +488,11 @@ enum {
 };
 
 enum {
+	CM_CTM,
+	CM_PQ,
+};
+
+enum {
 	CABC_DISABLED,
 	CABC_STOPPING,
 	CABC_WORKING
@@ -525,7 +530,9 @@ struct dpu_enhance {
 	u8 hsv_lut_index;
 	u8 lut3d_index;
 	int cabc_state;
+	bool ctm_set;
 	struct cm_cfg cm_copy;
+	struct cm_cfg ctm_copy;
 	struct slp_cfg slp_copy;
 	struct gamma_lut gamma_copy;
 	struct epf_cfg epf_copy;
@@ -1899,6 +1906,105 @@ static void dpu_scaling(struct dpu_context *ctx,
 	}
 }
 
+static void cm_multi(struct cm_cfg* cm_final, struct cm_cfg* cm_pq, struct cm_cfg* cm_ctm)
+{
+	int i, j, k;
+	int16_t *cm_final_p, *cm_pq_p, *cm_ctm_p;
+	cm_pq_p = (int16_t *)cm_pq;
+	cm_ctm_p = (int16_t *)cm_ctm;
+
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 4; j++) {
+			cm_final_p = (int16_t *)cm_final;
+			for (k = 0; k < 3; k++)
+				cm_final_p[i * 4 + j] += (cm_pq_p[i * 4 + k] * cm_ctm_p[k * 4 + j]) / 10000;
+			cm_final_p[i * 4 + j] += cm_pq_p[i * 4 + 3];
+		}
+	}
+}
+
+static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
+{
+	struct dpu_enhance *enhance = ctx->enhance;
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct cm_cfg cm_final;
+	int i, j;
+	int k = 0;
+
+	if (cm_status == CM_PQ) {
+		if (enhance->ctm_set) {
+			cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
+		} else {
+			memcpy(&cm_final, &enhance->cm_copy, sizeof(struct cm_cfg));
+		}
+	} else if (cm_status == CM_CTM) {
+		int16_t ctm_hwc[16];
+		int16_t ctm_unisoc[12];
+		struct cm_cfg ctm_new = {};
+		struct drm_color_ctm *ctm;
+
+		if (!dpu->crtc->base.state->ctm)
+			return;
+		ctm = (struct drm_color_ctm *)dpu->crtc->base.state->ctm->data;
+
+		/*
+		 * ctm->matrix[8] means if ctm changed, 0 means samed as last
+		 */
+		if (!ctm->matrix[8])
+			return;
+		ctm->matrix[8] = 0;
+
+		/*
+		 * ctm->matrix[j] is combined by two elements of colorMatrix in hwc hal,
+		 * so need to be parsed here
+		 */
+		for (j = 0; j < 16; j += 2) {
+			ctm_hwc[j] = (int16_t)(ctm->matrix[j / 2] & 0xffff);
+			ctm_hwc[j+1] = (int16_t)((ctm->matrix[j / 2] >> 16) & 0xffff);
+		}
+
+		/*
+		 * there are 16 elements in colorMatrix from hwc hal,
+		 * however only 12 elements in unisoc colorMatrix
+		 */
+		for (i = 0; i < 16; i++) {
+			if ((i + 1) % 4 == 0)
+				continue;
+			ctm_unisoc[k] = ctm_hwc[i];
+			k++;
+		}
+
+		ctm_new.c00 = ctm_unisoc[0];
+		ctm_new.c10 = ctm_unisoc[1];
+		ctm_new.c20 = ctm_unisoc[2];
+		ctm_new.c01 = ctm_unisoc[3];
+		ctm_new.c11 = ctm_unisoc[4];
+		ctm_new.c21 = ctm_unisoc[5];
+		ctm_new.c02 = ctm_unisoc[6];
+		ctm_new.c12 = ctm_unisoc[7];
+		ctm_new.c22 = ctm_unisoc[8];
+		ctm_new.c03 = ctm_unisoc[9];
+		ctm_new.c13 = ctm_unisoc[10];
+		ctm_new.c23 = ctm_unisoc[11];
+
+		pr_info("ctm changed!\n");
+		memcpy(&(enhance->ctm_copy), &ctm_new, sizeof(struct cm_cfg));
+		cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
+		enhance->ctm_set = 1;
+	}
+
+	DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm_final.c01 << 16) | cm_final.c00);
+	DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm_final.c03 << 16) | cm_final.c02);
+	DPU_REG_WR(ctx->base + REG_CM_COEF11_10, (cm_final.c11 << 16) | cm_final.c10);
+	DPU_REG_WR(ctx->base + REG_CM_COEF13_12, (cm_final.c13 << 16) | cm_final.c12);
+	DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm_final.c21 << 16) | cm_final.c20);
+	DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm_final.c23 << 16) | cm_final.c22);
+	DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(2));
+
+	if (cm_status == CM_CTM)
+		DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
+}
+
 static void dpu_flip(struct dpu_context *ctx,
 		     struct sprd_plane planes[], u8 count)
 {
@@ -1939,6 +2045,9 @@ static void dpu_flip(struct dpu_context *ctx,
 		state = to_sprd_plane_state(planes[i].base.state);
 		dpu_layer(ctx, &state->layer);
 	}
+
+	dpu_cm_set(ctx, CM_CTM);
+
 	/* update trigger and wait */
 	if (ctx->is_single_run) {
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
@@ -2351,7 +2460,6 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct cm_cfg cm;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
 	struct rgb_integrate_arr *lut3d;
@@ -2408,14 +2516,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		break;
 	case ENHANCE_CFG_ID_CM:
 		memcpy(&enhance->cm_copy, param, sizeof(enhance->cm_copy));
-		memcpy(&cm, &enhance->cm_copy, sizeof(struct cm_cfg));
-		DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm.c01 << 16) | cm.c00);
-		DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm.c03 << 16) | cm.c02);
-		DPU_REG_WR(ctx->base + REG_CM_COEF11_10, (cm.c11 << 16) | cm.c10);
-		DPU_REG_WR(ctx->base + REG_CM_COEF13_12, (cm.c13 << 16) | cm.c12);
-		DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm.c21 << 16) | cm.c20);
-		DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm.c23 << 16) | cm.c22);
-		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(2));
+		dpu_cm_set(ctx, CM_PQ);
 		pr_info("enhance cm set\n");
 		break;
 	case ENHANCE_CFG_ID_LTM:
@@ -2903,7 +3004,6 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 static void dpu_enhance_reload(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct cm_cfg *cm;
 	struct slp_cfg *slp;
 	struct epf_cfg *epf;
 	struct ud_cfg *ud;
@@ -2935,13 +3035,7 @@ static void dpu_enhance_reload(struct dpu_context *ctx)
 	}
 
 	if (enhance->enhance_en & BIT(2)) {
-		cm = &enhance->cm_copy;
-		DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm->c01 << 16) | cm->c00);
-		DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm->c03 << 16) | cm->c02);
-		DPU_REG_WR(ctx->base + REG_CM_COEF11_10, (cm->c11 << 16) | cm->c10);
-		DPU_REG_WR(ctx->base + REG_CM_COEF13_12, (cm->c13 << 16) | cm->c12);
-		DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm->c21 << 16) | cm->c20);
-		DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm->c23 << 16) | cm->c22);
+		dpu_cm_set(ctx, CM_PQ);
 		pr_info("enhance cm reload\n");
 	}
 
