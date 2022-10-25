@@ -835,6 +835,11 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	if (of_property_read_bool(lcd_node, "sprd,dsi-non-continuous-clock"))
 		info->mode_flags |= MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
+	if (of_property_read_bool(lcd_node, "sprd,dpi-src-is-pixelpll"))
+		info->dpi_src_is_pixelpll = true;
+	else
+		pr_info("sprd,dpi-src-is-pixelpll is not found!\n");
+
 	rc = of_property_read_u32(lcd_node, "sprd,dsi-lane-number", &val);
 	if (!rc)
 		info->lanes = val;
