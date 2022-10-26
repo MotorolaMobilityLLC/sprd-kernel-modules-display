@@ -823,9 +823,15 @@ static ssize_t ltm_write(struct file *fp, struct kobject *kobj,
 	if (off != 0)
 		return -EINVAL;
 
-	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf);
-	up(&ctx->lock);
+	if (!strcmp("dpu-r6p0", ctx->version) || !strcmp("dpu-r6p1", ctx->version)) {
+		down(&ctx->cabc_lock);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf);
+		up(&ctx->cabc_lock);
+	} else {
+		down(&ctx->lock);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf);
+		up(&ctx->lock);
+	}
 
 	return count;
 }
@@ -1010,9 +1016,15 @@ static ssize_t cm_write(struct file *fp, struct kobject *kobj,
 	if (off != 0 || count != attr->size)
 		return -EINVAL;
 
-	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf);
-	up(&ctx->lock);
+	if (!strcmp("dpu-r6p0", ctx->version) || !strcmp("dpu-r6p1", ctx->version)) {
+		down(&ctx->cabc_lock);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf);
+		up(&ctx->cabc_lock);
+	} else {
+		down(&ctx->lock);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf);
+		up(&ctx->lock);
+	}
 
 	return count;
 }
