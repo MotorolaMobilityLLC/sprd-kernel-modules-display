@@ -162,69 +162,10 @@ static void sprd_commit_work(struct work_struct *work)
 	sprd_commit_tail(state);
 }
 
-static int sprd_atomic_wait_last_cleanup_done(struct drm_device *drm,
-						struct drm_atomic_state *state)
-{
-	int i, ret;
-	struct drm_connector *connector;
-	struct drm_connector_state *old_conn_state;
-	struct drm_crtc *crtc;
-	struct drm_crtc_state *old_crtc_state;
-	struct drm_plane *plane;
-	struct drm_plane_state *old_plane_state;
-	struct drm_crtc_commit *commit;
-
-	for_each_old_crtc_in_state(state, crtc, old_crtc_state, i) {
-		commit = old_crtc_state->commit;
-
-		if (!commit)
-			continue;
-
-		ret = wait_for_completion_interruptible(&commit->cleanup_done);
-		if (ret)
-			return ret;
-	}
-
-	for_each_old_connector_in_state(state, connector, old_conn_state, i) {
-		commit = old_conn_state->commit;
-
-		if (!commit)
-			continue;
-
-		ret = wait_for_completion_interruptible(&commit->cleanup_done);
-		if (ret)
-			return ret;
-	}
-
-	for_each_old_plane_in_state(state, plane, old_plane_state, i) {
-		commit = old_plane_state->commit;
-
-		if (!commit)
-			continue;
-
-		ret = wait_for_completion_interruptible(&commit->cleanup_done);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
 int sprd_atomic_helper_commit(struct drm_device *dev,
 			struct drm_atomic_state *state, bool nonblock)
 {
 	int ret;
-	/*
-	 * FIXME:
-	 * In some extreme scenes, there will be FPS drops or screen freeze,
-	 * it's may be due to poor gpu capabilities or rendering heavy loads.
-	 * If nonblock flag is true, userspace is not allowed to get ahead of the
-	 * previous commit with nonblocking ones, it maybe cause drm atomic_commit
-	 * pipeline occur performance issues.
-	 *
-	 * -EBUSY when userspace schedules nonblocking commits too fast, that's
-	 * not the case for us, maybe caused by FPS drops or screen freezes.
-	 */
 	ret = drm_atomic_helper_setup_commit(state, false);
 	if (ret)
 		return ret;
@@ -235,21 +176,7 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 	if (ret)
 		return ret;
 
-	/*
-	 * FIXME:
-	 * Because of system heave loads or other performance issues, the procedure which after
-	 * swap state the most recent commit may running ahead of the last commit.
-	 * When the most recent commit finish drm atomic commit procedure, it will free last time's
-	 * commit state which stored as old state in the most recent commit's drm_atomic_state.
-	 * If last commit has not finished yet, calling on variable may causing stability problem.
-	 * So we add this restriction to force the most recent commit waiting for the last on clean
-	 * up done completed to avoid the problem declared above.
-	 */
-	ret = sprd_atomic_wait_last_cleanup_done(dev, state);
-	if (ret)
-		goto err;
-
-	ret = drm_atomic_helper_swap_state(state, false);
+	ret = drm_atomic_helper_swap_state(state, true);
 	if (ret)
 		goto err;
 
