@@ -1453,9 +1453,11 @@ int sprd_dpu_sysfs_init(struct device *dev)
 	if (rc)
 		pr_err("create dpu attr node failed, rc=%d\n", rc);
 
-	rc = sysfs_create_group(&(dev->kobj), &pq_group);
-	if (rc)
-		pr_err("create dpu PQ node failed, rc=%d\n", rc);
+	if (!strcmp(dev->kobj.name, "dispc0")) {
+		rc = sysfs_create_group(&(dev->kobj), &pq_group);
+		if (rc)
+			pr_err("create dpu PQ node failed, rc=%d\n", rc);
+	}
 
 	return rc;
 }
