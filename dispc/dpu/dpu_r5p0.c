@@ -2378,7 +2378,7 @@ static int dpu_modeset(struct dpu_context *ctx,
 	mode_vrefresh = drm_mode_vrefresh(mode);
 
 	if (state->resolution_change) {
-		if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.hdisplay))
+		if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.vdisplay))
 			scale_cfg->need_scale = true;
 		else
 			scale_cfg->need_scale = false;
