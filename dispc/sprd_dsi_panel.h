@@ -84,8 +84,6 @@ struct panel_info {
 	u32 dsc_en;
 	u32 dual_dsi_en;
 
-	bool dpi_src_is_pixelpll;
-
 	/* esd check parameters*/
 	bool esd_check_en;
 	u8 esd_check_mode;

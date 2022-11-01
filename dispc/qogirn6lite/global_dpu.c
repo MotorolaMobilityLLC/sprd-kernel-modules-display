@@ -32,21 +32,21 @@ static struct clk *clk_dpuvsp_disp_eb;
 static struct clk *clk_master_div6_eb;
 
 static struct dpu_clk_context {
-	struct clk *clk_src_200m; /* variable output, div16 of pixelpll */
+	struct clk *clk_src_200m; /* div16 of top pixelpll, 100M ~ 200M */
 	struct clk *clk_src_256m;
 	struct clk *clk_src_307m2;
 	struct clk *clk_src_312m5;
 	struct clk *clk_src_384m;
-	struct clk *clk_src_400m; /* variable output, div8 of pixelpll */
+	struct clk *clk_src_400m; /* div8 of top pixelpll, 200M ~ 400M */
 	struct clk *clk_src_409m6;
 	struct clk *clk_src_416m7;
-	struct clk *clk_src_420m; /* variable output, div4 of pixelpll */
+	struct clk *clk_src_420m; /* div4 of top pixelpll, 400M ~ 800M */
 	struct clk *clk_src_512m;
 	struct clk *clk_src_614m4;
 	struct clk *clk_dpu_core;
 	struct clk *clk_dpu_dpi;
 	struct clk *clk_dpu_dsc;
-	struct clk *clk_dpu_pixelpll; /* pixelpll clk, 1600M ~ 3200M */
+	struct clk *clk_dpi_pixelpll; /* top pixelpll, 1600M ~ 3200M */
 } dpu_clk_ctx;
 
 enum {
@@ -72,6 +72,18 @@ static const u32 dpi_clk_src[] = {
 	400000000,
 	416700000,
 	420000000
+};
+
+static uint32_t clk_pixelpll_src[] = {
+	200000000,
+	400000000,
+	420000000,
+};
+
+enum {
+	CLK_PIXELPLL_DIV4 = 4,
+	CLK_PIXELPLL_DIV8 = 8,
+	CLK_PIXELPLL_DIV16 = 16,
 };
 
 static struct reset_control *ctx_reset, *vau_reset;
@@ -131,8 +143,8 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 		of_clk_get_by_name(np, "clk_dpu_dpi");
 	clk_ctx->clk_dpu_dsc =
 		of_clk_get_by_name(np, "clk_dpu_dsc");
-	clk_ctx->clk_dpu_pixelpll =
-		of_clk_get_by_name(np, "clk_dpu_pixelpll");
+	clk_ctx->clk_dpi_pixelpll =
+		of_clk_get_by_name(np, "clk_dpi_pixelpll");
 
 	if (IS_ERR(clk_ctx->clk_src_200m)) {
 		pr_warn("read clk_src_200m failed\n");
@@ -204,9 +216,9 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 		clk_ctx->clk_dpu_dsc = NULL;
 	}
 
-	if (IS_ERR(clk_ctx->clk_dpu_pixelpll)) {
-		pr_warn("read clk_dpu_pixelpll failed\n");
-		clk_ctx->clk_dpu_pixelpll = NULL;
+	if (IS_ERR(clk_ctx->clk_dpi_pixelpll)) {
+		pr_warn("read clk_dpi_pixelpll failed\n");
+		clk_ctx->clk_dpi_pixelpll = NULL;
 	}
 
 	return 0;
@@ -232,26 +244,24 @@ static u32 calc_dpi_clk_src(u32 pclk)
 
 static u32 calc_div_of_pixelpll(u32 pclk)
 {
-	u32 ret;
+	int i;
 
-	if (pclk >= 400000000)
-		ret = 4;
-	else if (pclk >= 200000000 && pclk < 400000000)
-		ret = 8;
-	else
-		ret = 16;
+	for (i = 0; i < ARRAY_SIZE(clk_pixelpll_src); i++) {
+		if (clk_pixelpll_src[i] > pclk)
+			break;
+	}
 
-	return ret;
+	return 16 >> i;
 }
 
 static struct clk *pixelpll_div_to_clk(struct dpu_clk_context *clk_ctx, u32 clk_div)
 {
 	switch (clk_div) {
-	case 4:
+	case CLK_PIXELPLL_DIV4:
 		return clk_ctx->clk_src_420m;
-	case 8:
+	case CLK_PIXELPLL_DIV8:
 		return clk_ctx->clk_src_400m;
-	case 16:
+	case CLK_PIXELPLL_DIV16:
 		return clk_ctx->clk_src_200m;
 	default:
 		pr_err("invalid pixelpll clock value %u\n", clk_div);
@@ -279,7 +289,7 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	int dsc_core;
 	u32 dpu_core_val;
 	u32 dpi_src_val;
-	u32 div_of_pixelpll;
+	u32 clk_pixelpll_div;
 	struct clk *clk_src;
 	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
@@ -288,28 +298,18 @@ static int dpu_clk_init(struct dpu_context *ctx)
 				(struct sprd_panel *)container_of(dpu->dsi->panel,
 				struct sprd_panel, base);
 
-	if (!panel) {
-		pr_err("panel is NULL, please check!\n");
-		return -1;
-	} else {
-		if (panel->info.dpi_src_is_pixelpll) {
-			dpu->dsi->ctx.dpi_clk_div = 0;
-			pr_info("dpi src is pixelpll, close div6\n");
-		}
-	}
-
 	dsc_core = ctx->vm.hactive / panel->info.slice_width;
 	dpu_core_val = calc_dpu_core_clk();
 
-	if (panel->info.dpi_src_is_pixelpll) {
-		div_of_pixelpll = calc_div_of_pixelpll(ctx->vm.pixelclock);
+	if (ctx->dpi_clk_pixelpll) {
+		clk_pixelpll_div = calc_div_of_pixelpll(ctx->vm.pixelclock);
 
-		ret = clk_set_rate(clk_ctx->clk_dpu_pixelpll, div_of_pixelpll * ctx->vm.pixelclock);
+		ret = clk_set_rate(clk_ctx->clk_dpi_pixelpll, clk_pixelpll_div * ctx->vm.pixelclock);
 		if (ret)
 			pr_warn("dpu update dpi clk rate failed\n");
 
-		pr_info("div of pixelpll is %u, dpi clk is %u\n",
-				div_of_pixelpll, ctx->vm.pixelclock);
+		pr_info("clk_pixelpll_div is %u, dpi clk is %u\n",
+				clk_pixelpll_div, ctx->vm.pixelclock);
 	} else if (dpu->dsi->ctx.dpi_clk_div) {
 		pr_info("DPU_CORE_CLK = %u, DPI_CLK_DIV = %d\n",
 				dpu_core_val, dpu->dsi->ctx.dpi_clk_div);
@@ -325,8 +325,8 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	if (ret)
 		pr_warn("set dpu core clk source failed\n");
 
-	if (panel->info.dpi_src_is_pixelpll) {
-		clk_src = pixelpll_div_to_clk(clk_ctx, div_of_pixelpll);
+	if (ctx->dpi_clk_pixelpll) {
+		clk_src = pixelpll_div_to_clk(clk_ctx, clk_pixelpll_div);
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
 		if (ret)
 			pr_warn("set dpi clk source failed\n");

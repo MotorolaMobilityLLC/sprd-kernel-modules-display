@@ -220,6 +220,9 @@ struct dpu_context {
 
 	/* blend size limit config parameters */
 	uint32_t max_cap_layers;
+
+	/* pixelpll config parameters */
+	bool dpi_clk_pixelpll;
 };
 
 struct sprd_dpu_ops {
