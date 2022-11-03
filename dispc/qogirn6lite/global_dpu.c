@@ -342,8 +342,8 @@ static int dpu_clk_init(struct dpu_context *ctx)
 			if (ret)
 				pr_err("dpu update dsc clk rate failed\n");
 
-			pr_info("clk_dpu_dsc_src = %u, clk_dpu_dsc = %u, dsc_core = %d\n",
-				dpi_src_val, ctx->vm.pixelclock/dsc_core, dsc_core);
+			pr_info("clk_dpu_dsc = %u, dsc_core = %d\n",
+				ctx->vm.pixelclock/dsc_core, dsc_core);
 		}
 	} else if (dpu->dsi->ctx.dpi_clk_div) {
 		clk_src = div_to_clk(clk_ctx, dpu->dsi->ctx.dpi_clk_div);
