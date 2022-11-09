@@ -42,15 +42,16 @@ static void dsi_power_enable(struct dsi_context *ctx, int enable)
 	writel(enable, &reg->SOFT_RESET);
 }
 /**
- * Enable/disable DPI video mode
+ * Enable/disable DPI video mode & halt function
  * @param instance pointer to structure holding the DSI Host core information
- * @param enable (1) - disable (0)
+ * @param bit0 : DPI video mode enable (1) - disable (0)
+ * @param bit1 : halt function  enable (1) - disable (0)
  */
 static void dsi_video_mode(struct dsi_context *ctx)
 {
 	struct dsi_reg *reg = (struct dsi_reg *)ctx->base;
 
-	writel(0, &reg->DSI_MODE_CFG);
+	writel(0x2, &reg->DSI_MODE_CFG);
 }
 /**
  * Enable command mode (Generic interface)
