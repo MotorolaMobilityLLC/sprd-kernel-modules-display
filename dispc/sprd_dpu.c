@@ -92,6 +92,7 @@ static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 	struct drm_gem_object *obj;
 	struct sprd_gem_obj *sprd_gem;
 	struct sprd_dpu *dpu = crtc->priv;
+	struct sprd_plane_state *old_sprd_plane_state;
 	static atomic_t logo2animation = { -1 };
 	int i;
 
@@ -100,11 +101,11 @@ static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 		return;
 	}
 
-	for (i = 0; i < old_state->fb->format->num_planes; i++) {
-		obj = drm_gem_fb_get_obj(old_state->fb, i);
+	old_sprd_plane_state = to_sprd_plane_state(old_state);
+	for (i = 0; i < old_sprd_plane_state->plane_count; i++) {
+		obj = old_sprd_plane_state->gem_obj[i];
 		sprd_gem = to_sprd_gem_obj(obj);
-		if (sprd_gem->need_iommu)
-			sprd_crtc_iommu_unmap(&dpu->dev, sprd_gem);
+		sprd_crtc_iommu_unmap(&dpu->dev, sprd_gem);
 	}
 
 	if (unlikely(atomic_inc_not_zero(&logo2animation)) &&
