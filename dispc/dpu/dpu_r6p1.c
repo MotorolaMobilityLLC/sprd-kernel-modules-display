@@ -21,6 +21,7 @@
 #include "sprd_crtc.h"
 #include "sprd_plane.h"
 #include "sprd_dsi_panel.h"
+#include "dpu_r6p1_scale_param.h"
 #include <../drivers/trusty/trusty.h>
 
 #define XFBC8888_HEADER_SIZE(w, h) (ALIGN((ALIGN((w), 16)) * \
@@ -73,7 +74,7 @@
 #define REG_DPU_CFG1					0x10
 #define REG_PANEL_SIZE					0x18
 #define REG_BLEND_SIZE					0x1C
-#define REG_SCL_EN						0x20
+#define REG_SCL_EN					0x20
 #define REG_BG_COLOR					0x24
 
 /* DPU Secure reg */
@@ -88,16 +89,16 @@
 #define REG_LAY_DES_SIZE				0x44
 #define REG_LAY_SRC_SIZE				0x48
 #define REG_LAY_PITCH					0x4C
-#define REG_LAY_POS						0x50
+#define REG_LAY_POS					0x50
 #define REG_LAY_ALPHA					0x54
-#define REG_LAY_CK						0x58
+#define REG_LAY_CK					0x58
 #define REG_LAY_PALLETE					0x5C
 #define REG_LAY_CROP_START				0x60
 
 /* Write back config registers */
 #define REG_WB_BASE_ADDR				0x230
-#define REG_WB_CTRL						0x234
-#define REG_WB_CFG						0x238
+#define REG_WB_CTRL					0x234
+#define REG_WB_CFG					0x238
 #define REG_WB_PITCH					0x23C
 
 /* Interrupt control registers */
@@ -110,8 +111,12 @@
 #define REG_DPI_CTRL					0x260
 #define REG_DPI_H_TIMING				0x264
 #define REG_DPI_V_TIMING				0x268
-#define REG_DPI_VFP						0x26C
+#define REG_DPI_VFP					0x26C
 #define REG_DPI_S_VFP					0x270
+
+/* SCL coef registers */
+#define REG_SCL_COEF_HOR_CFG				0x300
+#define REG_SCL_COEF_VER_CFG				0x380
 
 /* DPU STS */
 #define REG_DPU_STS_20					0x750
@@ -1330,6 +1335,21 @@ static void dpu_dvfs_task_init(struct dpu_context *ctx)
 			(unsigned long)ctx);
 }
 
+static void dpu_scl_coef_cfg(struct dpu_context *ctx)
+{
+	int i, j;
+
+	for (i = 0, j = 0; i < 64; i += 2) {
+
+		DPU_REG_WR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, r6p1_scl_coef[i] +
+			(r6p1_scl_coef[i+1] << 16));
+
+		DPU_REG_WR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, r6p1_scl_coef[i] +
+			(r6p1_scl_coef[i+1] << 16));
+		j++;
+	}
+}
+
 static int dpu_init(struct dpu_context *ctx)
 {
 	u32 reg_val, size;
@@ -1369,6 +1389,8 @@ static int dpu_init(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_DPU_CFG1, reg_val);;
 	if (ctx->stopped)
 		dpu_clean_all(ctx);
+
+	dpu_scl_coef_cfg(ctx);
 
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xffff);
 
