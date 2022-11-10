@@ -12,6 +12,8 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/string.h>
+#include <linux/timer.h>
+#include <linux/timex.h>
 #include <video/videomode.h>
 
 #include <uapi/drm/drm_mode.h>
@@ -130,6 +132,12 @@ struct dpu_qos_cfg {
 	u8 awqos_high;
 };
 
+struct time_fifo {
+	struct timespec64 ts[33];
+	int head;
+	u32 sum_num;
+};
+
 struct dpu_context {
 	/* dpu common parameters */
 	void __iomem *base;
@@ -211,6 +219,7 @@ struct dpu_context {
 	unsigned long logo_size;
 	u32 prev_y2r_coef;
 	u64 frame_count;
+	struct time_fifo tf;
 
 	/* scaling config parameters */
 	struct scale_config_param scale_cfg;

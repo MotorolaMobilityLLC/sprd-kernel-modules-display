@@ -50,6 +50,32 @@ static ssize_t lane_num_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(lane_num);
 
+static ssize_t panel_fps_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct sprd_panel *panel = dev_get_drvdata(dev);
+	struct videomode vm;
+	u32 act_fps_int, act_fps_frac;
+	u32 total_pixels;
+	int ret;
+
+	drm_display_mode_to_videomode(&panel->info.mode, &vm);
+	total_pixels = (vm.hsync_len + vm.hback_porch +
+			vm.hfront_porch + vm.hactive) *
+			(vm.vsync_len + vm.vback_porch +
+			vm.vfront_porch + vm.vactive);
+
+	act_fps_int = vm.pixelclock / total_pixels;
+	act_fps_frac = vm.pixelclock % total_pixels;
+	act_fps_frac = act_fps_frac * 100 / total_pixels;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u.%u\n", act_fps_int, act_fps_frac);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(panel_fps);
+
 static ssize_t pixel_clock_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -402,6 +428,7 @@ static struct attribute *panel_attrs[] = {
 	&dev_attr_lane_num.attr,
 	&dev_attr_resolution.attr,
 	&dev_attr_screen_size.attr,
+	&dev_attr_panel_fps.attr,
 	&dev_attr_pixel_clock.attr,
 	&dev_attr_hporch.attr,
 	&dev_attr_vporch.attr,

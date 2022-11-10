@@ -471,31 +471,73 @@ static ssize_t cabc_state_write(struct file *fp, struct kobject *kobj,
 
 static BIN_ATTR_RW(cabc_state, 8);
 
+#ifdef CONFIG_ARM64
+static ssize_t actual_fps_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct sprd_dpu *dpu = dev_get_drvdata(dev);
+	struct time_fifo *tf = &dpu->ctx.tf;
+	int ret;
+
+	ret = kstrtou32(buf, 10, &tf->sum_num);
+	if (ret) {
+		pr_err("Invalid input\n");
+		return -EINVAL;
+	}
+
+	if (tf->sum_num > sizeof(tf->ts) / sizeof(struct timespec64) -1)
+		tf->sum_num = sizeof(tf->ts) / sizeof(struct timespec64) -1;
+
+	pr_info("[drm] %s() num:%d\n", __func__, tf->sum_num);
+
+	return count;
+}
+
 static ssize_t actual_fps_show(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
 	struct sprd_dpu *dpu = dev_get_drvdata(dev);
-	struct dpu_context *ctx = &dpu->ctx;
-	struct videomode vm = ctx->vm;
-	u32 act_fps_int, act_fps_frac;
-	u32 total_pixels;
-	int ret;
+	struct time_fifo *tf = &dpu->ctx.tf;
+	static u64 last_frame_count;
+	u64 temp, average = 0;
+	int i, j, len, head, cnt;
 
-	total_pixels = (vm.hsync_len + vm.hback_porch +
-			vm.hfront_porch + vm.hactive) *
-			(vm.vsync_len + vm.vback_porch +
-			vm.vfront_porch + vm.vactive);
+	down(&dpu->ctx.lock);
+	if (last_frame_count == dpu->ctx.frame_count) {
+		up(&dpu->ctx.lock);
+		return snprintf(buf, PAGE_SIZE, "0.0\n");
+	}
 
-	act_fps_int = vm.pixelclock / total_pixels;
-	act_fps_frac = vm.pixelclock % total_pixels;
-	act_fps_frac = act_fps_frac * 100 / total_pixels;
+	last_frame_count = dpu->ctx.frame_count;
+	len = sizeof(tf->ts) / sizeof(struct timespec64);
+	head = tf->head;
 
-	ret = snprintf(buf, PAGE_SIZE, "%u.%u\n", act_fps_int, act_fps_frac);
+	if (tf->sum_num == 0) {
+		i = head - 1 < 0 ? len + head - 1 : head - 1;
+		j = head - 2 < 0 ? len + head - 2 : head - 2;
+		temp = (tf->ts[i].tv_sec - tf->ts[j].tv_sec) * 1000000LL
+			+ (tf->ts[i].tv_nsec - tf->ts[j].tv_nsec) / 1000;
+		up(&dpu->ctx.lock);
+		return snprintf(buf, PAGE_SIZE, "%u.%u\n",
+			1000000LL / temp, 100000000LL / temp % 100);
+	} else {
+		for (cnt = tf->sum_num; cnt > 0; --cnt) {
+			i = head - cnt < 0 ? len + head - cnt : head - cnt;
+			j = head - cnt -1 < 0 ? len + head - cnt -1 : head - cnt -1;
+			temp = (tf->ts[i].tv_sec - tf->ts[j].tv_sec) * 1000000LL
+				+ (tf->ts[i].tv_nsec - tf->ts[j].tv_nsec) / 1000;
+			if (temp)
+				average += 100000000LL / temp / tf->sum_num;
+		}
+	}
 
-	return ret;
+	up(&dpu->ctx.lock);
+	return snprintf(buf, PAGE_SIZE, "avg:%u.%u\n", average / 100, average % 100);
 }
-static DEVICE_ATTR_RO(actual_fps);
+static DEVICE_ATTR_RW(actual_fps);
+#endif
 
 static ssize_t regs_offset_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -762,7 +804,9 @@ static struct attribute *dpu_attrs[] = {
 	&dev_attr_refresh.attr,
 	&dev_attr_bg_color.attr,
 	&dev_attr_disable_flip.attr,
+#ifdef CONFIG_ARM64
 	&dev_attr_actual_fps.attr,
+#endif
 	&dev_attr_regs_offset.attr,
 	&dev_attr_wr_regs.attr,
 	&dev_attr_dpu_version.attr,

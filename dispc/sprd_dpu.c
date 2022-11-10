@@ -244,12 +244,16 @@ static void sprd_dpu_atomic_flush(struct sprd_crtc *crtc)
 
 {
 	struct sprd_dpu *dpu = crtc->priv;
+	struct time_fifo *tf = &dpu->ctx.tf;
 
 	DRM_DEBUG("%s()\n", __func__);
 
 	if (crtc->pending_planes && !dpu->ctx.flip_pending) {
 		dpu->core->flip(&dpu->ctx, crtc->planes, crtc->pending_planes);
 		dpu->ctx.frame_count++;
+		ktime_get_real_ts64(&tf->ts[tf->head++]);
+		if (tf->head == sizeof(tf->ts) / sizeof(struct timespec64))
+			tf->head = 0;
 	}
 	up(&dpu->ctx.lock);
 }
