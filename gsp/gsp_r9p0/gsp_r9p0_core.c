@@ -1298,7 +1298,7 @@ static void gsp_r9p0_hdr10_set(void __iomem *base, struct gsp_r9p0_cfg *cfg, int
 
 	for (i = 0; i < HDR_REGAMMA_LUT_SIZE; ++i) {
 		gsp_core_reg_write(R9P0_HDR36_CFG(base, icnt), i);
-		gsp_core_reg_write(R9P0_HDR11_CFG(base, icnt), para->hdr_regamma_lut_table[i]);
+		gsp_core_reg_write(R9P0_HDR11_CFG(base, icnt), hdr_default_regamma_tbl[i]);
 	}
 
 	gsp_core_reg_write(R9P0_HDR26_CFG(base, icnt), HDR_DR_LUT_WRITE_FINISH);
