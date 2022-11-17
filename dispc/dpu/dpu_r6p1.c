@@ -62,12 +62,6 @@
 
 #define DSC1_REG(reg) (reg + DSC1_REG_OFFSET)
 
-/* DSC_PicW_PicH_SliceW_SliceH  */
-#define DSC_1440_2560_720_2560	0
-#define DSC_1080_2408_540_8	1
-#define DSC_720_2560_720_8	2
-#define DSC_1080_2400_540_2400	3
-
 /*Global control registers */
 #define REG_DPU_CTRL					0x08
 #define REG_DPU_CFG0					0x0C
@@ -1808,36 +1802,13 @@ static int dpu_vrr(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 			struct sprd_dpu, ctx);
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+
 	u32 reg_val;
 
-	dpu_stop(ctx);
-	reg_val = (ctx->vm.vsync_len << 0) |
-		(ctx->vm.vback_porch << 8);
-	DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
+
 	reg_val = ctx->vm.vfront_porch;
 	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
 
-	reg_val = (ctx->vm.hsync_len << 0) |
-		(ctx->vm.hback_porch << 8) |
-		(ctx->vm.hfront_porch << 20);
-	DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
-
-	if (panel->info.dsc_en) {
-		reg_val = (ctx->vm.vsync_len << 0) |
-			(ctx->vm.vback_porch  << 8) |
-			(ctx->vm.vfront_porch << 20);
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
-
-		reg_val = (ctx->vm.hsync_len << 0) |
-			(ctx->vm.hback_porch << 8) |
-			(ctx->vm.hfront_porch << 20);
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_H_TIMING), reg_val);
-	}
-	dpu_wait_update_done(ctx);
-	ctx->stopped = false;
-	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
 	dpu->crtc->fps_mode_changed = false;
 
 	return 0;
