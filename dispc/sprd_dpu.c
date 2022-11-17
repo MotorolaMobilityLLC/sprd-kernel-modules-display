@@ -105,7 +105,8 @@ static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 	for (i = 0; i < old_sprd_plane_state->plane_count; i++) {
 		obj = old_sprd_plane_state->gem_obj[i];
 		sprd_gem = to_sprd_gem_obj(obj);
-		sprd_crtc_iommu_unmap(&dpu->dev, sprd_gem);
+		if (sprd_gem->need_iommu)
+			sprd_crtc_iommu_unmap(&dpu->dev, sprd_gem);
 	}
 
 	if (unlikely(atomic_inc_not_zero(&logo2animation)) &&
