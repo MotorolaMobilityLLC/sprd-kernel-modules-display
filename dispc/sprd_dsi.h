@@ -215,6 +215,7 @@ struct sprd_dsi {
 	const struct dsi_glb_ops *glb;
 	struct mutex lock;
 	struct dsi_context ctx;
+	struct sprd_dpu *dpu;
 };
 
 #ifdef CONFIG_DRM_SPRD_DSI

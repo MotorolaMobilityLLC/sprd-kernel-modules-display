@@ -503,6 +503,8 @@ static struct sprd_dsi *sprd_dpu_dsi_attach(struct sprd_dpu *dpu)
 		return NULL;
 	}
 
+	dsi->dpu = dpu;
+
 	return dsi;
 }
 
