@@ -480,25 +480,24 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		return;
 	}
 
-	if (ret && connector && connector->encoder) {
-		const struct drm_encoder_helper_funcs *funcs;
+	if (ret && (connector->dpms == DRM_MODE_DPMS_ON)) {
+		const struct drm_encoder_helper_funcs *encoder_funcs;
+		const struct drm_connector_helper_funcs *conn_funcs;
 		struct drm_encoder *encoder;
 
-		encoder = connector->encoder;
-		funcs = encoder->helper_private;
+		conn_funcs = connector->helper_private;
+		encoder = conn_funcs->best_encoder(connector);
+		encoder_funcs = encoder->helper_private;
 		panel->esd_work_pending = false;
-
-		if (!encoder->crtc || (encoder->crtc->state &&
-		    !encoder->crtc->state->active)) {
-			DRM_INFO("skip esd recovery during panel suspend\n");
-			return;
-		}
 
 		DRM_INFO("====== esd recovery start ========\n");
 		panel->is_esd_rst = true;
-		funcs->disable(encoder);
-		funcs->enable(encoder);
+		encoder_funcs->disable(encoder);
+		encoder_funcs->enable(encoder);
 		panel->is_esd_rst = false;
+		if (!panel->esd_work_pending && panel->enabled)
+			schedule_delayed_work(&panel->esd_work,
+					msecs_to_jiffies(info->esd_check_period));
 		DRM_INFO("======= esd recovery end =========\n");
 	} else
 		schedule_delayed_work(&panel->esd_work,
