@@ -901,6 +901,17 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	/*
+	 * FIXME:
+	 * Every time hwc finished init, it will set connector dpms to DRM_MODE_DPMS_ON.
+	 * We use connector dpms status to check if display pipeline is ready instead of active state of crtc,
+	 * because releation ship between drm object connetor & encoder & crtc will be destroied during modeset.
+	 * However, after we use kzalloc allocing dsi struct, the dpms value of connetor is set to default value 0,
+	 * the value of DRM_MODE_DPMS_ON is set to 0 by linux kernel original design.
+	 * So, we initialize dpms status to off when after dsi sturct created.
+	 */
+	dsi->connector.dpms = DRM_MODE_DPMS_OFF;
+
 	pdata = of_device_get_match_data(&pdev->dev);
 	if (pdata) {
 		dsi->core = pdata->core;
