@@ -205,6 +205,16 @@
 #define REG_DPU_MMU_INT_STS				0x18A8
 #define REG_DPU_MMU_INT_RAW				0x18AC
 
+#define REG_DPU_MMU1_EN					0x1904
+#define REG_DPU_MMU1_INV_ADDR_RD			0x195C
+#define REG_DPU_MMU1_INV_ADDR_WR			0x1960
+#define REG_DPU_MMU1_UNS_ADDR_RD			0x1964
+#define REG_DPU_MMU1_UNS_ADDR_WR			0x1968
+#define REG_DPU_MMU1_INT_EN				0x19A0
+#define REG_DPU_MMU1_INT_CLR				0x19A4
+#define REG_DPU_MMU1_INT_STS				0x19A8
+#define REG_DPU_MMU1_INT_RAW				0x19AC
+
 /* Global control bits */
 #define BIT_DPU_RUN					BIT(0)
 #define BIT_DPU_STOP					BIT(1)
@@ -638,15 +648,22 @@ static u32 check_mmu_isr(struct dpu_context *ctx, u32 reg_val)
 	if (val) {
 		pr_err("--- iommu interrupt err: 0x%04x ---\n", val);
 
-		pr_err("iommu invalid read error, addr: 0x%08x\n",
+		pr_err("iommu0 invalid read error, addr: 0x%08x\n",
 			DPU_REG_RD(ctx->base + REG_DPU_MMU_INV_ADDR_RD));
-		pr_err("iommu invalid write error, addr: 0x%08x\n",
+		pr_err("iommu1 invalid read error, addr: 0x%08x\n",
+			DPU_REG_RD(ctx->base + REG_DPU_MMU1_INV_ADDR_RD));
+		pr_err("iommu0 invalid write error, addr: 0x%08x\n",
 			DPU_REG_RD(ctx->base + REG_DPU_MMU_INV_ADDR_WR));
-		pr_err("iommu unsecurity read error, addr: 0x%08x\n",
+		pr_err("iommu1 invalid write error, addr: 0x%08x\n",
+			DPU_REG_RD(ctx->base + REG_DPU_MMU1_INV_ADDR_WR));
+		pr_err("iommu0 unsecurity read error, addr: 0x%08x\n",
 			DPU_REG_RD(ctx->base + REG_DPU_MMU_UNS_ADDR_RD));
-		pr_err("iommu unsecurity  write error, addr: 0x%08x\n",
+		pr_err("iommu1 unsecurity read error, addr: 0x%08x\n",
+			DPU_REG_RD(ctx->base + REG_DPU_MMU1_UNS_ADDR_RD));
+		pr_err("iommu0 unsecurity  write error, addr: 0x%08x\n",
 			DPU_REG_RD(ctx->base + REG_DPU_MMU_UNS_ADDR_WR));
-
+		pr_err("iommu1 unsecurity  write error, addr: 0x%08x\n",
+			DPU_REG_RD(ctx->base + REG_DPU_MMU1_UNS_ADDR_WR));
 		pr_err("BUG: iommu failure at %s:%d/%s()!\n",
 			__FILE__, __LINE__, __func__);
 
@@ -665,18 +682,26 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		(struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
 	u32 reg_val, int_mask = 0;
 	u32 mmu_reg_val, mmu_int_mask = 0;
+	u32 mmu1_reg_val, mmu1_int_mask = 0;
 
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_INT_STS);
 	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
+	mmu1_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU1_INT_STS);
 
 	int_mask = reg_val & (BIT_DPU_INT_FBC_PLD_ERR |
 				BIT_DPU_INT_FBC_HDR_ERR | BIT_DPU_INT_ERR);
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, reg_val);
 	DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, int_mask);
 
+	/* clear & disable mmu0 int */
 	mmu_int_mask |= check_mmu_isr(ctx, mmu_reg_val);
 	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
 	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu_int_mask);
+
+	/* clear & disable mmu1 int */
+	mmu1_int_mask |= check_mmu_isr(ctx, mmu1_reg_val);
+	DPU_REG_WR(ctx->base + REG_DPU_MMU1_INT_CLR, mmu1_reg_val);
+	DPU_REG_CLR(ctx->base + REG_DPU_MMU1_INT_EN, mmu1_int_mask);
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
