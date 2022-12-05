@@ -617,6 +617,7 @@ int gsp_kcfg_iommu_map(struct gsp_kcfg *kcfg)
 	struct dma_buf *dmabuf = NULL;
 	struct gsp_layer *layer = NULL;
 	struct carveout_heap_buffer *buffer;
+	struct cma_heap_buffer *buffer2;
 	u32 phy_addr;
 
 	if (gsp_kcfg_verify(kcfg)) {
@@ -636,14 +637,24 @@ int gsp_kcfg_iommu_map(struct gsp_kcfg *kcfg)
 		buf = gsp_layer_to_buf(layer);
 		dmabuf = buf->dmabuf;
 
-		if (IS_ERR_OR_NULL(dmabuf))
+		if (IS_ERR_OR_NULL(dmabuf)) {
+			GSP_DEBUG("dmabuff is NULL");
 			continue;
+		}
 
 		if ((strcmp(dmabuf->exp_name, "system") &&
 		     strcmp(dmabuf->exp_name, "system-uncached"))) {
 			GSP_DEBUG("layer[%d] no need to iommu map\n", gsp_layer_to_type(layer));
-			buffer = (struct carveout_heap_buffer *)dmabuf->priv;
-			phy_addr = sg_phys(buffer->sg_table->sgl);
+			if (!strcmp(dmabuf->exp_name, "uncached_carveout_mm") &&
+			    (strcmp(GSP_QOGIRN6L, core->board_version) == 0)) {
+					GSP_DEBUG("N6Lite layer[%d] use cma buffer", gsp_layer_to_type(layer));
+					buffer2 = (struct cma_heap_buffer *)dmabuf->priv;
+					phy_addr = sg_phys(buffer2->sg_table.sgl);
+			} else {
+				buffer = (struct carveout_heap_buffer *)dmabuf->priv;
+				phy_addr = sg_phys(buffer->sg_table->sgl);
+			}
+
 			if (!phy_addr)
 				goto exit;
 			gsp_layer_addr_set(layer, phy_addr);

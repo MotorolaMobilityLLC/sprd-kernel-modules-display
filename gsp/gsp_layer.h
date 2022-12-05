@@ -39,6 +39,21 @@ struct carveout_heap_buffer {
 	bool uncached;
 };
 
+struct cma_heap_buffer {
+	struct cma_heap *heap;
+	struct list_head attachments;
+	struct mutex lock;
+	unsigned long len;
+	struct sg_table sg_table;
+	struct page *cma_pages;
+	struct page **pages;
+	pgoff_t pagecount;
+	int vmap_cnt;
+	void *vaddr;
+
+	bool uncached;
+};
+
 int gsp_layer_get_dmabuf(struct gsp_layer *layer);
 void gsp_layer_put_dmabuf(struct gsp_layer *layer);
 
