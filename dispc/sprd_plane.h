@@ -41,8 +41,6 @@ struct sprd_layer_state {
 struct sprd_plane_state {
 	struct drm_plane_state base;
 	struct sprd_layer_state layer;
-	struct drm_gem_object *gem_obj[4];
-	int plane_count;
 };
 
 struct sprd_plane {

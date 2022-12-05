@@ -34,10 +34,10 @@ static int sprd_plane_prepare_fb(struct drm_plane *plane,
 static void sprd_plane_cleanup_fb(struct drm_plane *plane,
 				struct drm_plane_state *old_state)
 {
+	struct drm_plane_state *curr_state = plane->state;
 	struct sprd_crtc *crtc = to_sprd_crtc(old_state->crtc);
-	struct sprd_plane_state *old_sprd_plane_state = to_sprd_plane_state(old_state);
 
-	if (old_sprd_plane_state->plane_count == 0)
+	if ((curr_state->fb == old_state->fb) || !old_state->fb)
 		return;
 
 	if (crtc->ops->cleanup_fb)
@@ -64,8 +64,6 @@ static void sprd_plane_atomic_update(struct drm_plane *drm_plane,
 		return;
 	}
 
-	state->plane_count = 0;
-
 	if (layer->pallete_en) {
 		layer->index = plane->index;
 		layer->dst_x = drm_state->crtc_x;
@@ -75,17 +73,8 @@ static void sprd_plane_atomic_update(struct drm_plane *drm_plane,
 		layer->alpha = drm_state->alpha;
 		layer->blending = drm_state->pixel_blend_mode;
 		crtc->pending_planes++;
-		layer->planes = drm_state->fb->format->num_planes;
-		state->plane_count = drm_state->fb->format->num_planes;
-
 		DRM_DEBUG("%s() pallete_color = %u, index = %u\n",
 			__func__, layer->pallete_color, layer->index);
-
-		for (i = 0; i < layer->planes; i++) {
-			obj = drm_gem_fb_get_obj(drm_state->fb, i);
-			state->gem_obj[i] = obj;
-		}
-
 		return;
 	}
 
@@ -104,7 +93,6 @@ static void sprd_plane_atomic_update(struct drm_plane *drm_plane,
 	layer->rotation = drm_state->rotation;
 	layer->planes = drm_state->fb->format->num_planes;
 	layer->format = drm_state->fb->format->format;
-	state->plane_count = drm_state->fb->format->num_planes;
 
 	DRM_DEBUG("%s() alpha = %u, blending = %u, rotation = %u, y2r_coef = %u\n",
 		  __func__, layer->alpha, layer->blending,
@@ -117,7 +105,6 @@ static void sprd_plane_atomic_update(struct drm_plane *drm_plane,
 	for (i = 0; i < layer->planes; i++) {
 		obj = drm_gem_fb_get_obj(drm_state->fb, i);
 		sprd_gem = to_sprd_gem_obj(obj);
-		state->gem_obj[i] = obj;
 		layer->addr[i] = sprd_gem->dma_addr + drm_state->fb->offsets[i];
 		layer->pitch[i] = drm_state->fb->pitches[i];
 	}
