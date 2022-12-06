@@ -1227,9 +1227,6 @@ static void dpu_dvfs_task_func(unsigned long data)
 	struct layer_info layer, layers[8];
 	int i, j, max_x, max_y, min_x, min_y;
 	int layer_en, max, maxs[8], count = 0;
-	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 	u32 dvfs_freq, reg_val;
 
 	if (!ctx->enabled) {
@@ -1311,7 +1308,7 @@ static void dpu_dvfs_task_func(unsigned long data)
 	else
 		dvfs_freq = 614400000;
 
-	if (panel->info.vrr_enabled)
+	if (ctx->vrr_enabled)
 		dvfs_freq = 614400000;
 
 	dpu_dvfs_notifier_call_chain(&dvfs_freq);
@@ -1406,7 +1403,7 @@ static int dpu_init(struct dpu_context *ctx)
 			pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
 	}
 
-	if (panel->info.vrr_enabled) {
+	if (ctx->vrr_enabled) {
 		dvfs_freq = 614400000;
 		dpu_dvfs_notifier_call_chain(&dvfs_freq);
 	}
@@ -2059,7 +2056,7 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		drm_display_mode_to_videomode(&dpu->actual_mode, &vm);
 	}
 
-	if (panel->info.vrr_enabled)
+	if (ctx->vrr_enabled)
 		DPU_REG_SET(ctx->base + REG_DPI_CTRL, BIT_DPU_VRR_EN);
 
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {

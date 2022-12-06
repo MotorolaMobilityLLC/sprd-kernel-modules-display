@@ -1353,9 +1353,6 @@ static void dpu_dvfs_task_func(unsigned long data)
 	struct layer_info layer, layers[8];
 	int i, j, max_x, max_y, min_x, min_y;
 	int layer_en, max, maxs[8], count = 0;
-	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 	u32 dvfs_freq, reg_val;
 
 	if (!ctx->enabled) {
@@ -1437,7 +1434,7 @@ static void dpu_dvfs_task_func(unsigned long data)
 	else
 		dvfs_freq = 614400000;
 
-	if(panel->info.vrr_enabled)
+	if(ctx->vrr_enabled)
 		dvfs_freq = 614400000;
 
 #if IS_ENABLED(CONFIG_DVFS_APSYS_SPRD)
@@ -1463,9 +1460,6 @@ static int dpu_init(struct dpu_context *ctx)
 	u32 dvfs_freq;
 	int ret;
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
-
 	struct dpu_enhance *enhance = ctx->enhance;
 
 	dpu_get_dsc_cfg(ctx);
@@ -1512,7 +1506,7 @@ static int dpu_init(struct dpu_context *ctx)
 
 	enhance->frame_no = 0;
 
-	if(panel->info.vrr_enabled){
+	if(ctx->vrr_enabled){
 		dvfs_freq = 614400000;
 		dpu_dvfs_notifier_call_chain(&dvfs_freq);
 	}

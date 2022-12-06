@@ -284,17 +284,14 @@ static int sprd_dpu_atomic_get_property(struct sprd_crtc *crtc,
 					struct drm_property *property, uint64_t *val)
 {
 	struct sprd_dpu *dpu = crtc->priv;
-	struct sprd_dsi *dsi = dpu->dsi;
-	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
-	struct panel_info *info = &panel->info;
 
 	if (property == crtc->blend_limit_property) {
-		if (info->vrr_max_layers != 0)
-			*val = info->vrr_max_layers;
+		if (dpu->ctx.vrr_max_layers != 0)
+			*val = dpu->ctx.vrr_max_layers;
 		else
 			*val = dpu->ctx.max_cap_layers;
 	} else if (property == crtc->vrr_enabled_property) {
-		*val = info->vrr_enabled;
+		*val = dpu->ctx.vrr_enabled;
 	} else {
 		DRM_ERROR("property %s is invalid\n", property->name);
 		return -EINVAL;
@@ -645,6 +642,55 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	return 0;
 }
 
+static int sprd_parse_vrr_config(struct sprd_dpu *dpu)
+{
+	struct device_node *lcd_node, *cmdline_node;
+	const char *cmd_line, *lcd_name_p;
+	char lcd_path[60];
+	char lcd_name[50];
+	u32 val;
+	int rc;
+
+	cmdline_node = of_find_node_by_path("/chosen");
+	rc = of_property_read_string(cmdline_node, "bootargs", &cmd_line);
+	if (!rc) {
+		lcd_name_p = strstr(cmd_line, "lcd_name=");
+		if (lcd_name_p) {
+			sscanf(lcd_name_p, "lcd_name=%s", lcd_name);
+			DRM_INFO("lcd name: %s\n", lcd_name);
+		}
+	} else {
+		DRM_ERROR("can't not parse bootargs property\n");
+		return rc;
+	}
+
+	sprintf(lcd_path, "/lcds/%s", lcd_name);
+	lcd_node = of_find_node_by_path(lcd_path);
+	if (!lcd_node) {
+		DRM_ERROR("could not find %s node\n", lcd_name);
+		return -ENODEV;
+	}
+
+	if (of_property_read_bool(lcd_node, "sprd,vrr-enabled")) {
+		DRM_INFO("vrr supported\n");
+		dpu->ctx.vrr_enabled = true;
+	} else {
+		dpu->ctx.vrr_enabled = false;
+		dpu->ctx.vrr_max_layers = 0;
+	}
+
+	rc = of_property_read_u32(lcd_node, "sprd,vrr-max-layers", &val);
+	if (!rc) {
+		DRM_INFO("dpu support no more than %d layers blending\n", val);
+		dpu->ctx.vrr_max_layers = val;
+	} else {
+		DRM_DEBUG("no blend limit config found\n");
+		dpu->ctx.vrr_max_layers = 0;
+	}
+
+	return 0;
+}
+
 static const struct sprd_dpu_ops sharkle_dpu = {
 	.core = &dpu_lite_r1p0_core_ops,
 	.clk = &sharkle_dpu_clk_ops,
@@ -743,6 +789,10 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = sprd_dpu_sysfs_init(&dpu->dev);
+	if (ret)
+	 	return ret;
+
+	ret = sprd_parse_vrr_config(dpu);
 	if (ret)
 	 	return ret;
 

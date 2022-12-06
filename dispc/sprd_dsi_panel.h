@@ -98,10 +98,6 @@ struct panel_info {
 	u32 lp_rate;
 	u32 mode_flags;
 	bool use_dcs;
-
-	/* blend size limit config parameters */
-	uint32_t vrr_max_layers;
-	bool vrr_enabled;
 };
 
 struct sprd_panel {
