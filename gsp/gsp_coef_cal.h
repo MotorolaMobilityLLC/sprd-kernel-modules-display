@@ -6,6 +6,7 @@
 #ifndef _GSP_COEF_GENERATE_H_
 #define _GSP_COEF_GENERATE_H_
 
+#include "gsp_r6p0/gsp_r6p0_core.h"
 #include "gsp_r8p0/gsp_r8p0_core.h"
 #include "gsp_r9p0/gsp_r9p0_core.h"
 #include "gsp_lite_r3p0/gsp_lite_r3p0_core.h"
@@ -47,6 +48,14 @@ struct GSC_MEM_POOL {
 	ulong total_size;
 	ulong used_size;
 };
+
+uint32_t *gsp_r6p0_gen_block_scaler_coef(struct gsp_r6p0_core *core,
+						 uint32_t i_w,
+						 uint32_t i_h,
+						 uint32_t o_w,
+						 uint32_t o_h,
+						 uint32_t hor_tap,
+						 uint32_t ver_tap);
 
 uint32_t *gsp_r8p0_gen_block_scaler_coef(struct gsp_r8p0_core *core,
 						 uint32_t i_w,

@@ -65,6 +65,7 @@ INCLUDE_SUBDIR = \
 	$(src)/gsp_lite_r2p0/Kbuild \
 	$(src)/gsp_lite_r3p0/Kbuild \
 	$(src)/gsp_lite_r4p0/Kbuild \
+	$(src)/gsp_r6p0/Kbuild \
 	$(src)/gsp_r8p0/Kbuild \
 	$(src)/gsp_r9p0/Kbuild
 
