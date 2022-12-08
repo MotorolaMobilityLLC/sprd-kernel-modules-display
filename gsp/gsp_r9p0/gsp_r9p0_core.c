@@ -1309,7 +1309,10 @@ static void gsp_r9p0_hdr10_set(void __iomem *base, struct gsp_r9p0_cfg *cfg, int
 
 		for (i = 0; i < HDR_TM_LUT_SIZE; ++i) {
 			gsp_core_reg_write(R9P0_HDR37_CFG(base, icnt), i);
-			gsp_core_reg_write(R9P0_HDR30_CFG(base, icnt), hdr_default_tm_tbl[i]);
+			if (para->transfer_char == PQ_TYPE)
+				gsp_core_reg_write(R9P0_HDR30_CFG(base, icnt), para->hdr_tone_mapping_lut_table[i]);
+			else
+				gsp_core_reg_write(R9P0_HDR30_CFG(base, icnt), hdr_default_tm_tbl[i]);
 		}
 
 		gsp_core_reg_write(R9P0_HDR26_CFG(base, icnt), HDR_TM_LUT_WRITE_FINISH);
