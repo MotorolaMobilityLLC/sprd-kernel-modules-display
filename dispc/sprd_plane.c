@@ -22,7 +22,10 @@ static int sprd_plane_prepare_fb(struct drm_plane *plane,
 	struct drm_plane_state *curr_state = plane->state;
 	struct sprd_crtc *crtc = to_sprd_crtc(new_state->crtc);
 
-	if ((curr_state->fb == new_state->fb) || !new_state->fb)
+	if (!new_state->fb)
+		return 0;
+
+	if (curr_state->fb && (curr_state->fb == new_state->fb))
 		return 0;
 
 	if (crtc->ops->prepare_fb)
