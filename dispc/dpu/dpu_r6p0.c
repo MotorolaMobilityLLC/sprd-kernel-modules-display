@@ -1914,6 +1914,14 @@ static int dpu_vrr(struct dpu_context *ctx)
 			struct sprd_dpu, ctx);
 	u32 reg_val;
 
+	if (ctx->stopped) {
+		pr_err("dpu is stoped\n");
+ 		dpu->crtc->fps_mode_changed = false;
+		return 0;
+	}
+
+	mutex_lock(&ctx->vrr_lock);
+
 	dpu_stop(ctx);
 	reg_val = (ctx->vm.vsync_len << 0) |
 		(ctx->vm.vback_porch << 8) |
@@ -1941,6 +1949,8 @@ static int dpu_vrr(struct dpu_context *ctx)
 	ctx->stopped = false;
 	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
 	dpu->crtc->fps_mode_changed = false;
+
+	mutex_unlock(&ctx->vrr_lock);
 
 	return 0;
 }

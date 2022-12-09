@@ -181,7 +181,6 @@ static int sprd_panel_disable(struct drm_panel *p)
 
 	DRM_INFO("%s()\n", __func__);
 
-	mutex_lock(&panel->lock);
 	/*
 	 * FIXME:
 	 * The cancel work should be executed before DPU stop,
@@ -194,6 +193,8 @@ static int sprd_panel_disable(struct drm_panel *p)
 		cancel_delayed_work_sync(&panel->esd_work);
 		panel->esd_work_pending = false;
 	}
+
+	mutex_lock(&panel->lock);
 
 	if (panel->backlight) {
 		panel->backlight->props.power = FB_BLANK_POWERDOWN;
@@ -350,6 +351,7 @@ static int sprd_panel_esd_check(struct sprd_panel *panel)
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	struct drm_connector *connector = &dsi->connector;
 	struct panel_info *info = &panel->info;
+	struct sprd_dpu *dpu;
 	u8 read_val = 0;
 
 	if (connector->dpms != DRM_MODE_DPMS_ON) {
@@ -362,10 +364,21 @@ static int sprd_panel_esd_check(struct sprd_panel *panel)
 		return 0;
 	}
 
+	mutex_lock(&panel->lock);
+	if (!panel->enabled) {
+		DRM_INFO("panel is not enabled, skip esd check");
+		mutex_unlock(&panel->lock);
+		return 0;
+	}
+
+	dpu = dsi->dpu;
+	mutex_lock(&dpu->ctx.vrr_lock);
+
 	/* FIXME: we should enable HS cmd tx here */
 	mipi_dsi_set_maximum_return_packet_size(panel->slave, 1);
 	mipi_dsi_dcs_read(panel->slave, info->esd_check_reg,
 			  &read_val, 1);
+	mutex_unlock(&dpu->ctx.vrr_lock);
 
 	/*
 	 * TODO:
@@ -374,8 +387,11 @@ static int sprd_panel_esd_check(struct sprd_panel *panel)
 	if (read_val != info->esd_check_val) {
 		DRM_ERROR("esd check failed, read value = 0x%02x\n",
 			  read_val);
+		mutex_unlock(&panel->lock);
 		return -EINVAL;
 	}
+
+	mutex_unlock(&panel->lock);
 
 	return 0;
 }
@@ -399,11 +415,20 @@ static int sprd_panel_te_check(struct sprd_panel *panel)
 		return 0;
 	}
 
+	mutex_lock(&panel->lock);
+	if (!panel->enabled) {
+		DRM_INFO("panel is not enabled, skip esd check");
+		mutex_unlock(&panel->lock);
+		return 0;
+	}
+
 	dpu = dsi->dpu;
 
 	/* DPU TE irq maybe enabled in kernel */
-	if (!dpu->ctx.enabled)
+	if (!dpu->ctx.enabled) {
+		mutex_unlock(&panel->lock);
 		return 0;
+	}
 
 	dpu->ctx.te_check_en = true;
 
@@ -431,6 +456,8 @@ static int sprd_panel_te_check(struct sprd_panel *panel)
 
 	dpu->ctx.te_check_en = false;
 	dpu->ctx.evt_te = false;
+
+	mutex_unlock(&panel->lock);
 
 	return ret < 0 ? ret : 0;
 }
@@ -489,6 +516,11 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		encoder = conn_funcs->best_encoder(connector);
 		encoder_funcs = encoder->helper_private;
 		panel->esd_work_pending = false;
+
+		if (connector->dpms != DRM_MODE_DPMS_ON) {
+			DRM_INFO("skip esd recovery during panel suspend\n");
+			return;
+		}
 
 		DRM_INFO("====== esd recovery start ========\n");
 		panel->is_esd_rst = true;

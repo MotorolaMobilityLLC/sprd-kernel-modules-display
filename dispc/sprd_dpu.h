@@ -147,6 +147,7 @@ struct dpu_context {
 	u8 if_type;
 	struct videomode vm;
 	struct semaphore lock;
+	struct mutex vrr_lock;
 	bool enabled;
 	bool stopped;
 	bool flip_pending;

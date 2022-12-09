@@ -1828,11 +1828,20 @@ static int dpu_vrr(struct dpu_context *ctx)
 
 	u32 reg_val;
 
+	if (ctx->stopped) {
+		pr_err("dpu is stoped\n");
+ 		dpu->crtc->fps_mode_changed = false;
+		return 0;
+	}
+
+	mutex_lock(&ctx->vrr_lock);
 
 	reg_val = ctx->vm.vfront_porch;
 	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
 
 	dpu->crtc->fps_mode_changed = false;
+
+	mutex_unlock(&ctx->vrr_lock);
 
 	return 0;
 }

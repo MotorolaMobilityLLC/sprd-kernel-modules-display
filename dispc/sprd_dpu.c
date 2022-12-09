@@ -632,6 +632,7 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	sema_init(&ctx->lock, 1);
 	sema_init(&ctx->cabc_lock, 1);
 	init_waitqueue_head(&ctx->wait_queue);
+	mutex_init(&ctx->vrr_lock);
 
 	ctx->panel_ready = true;
 	ctx->time = 5000;
