@@ -33,6 +33,11 @@ struct gsp_r8p0_core {
 	void __iomem *gsp_ctl_reg_base;
 };
 
+struct sprd_dpu_crtc {
+	struct device dev;
+	struct mutex dpu_gsp_lock;
+};
+
 #define MEM_OPS_ADDR_ALIGN_MASK (0x7UL)
 
 int gsp_r8p0_core_parse_dt(struct gsp_core *core);

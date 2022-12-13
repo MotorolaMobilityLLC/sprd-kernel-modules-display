@@ -308,11 +308,40 @@ static void dpu_glb_disable(struct dpu_context *ctx)
 
 static void dpu_reset(struct dpu_context *ctx)
 {
-	if (!IS_ERR_OR_NULL(dpu_rst)) {
-		reset_control_assert(dpu_rst);
-		udelay(10);
-		reset_control_deassert(dpu_rst);
-	}
+	u32 val;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+
+	/*
+	 * FIXME:
+	 * When gsp is busy, dpu executes dpu_reset.
+	 * Check gsp_busy status and add lock.
+	 * Just handle HDCP scence, power key lock/unlock.
+	 * When gsp is busy, dpu doesn't execute dpu reset request until gsp finishes operation.
+	 */
+	mutex_lock(&dpu->dpu_gsp_lock);
+
+	if (ctx->gsp_base_init) {
+		do {
+			val = readl(ctx->gsp_base);
+			mdelay(10);
+		} while (val & BIT(2));
+
+		if (!(val & BIT(2))) {
+			if (!IS_ERR_OR_NULL(dpu_rst)) {
+				reset_control_assert(dpu_rst);
+				udelay(10);
+				reset_control_deassert(dpu_rst);
+                        }
+                }
+        } else {
+		if (!IS_ERR_OR_NULL(dpu_rst)) {
+			reset_control_assert(dpu_rst);
+			udelay(10);
+                        reset_control_deassert(dpu_rst);
+                }
+        }
+	mutex_unlock(&dpu->dpu_gsp_lock);
 }
 
 static void dpu_power_domain(struct dpu_context *ctx, int enable)

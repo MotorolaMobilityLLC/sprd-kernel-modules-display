@@ -17,6 +17,7 @@
 #include <video/videomode.h>
 
 #include <uapi/drm/drm_mode.h>
+#include <drm/drm_crtc.h>
 
 #include "sprd_crtc.h"
 #include "sprd_plane.h"
@@ -94,6 +95,7 @@ struct dpu_core_ops {
 	bool (*check_raw_int)(struct dpu_context *ctx, u32 mask);
 	int (*modeset)(struct dpu_context *ctx, struct drm_display_mode *mode);
 	void (*dma_request)(struct dpu_context *ctx);
+	void (*get_gsp_base)(struct dpu_context *ctx, struct device_node *np);
 };
 
 struct dpu_clk_ops {
@@ -141,6 +143,8 @@ struct time_fifo {
 struct dpu_context {
 	/* dpu common parameters */
 	void __iomem *base;
+	void __iomem *gsp_base;
+	bool gsp_base_init;
 	u32 base_offset[2];
 	const char *version;
 	int irq;
@@ -244,6 +248,7 @@ struct sprd_dpu_ops {
 
 struct sprd_dpu {
 	struct device dev;
+	struct mutex dpu_gsp_lock;
 	struct sprd_crtc *crtc;
 	struct dpu_context ctx;
 	const struct dpu_core_ops *core;

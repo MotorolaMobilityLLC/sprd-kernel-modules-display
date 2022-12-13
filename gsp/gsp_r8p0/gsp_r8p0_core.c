@@ -32,6 +32,7 @@
 #include "gsp_coef_cal.h"
 #include "../gsp_interface.h"
 #include <../../drivers/trusty/trusty.h>
+#include <drm/drm_crtc.h>
 
 static int zorder_used[R8P0_IMGL_NUM + R8P0_OSDL_NUM] = {0};
 
@@ -1507,6 +1508,34 @@ static int gsp_r8p0_core_run_precheck(struct gsp_core *c)
 {
 	return 0;
 }
+
+static struct sprd_dpu_crtc *get_display_lock_status(void)
+{
+	struct device_node *dpu_node;
+	struct platform_device *dpu_pdev;
+	struct sprd_dpu_crtc *sprd_dpu;
+
+	dpu_node = of_find_node_by_name(NULL, "dpu");
+	if (!dpu_node) {
+		GSP_ERR("failed to get dpu node\n");
+		return NULL;
+	}
+
+	dpu_pdev = of_find_device_by_node(dpu_node);
+	if (!dpu_pdev) {
+		GSP_ERR("failed to get dpu platform device\n");
+		return NULL;
+	}
+
+	sprd_dpu = dev_get_drvdata(&dpu_pdev->dev);
+	if (!sprd_dpu) {
+		GSP_ERR("failed to get sprd_dpu\n");
+		return NULL;
+        }
+
+	return sprd_dpu;
+}
+
 int gsp_r8p0_core_trigger(struct gsp_core *c)
 {
 	int ret = -1;
@@ -1516,15 +1545,28 @@ int gsp_r8p0_core_trigger(struct gsp_core *c)
 	struct gsp_r8p0_cfg *cfg = NULL;
 	struct gsp_r8p0_core *core = (struct gsp_r8p0_core *)c;
 	struct R8P0_GSP_GLB_CFG_REG gsp_mod1_cfg_value;
+	struct sprd_dpu_crtc *sprd_dpu  = NULL;
+
+	/*
+	 * FIXME:
+	 * When gsp is busy, dpu executes dpu_reset.
+	 * Check gsp_busy status and add lock.
+	 * Just handle HDCP scence, power key lock/unlock.
+	 * When gsp is busy, dpu doesn't execute dpu reset request until gsp finishes operation.
+	 */
+	sprd_dpu = get_display_lock_status();
+	mutex_lock(&sprd_dpu->dpu_gsp_lock);
 
 	if (gsp_core_verify(c)) {
 		GSP_ERR("gsp_r8p0 core trigger params error\n");
+		mutex_unlock(&sprd_dpu->dpu_gsp_lock);
 		return ret;
 	}
 
 	kcfg = c->current_kcfg;
 	if (gsp_kcfg_verify(kcfg)) {
 		GSP_ERR("gsp_r8p0 trigger invalidate kcfg\n");
+		mutex_unlock(&sprd_dpu->dpu_gsp_lock);
 		return ret;
 	}
 
@@ -1533,6 +1575,7 @@ int gsp_r8p0_core_trigger(struct gsp_core *c)
 		gsp_core_reg_read(R8P0_GSP_GLB_CFG(c->base));
 	if (gsp_mod1_cfg_value.GSP_BUSY0) {
 		GSP_ERR("core is still busy, can't trigger\n");
+		mutex_unlock(&sprd_dpu->dpu_gsp_lock);
 		return GSP_K_HW_BUSY_ERR;
 	}
 	memset(zorder_used, 0, sizeof(zorder_used));
@@ -1550,6 +1593,7 @@ int gsp_r8p0_core_trigger(struct gsp_core *c)
 
 	if (gsp_r8p0_core_run_precheck(c)) {
 		GSP_ERR("r8p0 core run precheck fail !\n");
+		mutex_unlock(&sprd_dpu->dpu_gsp_lock);
 		return GSP_K_CLK_CHK_ERR;
 	}
 
@@ -1568,6 +1612,8 @@ int gsp_r8p0_core_trigger(struct gsp_core *c)
 	}
 
 	gsp_r8p0_core_run(c);
+
+	mutex_unlock(&sprd_dpu->dpu_gsp_lock);
 
 	return 0;
 };

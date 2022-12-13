@@ -2314,6 +2314,25 @@ static void dpu_capability(struct dpu_context *ctx,
 	cap->fmts_cnt = ARRAY_SIZE(primary_fmts);
 }
 
+static void dpu_get_gsp_base(struct dpu_context *ctx, struct device_node *np)
+{
+	struct resource r_gsp;
+
+	if (of_address_to_resource(np, 1, &r_gsp)) {
+		DRM_ERROR("parse dt gsp base address failed\n");
+		return;
+        }
+
+	ctx->gsp_base = ioremap(r_gsp.start, resource_size(&r_gsp));
+
+	if (!ctx->gsp_base) {
+		ctx->gsp_base_init = false;
+		DRM_ERROR("ioremap gsp base address failed\n");
+        } else {
+		ctx->gsp_base_init = true;
+        }
+}
+
 const struct dpu_core_ops dpu_r4p0_core_ops = {
 	.version = dpu_version,
 	.init = dpu_init,
@@ -2332,4 +2351,5 @@ const struct dpu_core_ops dpu_r4p0_core_ops = {
 	.enhance_get = dpu_enhance_get,
 	.modeset = dpu_modeset,
 	.check_raw_int = dpu_check_raw_int,
+	.get_gsp_base = dpu_get_gsp_base,
 };

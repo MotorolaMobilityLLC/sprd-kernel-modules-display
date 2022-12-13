@@ -653,6 +653,16 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 		ctx->stopped = true;
 	}
 
+	/*
+	 * FIXME:
+	 * When gsp is busy, dpu executes dpu_reset.
+	 * Check gsp_busy status and add lock.
+	 * Just handle HDCP scence, power key lock/unlock.
+	 * When gsp is busy, dpu doesn't execute dpu reset request until gsp finishes operation.
+	 */
+	if (dpu->core->get_gsp_base)
+		dpu->core->get_gsp_base(ctx, np);
+
 	of_get_logo_memory_info(dpu, np);
 
 	sema_init(&ctx->lock, 1);
@@ -796,6 +806,15 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 	dpu = devm_kzalloc(&pdev->dev, sizeof(*dpu), GFP_KERNEL);
 	if (!dpu)
 		return -ENOMEM;
+
+	/*
+	 * FIXME:
+	 * When gsp is busy, dpu executes dpu_reset.
+	 * Check gsp_busy status and add lock.
+	 * Just handle HDCP scence, power key lock/unlock.
+	 * When gsp is busy, dpu doesn't execute dpu reset request until gsp finishes operation.
+	 */
+	mutex_init(&dpu->dpu_gsp_lock);
 
 	pdata = of_device_get_match_data(&pdev->dev);
 	if (pdata) {
