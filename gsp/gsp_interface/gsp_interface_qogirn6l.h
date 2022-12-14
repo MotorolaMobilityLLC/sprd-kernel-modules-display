@@ -11,6 +11,8 @@
 #include <linux/regmap.h>
 #include "../gsp_interface.h"
 
+#define GSP_QOGIRN6L "qogirn6l"
+
 #define QOGIRN6L_DPU_VSP_EB_NAME	  ("clk_dpuvsp_eb")
 
 struct gsp_interface_qogirn6l {

@@ -13,6 +13,9 @@
 #include "gsp_core.h"
 #include "gsp_debug.h"
 
+#define GSP_QOGIRN6PRO "qogirn6pro"
+#define GSP_QOGIRN6L "qogirn6l"
+
 #define R9P0_GSP_CLOCK_NAME		("clk_gsp_eb")
 
 #define MIN_POOL_SIZE			(6 * 1024)
