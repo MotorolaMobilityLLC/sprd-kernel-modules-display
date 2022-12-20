@@ -17,6 +17,17 @@
 #include "sprd_plane.h"
 #include "sprd_iommu.h"
 
+struct drm_crtc *sprd_find_crtc_from_index(struct drm_device *dev, int idx)
+{
+	struct drm_crtc *crtc;
+
+	drm_for_each_crtc(crtc, dev)
+		if (idx == crtc->index)
+			return crtc;
+
+	return NULL;
+}
+
 int sprd_crtc_iommu_map(struct device *dev,
 				struct sprd_gem_obj *sprd_gem)
 {

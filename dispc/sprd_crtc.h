@@ -88,6 +88,7 @@ struct sprd_crtc_ops {
 				struct drm_property *property, uint64_t *val);
 };
 
+struct drm_crtc *sprd_find_crtc_from_index(struct drm_device *dev, int idx);
 int sprd_crtc_iommu_map(struct device *dev, struct sprd_gem_obj *sprd_gem);
 void sprd_crtc_iommu_unmap(struct device *dev, struct sprd_gem_obj *sprd_gem);
 void sprd_crtc_wait_last_commit_complete(struct drm_crtc *crtc);

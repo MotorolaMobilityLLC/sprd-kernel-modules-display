@@ -345,17 +345,38 @@ static const struct drm_panel_funcs sprd_panel_funcs = {
 	.unprepare = sprd_panel_unprepare,
 };
 
-static int sprd_panel_esd_check(struct sprd_panel *panel)
+static bool sprd_check_crtc_active_state(struct sprd_panel *panel, int crtc_index)
 {
 	struct mipi_dsi_host *host = panel->slave->host;
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	struct drm_connector *connector = &dsi->connector;
+	struct drm_crtc *crtc;
+
+	if (!connector->dev ||
+	    !connector->dev->registered) {
+		DRM_INFO("crtc can not be obtained when drm is not inited\n");
+		return false;
+	}
+
+	crtc = sprd_find_crtc_from_index(connector->dev, 0);
+	if (crtc && crtc->state->active)
+		return true;
+
+	return false;
+}
+
+static int sprd_panel_esd_check(struct sprd_panel *panel)
+{
+	struct mipi_dsi_host *host = panel->slave->host;
+	struct sprd_dsi *dsi = host_to_dsi(host);
 	struct panel_info *info = &panel->info;
 	struct sprd_dpu *dpu;
+	bool crtc_active_state;
 	u8 read_val = 0;
 
-	if (connector->dpms != DRM_MODE_DPMS_ON) {
-		DRM_INFO("skip esd when display suspend\n");
+	crtc_active_state = sprd_check_crtc_active_state(panel, 0);
+	if (!crtc_active_state) {
+		DRM_INFO("skip esd during panel suspend\n");
 		return 0;
 	}
 
@@ -400,13 +421,14 @@ static int sprd_panel_te_check(struct sprd_panel *panel)
 {
 	struct mipi_dsi_host *host = panel->slave->host;
 	struct sprd_dsi *dsi = host_to_dsi(host);
-	struct drm_connector *connector = &dsi->connector;
 	struct sprd_dpu *dpu;
 	int ret;
+	bool crtc_active_state;
 	bool irq_occur = false;
 
-	if (connector->dpms != DRM_MODE_DPMS_ON) {
-		DRM_INFO("skip esd when display suspend\n");
+	crtc_active_state = sprd_check_crtc_active_state(panel, 0);
+	if (!crtc_active_state) {
+		DRM_INFO("skip esd during panel suspend\n");
 		return 0;
 	}
 
@@ -507,7 +529,7 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		return;
 	}
 
-	if (ret && (connector->dpms == DRM_MODE_DPMS_ON)) {
+	if (ret && sprd_check_crtc_active_state(panel, 0)) {
 		const struct drm_encoder_helper_funcs *encoder_funcs;
 		const struct drm_connector_helper_funcs *conn_funcs;
 		struct drm_encoder *encoder;
@@ -517,7 +539,7 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		encoder_funcs = encoder->helper_private;
 		panel->esd_work_pending = false;
 
-		if (connector->dpms != DRM_MODE_DPMS_ON) {
+		if (!sprd_check_crtc_active_state(panel, 0)) {
 			DRM_INFO("skip esd recovery during panel suspend\n");
 			return;
 		}
