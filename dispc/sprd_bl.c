@@ -18,7 +18,7 @@
 void sprd_backlight_normalize_map(struct backlight_device *bd, u16 *level)
 {
 	struct sprd_backlight *bl = bl_get_data(bd);
-	u32 mul;
+	u64 mul;
 
 	if (!bl->num) {
 		if(!bd->props.brightness)
