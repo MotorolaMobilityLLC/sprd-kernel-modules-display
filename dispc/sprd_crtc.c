@@ -292,10 +292,8 @@ static int sprd_crtc_atomic_set_property(struct drm_crtc *drm_crtc,
 
 	if (property == crtc->resolution_property) {
 		state->resolution_change = val;
-		crtc->sr_mode_changed = val;
 	} else if (property == crtc->frame_rate_property) {
 		state->frame_rate_change = val;
-		crtc->fps_mode_changed = val;
 	} else if (property == crtc->blend_limit_property){
 		DRM_DEBUG("do not allow change blend limit property value.\n");
 	} else if (property == crtc->vrr_enabled_property) {

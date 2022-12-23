@@ -1838,7 +1838,7 @@ static int dpu_vrr(struct dpu_context *ctx)
 
 	reg_val = ctx->vm.vfront_porch;
 	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
-
+	DRM_INFO("dpu vrr changed, set vfp to %d\n", reg_val);
 	dpu->crtc->fps_mode_changed = false;
 
 	mutex_unlock(&ctx->vrr_lock);
@@ -3240,6 +3240,10 @@ static int dpu_modeset(struct dpu_context *ctx,
 		else
 			scale_cfg->need_scale = false;
 		ctx->wb_pending = true;
+
+		dpu->crtc->sr_mode_changed = state->resolution_change;
+	} else if (state->frame_rate_change) {
+		dpu->crtc->fps_mode_changed = state->frame_rate_change;
 	}
 
 	ctx->wb_size_changed = true;
