@@ -359,7 +359,7 @@ static bool sprd_check_crtc_active_state(struct sprd_panel *panel, int crtc_inde
 	}
 
 	crtc = sprd_find_crtc_from_index(connector->dev, 0);
-	if (crtc && crtc->state->active)
+	if (crtc && crtc->state && crtc->state->active)
 		return true;
 
 	return false;
