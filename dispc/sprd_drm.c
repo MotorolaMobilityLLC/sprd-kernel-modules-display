@@ -98,6 +98,8 @@ int sprd_atomic_wait_for_fences(struct drm_device *dev,
 {
 	struct drm_plane *plane;
 	struct drm_plane_state *new_plane_state;
+	int len = 50;
+	char buf[50];
 	int i, ret;
 
 	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
@@ -115,7 +117,12 @@ int sprd_atomic_wait_for_fences(struct drm_device *dev,
 				pre_swap,
 				msecs_to_jiffies(SPRD_FENCE_WAIT_TIMEOUT));
 		if (ret == 0) {
-			DRM_ERROR("wait fence timed out, index:%d,\n", i);
+			snprintf(buf, len, "%s-%s%llu-%lld",
+				new_plane_state->fence->ops->get_driver_name(new_plane_state->fence),
+				new_plane_state->fence->ops->get_timeline_name(new_plane_state->fence),
+				new_plane_state->fence->context,
+				new_plane_state->fence->seqno);
+			DRM_ERROR("wait fence timed out, index:%d, name:%s\n", i, buf);
 			return -EBUSY;
 		} else if (ret < 0) {
 			DRM_ERROR("wait fence failed, index:%d, ret:%d.\n",
