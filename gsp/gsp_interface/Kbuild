@@ -23,4 +23,6 @@ sprd-gsp-y += \
     gsp_interface/gsp_interface_qogirn6pro.o \
     gsp_interface/gsp_interface_sharkl5pro.o \
     gsp_interface/gsp_interface_pike2.o \
-    gsp_interface/gsp_interface_qogirn6l.o
+    gsp_interface/gsp_interface_qogirn6l.o \
+    gsp_interface/gsp_interface_sharkle.o
+
