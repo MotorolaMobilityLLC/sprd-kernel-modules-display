@@ -8,6 +8,7 @@
 
 #include "gsp_r8p0/gsp_r8p0_core.h"
 #include "gsp_r9p0/gsp_r9p0_core.h"
+#include "gsp_lite_r3p0/gsp_lite_r3p0_core.h"
 #include "gsp_lite_r4p0/gsp_lite_r4p0_core.h"
 #include "gsp_debug.h"
 
@@ -56,6 +57,14 @@ uint32_t *gsp_r8p0_gen_block_scaler_coef(struct gsp_r8p0_core *core,
 						 uint32_t ver_tap);
 
 uint32_t *gsp_r9p0_gen_block_scaler_coef(struct gsp_r9p0_core *core,
+						 uint32_t i_w,
+						 uint32_t i_h,
+						 uint32_t o_w,
+						 uint32_t o_h,
+						 uint32_t hor_tap,
+						 uint32_t ver_tap);
+
+uint32_t *gsp_lite_r3p0_gen_block_scaler_coef(struct gsp_lite_r3p0_core *core,
 						 uint32_t i_w,
 						 uint32_t i_h,
 						 uint32_t o_w,
