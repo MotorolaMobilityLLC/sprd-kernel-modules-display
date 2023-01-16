@@ -143,7 +143,7 @@
 
 static bool panel_ready = true;
 
-static int boot_charging;
+static bool dpu_mode_check;
 
 static void dpu_clean_all(struct dpu_context *ctx);
 static void dpu_layer(struct dpu_context *ctx,
@@ -166,10 +166,10 @@ static bool dpu_check_raw_int(struct dpu_context *ctx, u32 mask)
 	return false;
 }
 
-static void dpu_charger_mode(void)
+static void dpu_mode_change(void)
 {
 	struct device_node *cmdline_node;
-	const char *cmdline, *mode;
+	const char *cmdline, *charge_mode, *autotest_mode, *recovery_mode;
 	int ret;
 
 	cmdline_node = of_find_node_by_path("/chosen");
@@ -180,12 +180,14 @@ static void dpu_charger_mode(void)
 		return;
 	}
 
-	mode = strstr(cmdline, "sprdboot.mode=charger");
+	charge_mode = strstr(cmdline, "androidboot.mode=charger");
+	autotest_mode = strstr(cmdline, "androidboot.mode=autotest");
+	recovery_mode = strstr(cmdline, "androidboot.mode=recovery");
 
-	if (mode)
-		boot_charging = 1;
+	if (charge_mode || autotest_mode || recovery_mode)
+		dpu_mode_check = true;
 	else
-		boot_charging = 0;
+		dpu_mode_check = false;
 
 }
 
@@ -335,7 +337,7 @@ static int dpu_init(struct dpu_context *ctx)
 
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xffff);
 
-	dpu_charger_mode();
+	dpu_mode_change();
 
 	return 0;
 }
@@ -528,7 +530,7 @@ static void dpu_layer(struct dpu_context *ctx,
 			       i, hwlayer->addr[i]);
 		/* for poweroff charging , iommu not enabled,
 		   sharkle DPU is direct connect with DDRC, so memory addr need remove offset */
-		if (boot_charging && (hwlayer->addr[i] >= DPU_MEM_DDRC_ADDR_OFFSET)) {
+		if (dpu_mode_check && (hwlayer->addr[i] >= DPU_MEM_DDRC_ADDR_OFFSET)) {
 			hwlayer->addr[i] -= DPU_MEM_DDRC_ADDR_OFFSET;
 		}
 		DPU_REG_WR(ctx->base + DPU_LAY_PLANE_ADDR(REG_LAY_BASE_ADDR,
