@@ -629,9 +629,9 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	ctx->wb_layer.addr[0] = ctx->wb_addr_p;
 	ctx->wb_layer.fbc_hsize_r = wb_hdr_size;
 
-	ctx->max_vsync_count = 4;
+	ctx->max_vsync_count = 0;
 
-	ctx->wb_configed = true;
+	ctx->wb_configed = false;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
 
@@ -1156,7 +1156,7 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	ret = of_property_read_u8(qos_np, "arqos-low",
 					&ctx->qos_cfg.arqos_low);
 	if (ret) {
-		ctx->qos_cfg.arqos_low = 0x1;
+		ctx->qos_cfg.arqos_low = 0xc;
 		pr_warn("read arqos-low failed, use default\n");
 	}
 
@@ -1164,21 +1164,21 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 					&ctx->qos_cfg.arqos_high);
 	if (ret) {
 		pr_warn("read arqos-high failed, use default\n");
-		ctx->qos_cfg.arqos_high = 0x7;
+		ctx->qos_cfg.arqos_high = 0xd;
 	}
 
 	ret = of_property_read_u8(qos_np, "awqos-low",
 					&ctx->qos_cfg.awqos_low);
 	if (ret) {
 		pr_warn("read awqos_low failed, use default\n");
-		ctx->qos_cfg.awqos_low = 0x1;
+		ctx->qos_cfg.awqos_low = 0xa;
 	}
 
 	ret = of_property_read_u8(qos_np, "awqos-high",
 					&ctx->qos_cfg.awqos_high);
 	if (ret) {
 		pr_warn("read awqos-high failed, use default\n");
-		ctx->qos_cfg.awqos_high = 0x7;
+		ctx->qos_cfg.awqos_high = 0xa;
 	}
 
 
