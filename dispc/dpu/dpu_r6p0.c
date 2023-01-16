@@ -698,10 +698,10 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu_reg_val);
 	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu_int_mask);
 
-	/* clear & disable mmu1 int */
+	/* clear & disable mmu1 int, mmu1 controlled by mmu0 */
 	mmu1_int_mask |= check_mmu_isr(ctx, mmu1_reg_val);
-	DPU_REG_WR(ctx->base + REG_DPU_MMU1_INT_CLR, mmu1_reg_val);
-	DPU_REG_CLR(ctx->base + REG_DPU_MMU1_INT_EN, mmu1_int_mask);
+	DPU_REG_WR(ctx->base + REG_DPU_MMU_INT_CLR, mmu1_reg_val);
+	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu1_int_mask);
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
