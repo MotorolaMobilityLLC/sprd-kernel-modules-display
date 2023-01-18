@@ -389,6 +389,7 @@ struct dpu_enhance {
 	int frame_no;
 	bool cabc_bl_set;
 	bool ctm_set;
+	bool pq_update_by_flip;
 
 	struct hsv_lut hsv_copy;
 	struct cm_cfg cm_copy;
@@ -1371,7 +1372,9 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 	struct sprd_plane_state *state;
 	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct dpu_enhance *enhance = ctx->enhance;
 
+	enhance->pq_update_by_flip = true;
 	ctx->vsync_count = 0;
 	if (ctx->max_vsync_count > 0 && count > 1)
 		ctx->wb_en = true;
@@ -1908,7 +1911,13 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 
 	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2));
-		dpu_wait_update_done(ctx);
+		/*
+		 * if dpu is fliping, pq enhance update by dpu_flip(),
+		 * if not, pq enhance update by itself.
+		 */
+		if (!(enhance->pq_update_by_flip))
+			dpu_wait_update_done(ctx);
+		enhance->pq_update_by_flip = false;
 	} else if ((ctx->if_type == SPRD_DPU_IF_EDPI) && ctx->panel_ready) {
 		/*
 		 * In EDPI mode, we need to wait panel initializatin
