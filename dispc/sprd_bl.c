@@ -263,6 +263,8 @@ static int sprd_backlight_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sprd_backlight_of_match[] = {
+	{ .compatible = "sprd,sharkl3-backlight" },
+	{ .compatible = "sprd,sharkl5-backlight" },
 	{ .compatible = "sprd,sharkl5pro-backlight" },
 	{ .compatible = "sprd,sharkl6-backlight" },
 	{ .compatible = "sprd,qogirn6pro-backlight"},
