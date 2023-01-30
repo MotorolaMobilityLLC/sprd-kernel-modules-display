@@ -180,9 +180,9 @@ static void dpu_mode_change(void)
 		return;
 	}
 
-	charge_mode = strstr(cmdline, "androidboot.mode=charger");
-	autotest_mode = strstr(cmdline, "androidboot.mode=autotest");
-	recovery_mode = strstr(cmdline, "androidboot.mode=recovery");
+	charge_mode = strstr(cmdline, "sprdboot.mode=charger");
+	autotest_mode = strstr(cmdline, "sprdboot.mode=autotest");
+	recovery_mode = strstr(cmdline, "sprdboot.mode=recovery");
 
 	if (charge_mode || autotest_mode || recovery_mode)
 		dpu_mode_check = true;
