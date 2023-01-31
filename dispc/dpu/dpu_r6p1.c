@@ -2209,14 +2209,6 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		pr_info("read widevine-use-fastcall failed, fastcall_en = false\n");
 	}
 
-	if (of_property_read_bool(np, "sprd,dpi-clk-pixelpll")) {
-		ctx->dpi_clk_pixelpll = true;
-		pr_info("read sprd,dpi-clk-pixelpll success, dpi_clk_pixelpll = true\n");
-	} else {
-		ctx->dpi_clk_pixelpll = false;
-		pr_info("read sprd,dpi-clk-pixelpll failed, dpi_clk_pixelpll = false\n");
-	}
-
 	qos_np = of_parse_phandle(np, "sprd,qos", 0);
 	if (!qos_np)
 		pr_warn("can't find dpu qos cfg node\n");

@@ -97,6 +97,9 @@ struct panel_info {
 	u32 lp_rate;
 	u32 mode_flags;
 	bool use_dcs;
+
+	/* pixelpll config parameters */
+	bool dpi_clk_pixelpll;
 };
 
 struct sprd_panel {

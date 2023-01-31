@@ -301,7 +301,7 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	dsc_core = ctx->vm.hactive / panel->info.slice_width;
 	dpu_core_val = calc_dpu_core_clk();
 
-	if (ctx->dpi_clk_pixelpll) {
+	if (panel->info.dpi_clk_pixelpll) {
 		clk_pixelpll_div = calc_div_of_pixelpll(ctx->vm.pixelclock);
 
 		ret = clk_set_rate(clk_ctx->clk_dpi_pixelpll, clk_pixelpll_div * ctx->vm.pixelclock);
@@ -325,7 +325,7 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	if (ret)
 		pr_warn("set dpu core clk source failed\n");
 
-	if (ctx->dpi_clk_pixelpll) {
+	if (panel->info.dpi_clk_pixelpll) {
 		clk_src = pixelpll_div_to_clk(clk_ctx, clk_pixelpll_div);
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
 		if (ret)

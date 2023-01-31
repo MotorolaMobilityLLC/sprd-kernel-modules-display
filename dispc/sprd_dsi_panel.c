@@ -868,6 +868,14 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	if (of_property_read_bool(lcd_node, "sprd,dsi-non-continuous-clock"))
 		info->mode_flags |= MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
+	if (of_property_read_bool(lcd_node, "sprd,dpi-clk-pixelpll")) {
+		info->dpi_clk_pixelpll = true;
+		pr_info("read sprd,dpi-clk-pixelpll success, dpi_clk_pixelpll = true\n");
+	} else {
+		info->dpi_clk_pixelpll = false;
+		pr_info("read sprd,dpi-clk-pixelpll failed, dpi_clk_pixelpll = false\n");
+	}
+
 	rc = of_property_read_u32(lcd_node, "sprd,dsi-lane-number", &val);
 	if (!rc)
 		info->lanes = val;
