@@ -214,6 +214,7 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 			struct drm_atomic_state *state, bool nonblock)
 {
 	int ret;
+	struct sprd_drm *sprd;
 	ret = drm_atomic_helper_setup_commit(state, false);
 	if (ret)
 		return ret;
@@ -238,7 +239,10 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 	if (ret)
 		goto err;
 
+	sprd = dev->dev_private;
+	mutex_lock(&sprd->state_lock);
 	ret = drm_atomic_helper_swap_state(state, false);
+	mutex_unlock(&sprd->state_lock);
 	if (ret)
 		goto err;
 
@@ -362,6 +366,8 @@ static int sprd_drm_bind(struct device *dev)
 
 	/* reset all the states of crtc/plane/encoder/connector */
 	drm_mode_config_reset(drm);
+
+	mutex_init(&sprd->state_lock);
 
 	/* init kms poll for handling hpd */
 	drm_kms_helper_poll_init(drm);

@@ -15,6 +15,7 @@ struct sprd_drm {
 	struct drm_device *drm;
 	struct device *gsp_dev[GSP_MAX_NUM];
 	struct drm_atomic_state *state;
+	struct mutex state_lock;
 };
 
 #ifdef CONFIG_DRM_SPRD_DUMMY

@@ -15,6 +15,7 @@
 
 #include "sprd_crtc.h"
 #include "sprd_dpu.h"
+#include "sprd_drm.h"
 #include "sprd_dsi_panel.h"
 #include "dsi/sprd_dsi_api.h"
 #include "sysfs/sysfs_display.h"
@@ -342,6 +343,7 @@ static bool sprd_check_crtc_active_state(struct sprd_panel *panel, int crtc_inde
 	struct mipi_dsi_host *host = panel->slave->host;
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	struct drm_connector *connector = &dsi->connector;
+	struct sprd_drm *sprd;
 	struct drm_crtc *crtc;
 
 	if (!connector->dev ||
@@ -350,9 +352,14 @@ static bool sprd_check_crtc_active_state(struct sprd_panel *panel, int crtc_inde
 		return false;
 	}
 
+	sprd = connector->dev->dev_private;
+	mutex_lock(&sprd->state_lock);
 	crtc = sprd_find_crtc_from_index(connector->dev, 0);
-	if (crtc && crtc->state && crtc->state->active)
+	if (crtc && crtc->state && crtc->state->active) {
+		mutex_unlock(&sprd->state_lock);
 		return true;
+	}
+	mutex_unlock(&sprd->state_lock);
 
 	return false;
 }
