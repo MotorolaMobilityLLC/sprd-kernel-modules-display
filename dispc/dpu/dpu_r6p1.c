@@ -1377,13 +1377,13 @@ static int dpu_init(struct dpu_context *ctx)
 	struct sprd_panel *panel =
 		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 
-	calc_dsc_params(&ctx->dsc_init);
-
 	if (panel->info.dual_dsi_en)
 		DPU_REG_WR(ctx->base + REG_DPU_MODE, BIT(0));
 
-	if (panel->info.dsc_en)
+	if (panel->info.dsc_en) {
+		calc_dsc_params(&ctx->dsc_init);
 		dpu_config_dsc_param(ctx);
+	}
 
 	/* set bg color */
 	DPU_REG_WR(ctx->base + REG_BG_COLOR, 0x00);

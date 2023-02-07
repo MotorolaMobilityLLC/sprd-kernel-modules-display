@@ -1213,8 +1213,8 @@ static int dpu_config_dsc_param(struct dpu_context *ctx)
 			(vm.vfront_porch << 20);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
 
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG0), 0x306c81db);
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG3), 0x12181800);
+	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG0), 0x306c8200);
+	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG3), 0x10f01800);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG4), 0x003316b6);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG5), 0x382a1c0e);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG6), 0x69625446);
@@ -1239,7 +1239,7 @@ static int dpu_config_dsc_param(struct dpu_context *ctx)
 	case DSC_1080_2408_540_8:
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_GRP_SIZE), 0x800b4);
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_SLICE_SIZE), 0x050005a0);
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG1), 0x7009b);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG1), 0x700bb);
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG2), 0xcb70db7);
 		break;
 	case DSC_720_2560_720_8:
@@ -1262,8 +1262,8 @@ static int dpu_config_dsc_param(struct dpu_context *ctx)
 				(vm.vfront_porch << 20);
 			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_V_TIMING), reg_val);
 
-			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG0), 0x306c81db);
-			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG3), 0x12181800);
+			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG0), 0x306c8200);
+			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG3), 0x10f01800);
 			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG4), 0x003316b6);
 			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG5), 0x382a1c0e);
 			DPU_REG_WR(ctx->base + DSC1_REG(REG_DSC_CFG6), 0x69625446);

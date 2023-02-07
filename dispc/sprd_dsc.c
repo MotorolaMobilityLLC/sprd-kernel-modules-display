@@ -30,7 +30,7 @@ static void set_defaults(struct dsc_init_param *dsc_init, int bpc)
 	dsc_init->init_simple_422 = 0;
 	dsc_init->bp_enable = 1;
 	dsc_init->initial_fullness_ofs = (bpc == 8) ? 6144 : 5632;
-	dsc_init->initial_delay = (bpc == 8) ? 475 : 410;
+	dsc_init->initial_delay = (dsc_init->rc_model_size / 2) / dsc_init->bit_per_pixel;
 	dsc_init->first_linebpg_ofs = 12;
 	dsc_init->init_slice_width = 0;
 	dsc_init->init_slice_height = 0;
