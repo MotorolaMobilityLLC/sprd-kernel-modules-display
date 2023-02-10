@@ -19,6 +19,10 @@
 #define PM_RUNTIME_DELAY_MS 1000
 #define GSP_CORE_TIMER_OUT 2800 /* 2800 ms */
 
+#define GSP_QOGIRN6PRO "qogirn6pro"
+#define GSP1_QOGIRN6PRO "r4p0-qogirn6pro"
+#define GSP_QOGIRN6L "qogirn6l"
+
 struct gsp_core_ops;
 struct gsp_dev;
 struct gsp_kcfg;
