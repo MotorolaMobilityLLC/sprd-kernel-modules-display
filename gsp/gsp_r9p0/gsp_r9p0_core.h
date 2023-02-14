@@ -39,6 +39,7 @@ struct gsp_r9p0_core {
 	/* module ctl reg base, virtual	0x31100000 */
 	void __iomem *gsp_ctl_reg_base;
 	void __iomem *gsp_qos_reg_base;
+	bool vrr_enabled;
 };
 
 #define MEM_OPS_ADDR_ALIGN_MASK (0x7UL)
@@ -64,5 +65,6 @@ int gsp_r9p0_core_release(struct gsp_core *core);
 int __user *gsp_r9p0_core_intercept(void __user *arg, int index);
 void gsp_r9p0_core_reset(struct gsp_core *core);
 void gsp_r9p0_core_dump(struct gsp_core *core);
+bool sprd_parse_vrr_gsp_config(struct gsp_core *core);
 
 #endif

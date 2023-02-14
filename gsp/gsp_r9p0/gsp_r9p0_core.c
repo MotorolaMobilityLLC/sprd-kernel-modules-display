@@ -52,6 +52,39 @@ enum sprd_fw_attr {
 	FW_ATTR_PROTECTED,
 };
 
+bool sprd_parse_vrr_gsp_config(struct gsp_core *core)
+{
+	struct gsp_r9p0_core *c = (struct gsp_r9p0_core *)core;
+        struct device_node *lcd_node, *cmdline_node;
+        const char *cmd_line, *lcd_name_p;
+        char lcd_path[60];
+        char lcd_name[50];
+        int rc;
+
+        cmdline_node = of_find_node_by_path("/chosen");
+        rc = of_property_read_string(cmdline_node, "bootargs", &cmd_line);
+        if (!rc) {
+                lcd_name_p = strstr(cmd_line, "lcd_name=");
+                if (lcd_name_p) {
+                sscanf(lcd_name_p, "lcd_name=%s", lcd_name);
+                }
+        } else {
+                GSP_ERR("can't not parse bootargs property\n");
+                return rc;
+        }
+
+        sprintf(lcd_path, "/lcds/%s", lcd_name);
+        lcd_node = of_find_node_by_path(lcd_path);
+
+        if (of_property_read_bool(lcd_node, "sprd,vrr-enabled")) {
+                c->vrr_enabled = true;
+        } else {
+                c->vrr_enabled = false;
+        }
+
+	return c->vrr_enabled;
+}
+
 static void print_image_layer_cfg(struct gsp_r9p0_img_layer *layer)
 {
 	struct gsp_r9p0_img_layer_params *params = NULL;
@@ -1132,6 +1165,8 @@ int gsp_r9p0_core_parse_dt(struct gsp_core *core)
 		return PTR_ERR(r9p0_core->pd_dpu_vsp);
 	}
 
+	r9p0_core->vrr_enabled = sprd_parse_vrr_gsp_config(core);
+
 	return ret;
 }
 
@@ -1519,7 +1554,13 @@ static void gsp_r9p0_core_misc_reg_set(struct gsp_core *core,
 
 	base = core->base;
 
-	gsp_dvfs_tasklet_schedule(c, cfg->misc.work_freq);
+	if(c->vrr_enabled) {
+		if (strcmp(GSP_QOGIRN6PRO, core->board_version) == 0)
+			gsp_dvfs_tasklet_schedule(c, GSP_R9P0_FREQ_512M);
+		else if (strcmp(GSP_QOGIRN6L, core->board_version) == 0)
+			gsp_dvfs_tasklet_schedule(c, GSP_R9P0_FREQ_614_4M);
+	} else
+		gsp_dvfs_tasklet_schedule(c, cfg->misc.work_freq);
 
 	gsp_mod_cfg_value.value = 0x0;
 	gsp_mod_cfg_value.CORE_NUM = cfg->misc.core_num;
