@@ -89,10 +89,13 @@ static unsigned long sprd_free_reserved_area(void *start, void *end, int poison,
 static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 				struct drm_plane_state *old_state)
 {
+	struct device_node *np = NULL;
 	struct drm_gem_object *obj;
 	struct sprd_gem_obj *sprd_gem;
 	struct sprd_dpu *dpu = crtc->priv;
 	static atomic_t logo2animation = { -1 };
+	struct resource r;
+	bool keep_buf_reserved = false;
 	int i;
 
 	if (!dpu->ctx.enabled) {
@@ -107,8 +110,31 @@ static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 			sprd_crtc_iommu_unmap(&dpu->dev, sprd_gem);
 	}
 
+	/* FIXME:
+	 * while sysdump, some thread information will be written to an area
+	 * of memory that may overlap with the logo_reserved, resulting in logo data
+	 * overwriting the thread information when restart.
+	 * Workaround:
+	 * keep_buf_reserved = true: do not free logo_reserved
+	 * keep_buf_reserved = false: free logo_reserved
+	 */
 	if (unlikely(atomic_inc_not_zero(&logo2animation)) &&
 		dpu->ctx.logo_addr) {
+		np = of_find_node_by_name(NULL, "sysdump-uboot");
+		if (np) {
+			if ((!of_address_to_resource(np, 0, &r)) && (resource_size(&r) != 0)) {
+				DRM_INFO("sysdump-uboot reserved is not 0, do not free logo_reserved\n");
+				keep_buf_reserved = true;
+			} else {
+				DRM_INFO("sysdump-uboot reserved is 0, free logo_reserved\n");
+			}
+		} else {
+			DRM_INFO("cannot find node by name sysdump-uboot, free logo_reserved\n");
+		}
+
+		if (keep_buf_reserved)
+			return;
+
 		DRM_INFO("free logo memory addr:0x%lx size:0x%lx\n",
 			dpu->ctx.logo_addr, dpu->ctx.logo_size);
 		sprd_free_reserved_area(phys_to_virt(dpu->ctx.logo_addr),
