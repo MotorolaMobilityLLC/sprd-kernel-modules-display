@@ -217,12 +217,6 @@
 #define BIT_DPU_INT_MMU_VAOR_WR_MASK	BIT(1)
 #define BIT_DPU_INT_MMU_VAOR_RD_MASK	BIT(0)
 
-#define CABC_MODE_UI			(1 << 2)
-#define CABC_MODE_GAME			(1 << 3)
-#define CABC_MODE_VIDEO			(1 << 4)
-#define CABC_MODE_IMAGE			(1 << 5)
-#define CABC_MODE_CAMERA		(1 << 6)
-#define CABC_MODE_FULL_FRAME		(1 << 7)
 #define CABC_BRIGHTNESS_STEP		8
 #define CABC_BRIGHTNESS			32
 #define CABC_FST_MAX_BRIGHT_TH		64
@@ -391,6 +385,7 @@ struct dpu_enhance {
 	int frame_no;
 	bool cabc_bl_set;
 	bool ctm_set;
+	bool flash_finished;
 
 	struct hsv_lut hsv_copy;
 	struct cm_cfg cm_copy;
@@ -1551,13 +1546,13 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct cm_cfg cm_final;
+	struct cm_cfg cm_zero = {0};
 
 	if (cm_status == CM_PQ) {
-		if (enhance->ctm_set) {
+		if (enhance->ctm_set)
 			cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
-		} else {
+		else
 			memcpy(&cm_final, &enhance->cm_copy, sizeof(struct cm_cfg));
-		}
 	} else if (cm_status == CM_CTM) {
 		bool ret;
 		int16_t ctm_final[12] = {0};
@@ -1576,6 +1571,9 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 		cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
 		enhance->ctm_set = 1;
 	}
+
+	if (!memcmp(&cm_zero, &cm_final, sizeof(struct cm_cfg)))
+		return;
 
 	DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm_final.coef01 << 16) | cm_final.coef00);
 	DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm_final.coef03 << 16) | cm_final.coef02);
@@ -2112,16 +2110,17 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		pr_info("enhance lut3d set\n");
 		enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 		return;
-	case ENHANCE_CFG_ID_CABC_MODE:
+	case ENHANCE_CFG_ID_MODE:
 		p = param;
-
-		if (*p & CABC_MODE_UI)
+		if (*p & ENHANCE_MODE_UI)
 			enhance->cabc_para.video_mode = 0;
-		else if (*p & CABC_MODE_FULL_FRAME)
+		else if (*p & ENHANCE_MODE_FULL_FRAME)
 			enhance->cabc_para.video_mode = 1;
-		else if (*p & CABC_MODE_VIDEO)
-			enhance->cabc_para.video_mode = 2;
-		pr_info("enhance CABC mode: 0x%x\n", *p);
+		else if (*p & ENHANCE_MODE_VIDEO)
+			enhance->cabc_para.video_mode = 1;
+		else if (*p & ENHANCE_MODE_CAMERA)
+			enhance->flash_finished = 1;
+		pr_info("enhance mode: 0x%x\n", *p);
 		return;
 	case ENHANCE_CFG_ID_CABC_PARAM:
 		memcpy(&cabc_param, param, sizeof(struct cabc_para));
@@ -2218,13 +2217,19 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 		break;
 	case ENHANCE_CFG_ID_CM:
 		p32 = param;
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF01_00);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF03_02);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF11_10);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF13_12);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF21_20);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF23_22);
-		pr_info("enhance cm get\n");
+		if (enhance->flash_finished) {
+			memcpy(p32, &enhance->cm_copy, sizeof(struct cm_cfg));
+			enhance->flash_finished = 0;
+			pr_info("flash get cm_copy\n");
+		} else {
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF01_00);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF03_02);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF11_10);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF13_12);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF21_20);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF23_22);
+			pr_info("enhance cm get\n");
+		}
 		break;
 	case ENHANCE_CFG_ID_LTM:
 		ltm = param;

@@ -289,24 +289,18 @@
 #define BIT_DPU_INT_MMU_PAOR_WR_MASK			BIT(7)
 
 /* enhance config bits */
-#define BIT_DPU_ENHANCE_EN		BIT(0)
-#define GAMMA_LUT_MODE			2
-#define HSV_LUT_MODE			3
-#define LUT3D_MODE			5
-#define LUTS_SIZE_4K			(GAMMA_LUT_MODE + HSV_LUT_MODE + LUT3D_MODE * 6)
-#define LUTS_COPY_TIME			((LUTS_SIZE_4K) * 2)
-#define DPU_LUTS_SIZE			(LUTS_SIZE_4K * 4096)
-#define DPU_LUTS_SLP_OFFSET		0
-#define DPU_LUTS_GAMMA_OFFSET		4096
-#define DPU_LUTS_HSV_OFFSET		(4096 * 3)
-#define DPU_LUTS_LUT3D_OFFSET		(4096 * 6)
-#define CABC_BL_COEF			1020
-#define CABC_MODE_UI			BIT(2)
-#define CABC_MODE_GAME			BIT(3)
-#define CABC_MODE_VIDEO			BIT(4)
-#define CABC_MODE_IMAGE			BIT(5)
-#define CABC_MODE_CAMERA		BIT(6)
-#define CABC_MODE_FULL_FRAME		BIT(7)
+#define BIT_DPU_ENHANCE_EN				BIT(0)
+#define GAMMA_LUT_MODE					2
+#define HSV_LUT_MODE					3
+#define LUT3D_MODE					5
+#define LUTS_SIZE_4K					(GAMMA_LUT_MODE + HSV_LUT_MODE + LUT3D_MODE * 6)
+#define LUTS_COPY_TIME					(LUTS_SIZE_4K * 2)
+#define DPU_LUTS_SIZE					(LUTS_SIZE_4K * 4096)
+#define DPU_LUTS_SLP_OFFSET				0
+#define DPU_LUTS_GAMMA_OFFSET				4096
+#define DPU_LUTS_HSV_OFFSET				(4096 * 3)
+#define DPU_LUTS_LUT3D_OFFSET				(4096 * 6)
+#define CABC_BL_COEF					1020
 
 struct layer_info {
 	u16 dst_x;
@@ -545,6 +539,7 @@ struct dpu_enhance {
 	int cabc_bl_set_delay;
 	bool mode_changed;
 	bool need_scale;
+	bool flash_finished;
 	u8 skip_layer_index;
 	u32 dpu_luts_paddr;
 	u8 *dpu_luts_vaddr;
@@ -2052,13 +2047,13 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct cm_cfg cm_final;
+	struct cm_cfg cm_zero = {0};
 
 	if (cm_status == CM_PQ) {
-		if (enhance->ctm_set) {
+		if (enhance->ctm_set)
 			cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
-		} else {
+		else
 			memcpy(&cm_final, &enhance->cm_copy, sizeof(struct cm_cfg));
-		}
 	} else if (cm_status == CM_CTM) {
 		bool ret;
 		int16_t ctm_final[12] = {0};
@@ -2077,6 +2072,9 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 		cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
 		enhance->ctm_set = 1;
 	}
+
+	if (!memcmp(&cm_zero, &cm_final, sizeof(struct cm_cfg)))
+		return;
 
 	DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm_final.c01 << 16) | cm_final.c00);
 	DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm_final.c03 << 16) | cm_final.c02);
@@ -2736,15 +2734,17 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		pr_info("enhance lut3d lut update\n");
 		enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 		break;
-	case ENHANCE_CFG_ID_CABC_MODE:
+	case ENHANCE_CFG_ID_MODE:
 		p32 = param;
-		if (*p32 & CABC_MODE_UI)
+		if (*p32 & ENHANCE_MODE_UI)
 			enhance->cabc_para.video_mode = 0;
-		else if (*p32 & CABC_MODE_FULL_FRAME)
+		else if (*p32 & ENHANCE_MODE_FULL_FRAME)
 			enhance->cabc_para.video_mode = 1;
-		else if (*p32 & CABC_MODE_VIDEO)
-			enhance->cabc_para.video_mode = 2;
-		pr_info("enhance CABC mode = 0x%x\n", *p32);
+		else if (*p32 & ENHANCE_MODE_VIDEO)
+			enhance->cabc_para.video_mode = 1;
+		else if (*p32 & ENHANCE_MODE_CAMERA)
+			enhance->flash_finished = 1;
+		pr_info("enhance mode = 0x%x\n", *p32);
 		return;
 	case ENHANCE_CFG_ID_CABC_PARAM:
 		memcpy(&cabc_param, param, sizeof(cabc_param));
@@ -2939,20 +2939,25 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 		break;
 	case ENHANCE_CFG_ID_CM:
 		cm = (struct cm_cfg *)param;
-		cm->c00 = DPU_REG_RD(ctx->base + REG_CM_COEF01_00) & 0x3fff;
-		cm->c01 = (DPU_REG_RD(ctx->base + REG_CM_COEF01_00) >> 16) & 0x3fff;
-		cm->c02 = DPU_REG_RD(ctx->base + REG_CM_COEF03_02) & 0x3fff;
-		cm->c03 = (DPU_REG_RD(ctx->base + REG_CM_COEF03_02) >> 16) & 0x3fff;
-		cm->c10 = DPU_REG_RD(ctx->base + REG_CM_COEF11_10) & 0x3fff;
-		cm->c11 = (DPU_REG_RD(ctx->base + REG_CM_COEF11_10) >> 16) & 0x3fff;
-		cm->c12 = DPU_REG_RD(ctx->base + REG_CM_COEF13_12) & 0x3fff;
-		cm->c13 = (DPU_REG_RD(ctx->base + REG_CM_COEF13_12) >> 16) & 0x3fff;
-		cm->c20 = DPU_REG_RD(ctx->base + REG_CM_COEF21_20) & 0x3fff;
-		cm->c21 = (DPU_REG_RD(ctx->base + REG_CM_COEF21_20) >> 16) & 0x3fff;
-		cm->c22 = DPU_REG_RD(ctx->base + REG_CM_COEF23_22) & 0x3fff;
-		cm->c23 = (DPU_REG_RD(ctx->base + REG_CM_COEF23_22) >> 16) & 0x3fff;
-
-		pr_info("enhance cm get\n");
+		if (enhance->flash_finished) {
+			memcpy(cm, &enhance->cm_copy, sizeof(struct cm_cfg));
+			enhance->flash_finished = 0;
+			pr_info("flash get cm_copy\n");
+		} else {
+			cm->c00 = DPU_REG_RD(ctx->base + REG_CM_COEF01_00) & 0x3fff;
+			cm->c01 = (DPU_REG_RD(ctx->base + REG_CM_COEF01_00) >> 16) & 0x3fff;
+			cm->c02 = DPU_REG_RD(ctx->base + REG_CM_COEF03_02) & 0x3fff;
+			cm->c03 = (DPU_REG_RD(ctx->base + REG_CM_COEF03_02) >> 16) & 0x3fff;
+			cm->c10 = DPU_REG_RD(ctx->base + REG_CM_COEF11_10) & 0x3fff;
+			cm->c11 = (DPU_REG_RD(ctx->base + REG_CM_COEF11_10) >> 16) & 0x3fff;
+			cm->c12 = DPU_REG_RD(ctx->base + REG_CM_COEF13_12) & 0x3fff;
+			cm->c13 = (DPU_REG_RD(ctx->base + REG_CM_COEF13_12) >> 16) & 0x3fff;
+			cm->c20 = DPU_REG_RD(ctx->base + REG_CM_COEF21_20) & 0x3fff;
+			cm->c21 = (DPU_REG_RD(ctx->base + REG_CM_COEF21_20) >> 16) & 0x3fff;
+			cm->c22 = DPU_REG_RD(ctx->base + REG_CM_COEF23_22) & 0x3fff;
+			cm->c23 = (DPU_REG_RD(ctx->base + REG_CM_COEF23_22) >> 16) & 0x3fff;
+			pr_info("enhance cm get\n");
+		}
 		break;
 	case ENHANCE_CFG_ID_LTM:
 	case ENHANCE_CFG_ID_SLP:

@@ -234,7 +234,7 @@ static ssize_t disable_flip_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(disable_flip);
 
-static ssize_t cabc_mode_write(struct file *fp, struct kobject *kobj,
+static ssize_t enhance_mode_write(struct file *fp, struct kobject *kobj,
 			struct bin_attribute *attr, char *buf,
 			loff_t off, size_t count)
 {
@@ -249,11 +249,11 @@ static ssize_t cabc_mode_write(struct file *fp, struct kobject *kobj,
 	if (off != 0 || count != attr->size)
 		return -EINVAL;
 
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_MODE, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_MODE, buf);
 
 	return count;
 }
-static BIN_ATTR_WO(cabc_mode, 4);
+static BIN_ATTR_WO(enhance_mode, 4);
 
 static ssize_t cabc_hist_read(struct file *fp, struct kobject *kobj,
 			struct bin_attribute *attr, char *buf,
@@ -1500,7 +1500,7 @@ static struct bin_attribute *pq_bin_attrs[] = {
 	&bin_attr_cm,
 	&bin_attr_hsv,
 	&bin_attr_epf,
-	&bin_attr_cabc_mode,
+	&bin_attr_enhance_mode,
 	&bin_attr_cabc_hist,
 	&bin_attr_cabc_hist_v2,
 	&bin_attr_cabc_param,

@@ -235,7 +235,7 @@ struct slp_cfg {
 struct dpu_enhance {
 	u32 enhance_en;
 	bool ctm_set;
-
+	bool flash_finished;
 	struct cm_cfg cm_copy;
 	struct cm_cfg ctm_copy;
 	struct slp_cfg slp_copy;
@@ -906,13 +906,13 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct cm_cfg cm_final;
+	struct cm_cfg cm_zero = {0};
 
 	if (cm_status == CM_PQ) {
-		if (enhance->ctm_set) {
+		if (enhance->ctm_set)
 			cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
-		} else {
+		else
 			memcpy(&cm_final, &enhance->cm_copy, sizeof(struct cm_cfg));
-		}
 	} else if (cm_status == CM_CTM) {
 		bool ret;
 		int16_t ctm_final[12] = {0};
@@ -931,6 +931,9 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 		cm_multi(&cm_final, &(enhance->cm_copy), &(enhance->ctm_copy));
 		enhance->ctm_set = 1;
 	}
+
+	if (!memcmp(&cm_zero, &cm_final, sizeof(struct cm_cfg)))
+		return;
 
 	DPU_REG_WR(ctx->base + REG_CM_COEF01_00, (cm_final.coef01 << 16) | cm_final.coef00);
 	DPU_REG_WR(ctx->base + REG_CM_COEF03_02, (cm_final.coef03 << 16) | cm_final.coef02);
@@ -1251,6 +1254,12 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(5));
 		pr_info("enhance gamma set\n");
 		break;
+	case ENHANCE_CFG_ID_MODE:
+		p = param;
+		if (*p & ENHANCE_MODE_CAMERA)
+			enhance->flash_finished = 1;
+		pr_info("enhance mode: 0x%x\n", *p);
+		return;
 	default:
 		break;
 	}
@@ -1273,6 +1282,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 
 static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 {
+	struct dpu_enhance *enhance = ctx->enhance;
 	struct epf_cfg *ep;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
@@ -1321,13 +1331,19 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 		break;
 	case ENHANCE_CFG_ID_CM:
 		p32 = param;
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF01_00);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF03_02);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF11_10);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF13_12);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF21_20);
-		*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF23_22);
-		pr_info("enhance cm get\n");
+		if (enhance->flash_finished) {
+			memcpy(p32, &enhance->cm_copy, sizeof(struct cm_cfg));
+			enhance->flash_finished = 0;
+			pr_info("flash get cm_copy\n");
+		} else {
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF01_00);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF03_02);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF11_10);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF13_12);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF21_20);
+			*p32++ = DPU_REG_RD(ctx->base + REG_CM_COEF23_22);
+			pr_info("enhance cm get\n");
+		}
 		break;
 	case ENHANCE_CFG_ID_SLP:
 		slp = param;
