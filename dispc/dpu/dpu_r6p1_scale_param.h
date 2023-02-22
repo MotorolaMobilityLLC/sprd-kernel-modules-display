@@ -1,3 +1,7 @@
+/*
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 #ifndef __DPU_R6P1_SCALE_PARAM_H_
 #define __DPU_R6P1_SCALE_PARAM_H_
 

@@ -1,3 +1,7 @@
+/*
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 #include <linux/backlight.h>
 #include <linux/kernel.h>
 #include <linux/module.h>

@@ -1,8 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2016 Synopsys, Inc.
- * Copyright (C) 2020 Unisoc Inc.
- */
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 
 #ifndef __DPTX_H__
 #define __DPTX_H__

@@ -1,9 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2016 Synopsys, Inc.
- * Copyright (C) 2020 Unisoc Inc.
- */
-
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 #include "dp_api.h"
 
 #define DEFAULT_STREAM 0

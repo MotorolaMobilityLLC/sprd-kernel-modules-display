@@ -1,3 +1,7 @@
+/*
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 #include <linux/interrupt.h>
 
 #include "gsp_r9p0_dvfs.h"

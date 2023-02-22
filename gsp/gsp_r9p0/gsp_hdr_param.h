@@ -1,3 +1,7 @@
+/*
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 #ifndef _GSP_HDR_PARAM_H
 #define _GSP_HDR_PARAM_H
 

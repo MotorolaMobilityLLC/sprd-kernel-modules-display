@@ -1,13 +1,5 @@
-# Note:
-# - Build arguments(ARCH CROSS_COMPILE O BSP_MAKE_EXTRA_ARGS
-#   INSTALL_MOD_PATH etc.) are passed by parent make
-# - obj-m objects configuration is moved to Kbuild file used by
-#   Kernel kbuild system
-# - Please use these predefined name for keeping code:
-#   KO_MODULE_NAME KO_MODULE_OUT KO_MODULE_KBUILD
-# - For more kernel module building, please refer to kernel doc:
-#   Documentation/kbuild/modules.txt
-#
+#SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+#SPDX-License-Identifier: GPL-2.0-only
 
 export KO_MODULE_NAME := sprd-drm
 KO_MODULE_OUT := $(BSP_MODULES_OUT)/$(KO_MODULE_NAME)

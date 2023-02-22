@@ -1,3 +1,7 @@
+/*
+*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
+*SPDX-License-Identifier: GPL-2.0-only
+*/
 #ifndef __GLOBAL_DPU_QOS_H__
 #define __GLOBAL_DPU_QOS_H__
 
