@@ -382,7 +382,7 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 		return PTR_ERR(planes);
 
 	dpu->crtc = sprd_crtc_init(drm, planes, SPRD_DISPLAY_TYPE_DP,
-				&sprd_dpu_ops, dpu->ctx.version, dpu->ctx.corner_size, dpu);
+				&sprd_dpu_ops, dpu->ctx.version, dpu->ctx.corner_size, "dispc1", dpu);
 	if (IS_ERR(dpu->crtc))
 		return PTR_ERR(dpu->crtc);
 

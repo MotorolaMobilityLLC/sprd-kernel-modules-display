@@ -30,9 +30,6 @@
 #include "sprd_plane.h"
 #include "sysfs/sysfs_display.h"
 
-static void sprd_dpu_enable(struct sprd_dpu *dpu);
-static void sprd_dpu_disable(struct sprd_dpu *dpu);
-
 static void sprd_dpu_prepare_fb(struct sprd_crtc *crtc,
 				struct drm_plane_state *new_state)
 {
@@ -243,15 +240,27 @@ void sprd_dpu_atomic_disable_force(struct drm_crtc *crtc)
 {
 	struct sprd_crtc *sprd_crtc = container_of(crtc, struct sprd_crtc, base);
 	struct sprd_dpu *dpu = sprd_crtc->priv;
+	struct sprd_panel *panel = (struct sprd_panel *)
+					container_of(dpu->dsi->panel, struct sprd_panel, base);
 
 	DRM_INFO("%s()\n", __func__);
 
-	/* dpu is not initialized,it should enable first! */
-	sprd_dpu_enable(dpu);
-	enable_irq(dpu->ctx.irq);
+	/* disable esd check work in bbat deepsleep */
+	cancel_delayed_work_sync(&panel->esd_work);
 
-	disable_irq(dpu->ctx.irq);
-	sprd_dpu_disable(dpu);
+	/* dpu is not initialized,it should enable first! */
+	if (!dpu->ctx.enabled) {
+		drm_display_mode_to_videomode(&panel->info.mode, &dpu->ctx.vm);
+		sprd_dpu_enable(dpu);
+		enable_irq(dpu->ctx.irq);
+	}
+
+	if (strcmp(dpu->ctx.version, "dpu-r6p0")) {
+		disable_irq(dpu->ctx.irq);
+		sprd_dpu_disable(dpu);
+	}
+
+	pm_runtime_put(dpu->dev.parent);
 }
 
 static void sprd_dpu_atomic_begin(struct sprd_crtc *crtc)
@@ -390,7 +399,7 @@ void sprd_dpu_stop(struct sprd_dpu *dpu)
 	drm_crtc_vblank_off(&dpu->crtc->base);
 }
 
-static void sprd_dpu_enable(struct sprd_dpu *dpu)
+void sprd_dpu_enable(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 
@@ -432,7 +441,7 @@ void sprd_dpu_resume(struct sprd_dpu *dpu)
 	DRM_INFO("dpu resume OK\n");
 }
 
-static void sprd_dpu_disable(struct sprd_dpu *dpu)
+void sprd_dpu_disable(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 
@@ -547,7 +556,7 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 		return PTR_ERR(planes);
 
 	dpu->crtc = sprd_crtc_init(drm, planes, SPRD_DISPLAY_TYPE_LCD,
-				&sprd_dpu_ops, dpu->ctx.version, dpu->ctx.corner_size, dpu);
+				&sprd_dpu_ops, dpu->ctx.version, dpu->ctx.corner_size, "dispc0", dpu);
 	if (IS_ERR(dpu->crtc))
 		return PTR_ERR(dpu->crtc);
 

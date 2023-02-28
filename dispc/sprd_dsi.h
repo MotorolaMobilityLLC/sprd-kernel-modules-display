@@ -219,9 +219,9 @@ struct sprd_dsi {
 };
 
 #ifdef CONFIG_DRM_SPRD_DSI
-void sprd_dsi_encoder_disable_force(struct drm_encoder *encoder);
+void sprd_dsi_encoder_disable_force(struct drm_crtc *crtc);
 #else
-static inline void sprd_dsi_encoder_disable_force(struct drm_encoder *encoder) {}
+static inline void sprd_dsi_encoder_disable_force(struct drm_crtc *crtc) {}
 #endif
 
 int dsi_panel_set_dpms_mode(struct sprd_dsi *dsi);

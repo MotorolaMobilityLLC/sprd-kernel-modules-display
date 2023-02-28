@@ -548,7 +548,6 @@ static int sprd_drm_pm_suspend(struct device *dev)
 	struct drm_atomic_state *state;
 	struct sprd_drm *sprd;
 	struct drm_crtc *crtc;
-	struct drm_encoder *encoder;
 	static bool is_suspend;
 
 	if (!drm) {
@@ -563,21 +562,21 @@ static int sprd_drm_pm_suspend(struct device *dev)
 			return 0;
 
 		drm_for_each_crtc(crtc, drm) {
-			if (!crtc->state->active) {
-				/* crtc force power down! */
-				sprd_dpu_atomic_disable_force(crtc);
+			if (crtc && !strcmp(crtc->name, "dispc0")) {
+				if (!crtc->state->active) {
+					/* crtc force power down! */
+					sprd_dpu_atomic_disable_force(crtc);
 
-				/* encoder force power down! */
-				drm_for_each_encoder(encoder, drm) {
-					sprd_dsi_encoder_disable_force(encoder);
+					/* encoder force power down! */
+					sprd_dsi_encoder_disable_force(crtc);
+
+					is_suspend = true; /* For BBAT deep sleep */
+					return 0;
 				}
-
-				is_suspend = true; /* For BBAT deep sleep */
-				return 0;
+				is_suspend = true; /* For BBAT display test */
+				pr_err("Only support %s  power down\n", crtc->name);
+				break;
 			}
-			is_suspend = true; /* For BBAT display test */
-			DRM_INFO("Only support crtc0  power down\n");
-			break;
 		}
 	}
 

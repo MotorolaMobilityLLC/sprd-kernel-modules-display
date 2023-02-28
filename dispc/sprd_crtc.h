@@ -98,6 +98,7 @@ struct sprd_crtc *sprd_crtc_init(struct drm_device *drm,
 					const struct sprd_crtc_ops *ops,
 					const char *version,
 					u32 corner_size,
+					const char *name,
 					void *priv);
 int sprd_drm_set_possible_crtcs(struct drm_encoder *encoder,
 		enum sprd_crtc_output_type out_type);

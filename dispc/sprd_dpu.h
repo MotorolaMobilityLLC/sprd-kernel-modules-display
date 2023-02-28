@@ -259,6 +259,8 @@ struct sprd_dpu {
 	struct sprd_dsi *dsi;
 };
 
+void sprd_dpu_enable(struct sprd_dpu *dpu);
+void sprd_dpu_disable(struct sprd_dpu *dpu);
 void sprd_dpu_run(struct sprd_dpu *dpu);
 void sprd_dpu_stop(struct sprd_dpu *dpu);
 void sprd_dpu_resume(struct sprd_dpu *dpu);

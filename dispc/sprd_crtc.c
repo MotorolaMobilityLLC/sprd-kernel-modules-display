@@ -448,6 +448,7 @@ struct sprd_crtc *sprd_crtc_init(struct drm_device *drm,
 					const struct sprd_crtc_ops *ops,
 					const char *version,
 					u32 corner_size,
+					const char *name,
 					void *priv)
 {
 	struct sprd_crtc *crtc;
@@ -464,7 +465,7 @@ struct sprd_crtc *sprd_crtc_init(struct drm_device *drm,
 	crtc->planes = planes;
 
 	ret = drm_crtc_init_with_planes(drm, &crtc->base, primary, NULL,
-					&sprd_crtc_funcs, NULL);
+					&sprd_crtc_funcs, name);
 	if (ret < 0) {
 		DRM_ERROR("failed to initial crtc.\n");
 		goto err_crtc;
