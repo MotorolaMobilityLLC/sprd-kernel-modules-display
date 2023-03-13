@@ -6,6 +6,7 @@
 #include <linux/delay.h>
 
 #include "sprd_dsi_hal.h"
+#define BYTE_PER_PIXEL_RGB888 3
 
 static int dsi_wait_tx_payload_fifo_empty(struct sprd_dsi *dsi)
 {
@@ -395,7 +396,10 @@ void sprd_dsi_edpi_video(struct sprd_dsi *dsi)
 	u32 hactive = ctx->vm.hactive;
 	u32 Bpp_x100;
 	u32 max_fifo_len;
+	u32 cur_pkt_len, dcs_wm_pkt_size;
 	u8 coding;
+	int i, remainder;
+	bool find_pkt_size = false;
 
 	coding = fmt_to_coding(ctx->format);
 	Bpp_x100 = calc_bytes_per_pixel_x100(coding);
@@ -405,10 +409,28 @@ void sprd_dsi_edpi_video(struct sprd_dsi *dsi)
 	dsi_hal_dpi_color_coding(dsi, coding);
 	dsi_hal_tear_effect_ack_en(dsi, ctx->te_ack_en);
 
+
 	if (max_fifo_len > hactive)
-		dsi_hal_edpi_max_pkt_size(dsi, hactive);
+		cur_pkt_len = hactive;
 	else
-		dsi_hal_edpi_max_pkt_size(dsi, max_fifo_len);
+		cur_pkt_len = max_fifo_len;
+
+	for (i = 1; i <= cur_pkt_len; i++) {
+		if (cur_pkt_len % i != 0)
+			continue;
+
+		dcs_wm_pkt_size = cur_pkt_len / i;
+		remainder = (dcs_wm_pkt_size * BYTE_PER_PIXEL_RGB888 + 1) % 8;
+		if (remainder == 0 || remainder > 4) {
+			find_pkt_size = true;
+			break;
+		}
+	}
+
+	if (i == cur_pkt_len && !find_pkt_size)
+		dsi_hal_edpi_max_pkt_size(dsi, cur_pkt_len);
+	else
+		dsi_hal_edpi_max_pkt_size(dsi, dcs_wm_pkt_size);
 
 	dsi_hal_int0_mask(dsi, ctx->int0_mask);
 	dsi_hal_int1_mask(dsi, ctx->int1_mask);
