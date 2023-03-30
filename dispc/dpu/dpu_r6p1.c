@@ -743,7 +743,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 				schedule_work(&ctx->wb_work);
 
 			/* cabc update backlight */
-			if (enhance->cabc_bl_set)
+			if (enhance->cabc_bl_set && !ctx->is_oled_bl)
 				schedule_work(&ctx->cabc_bl_update);
 		}
 
@@ -1040,14 +1040,26 @@ static void dpu_run(struct dpu_context *ctx)
 
 static void dpu_cabc_work_func(struct work_struct *data)
 {
+	int ret;
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, cabc_work);
 
 	down(&ctx->cabc_lock);
 	if (ctx->enabled) {
 		dpu_cabc_trigger(ctx);
-		DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
-		dpu_wait_pq_update_done(ctx);
+		if (ctx->cmd_dpi_mode) {
+			spin_lock_irq(&ctx->irq_lock);
+			ctx->dpu_run_flag = true;
+			ctx->evt_te = false;
+			spin_unlock_irq(&ctx->irq_lock);
+			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+								msecs_to_jiffies(20));
+			if (!ret)
+				pr_err("cabc set wait for te time out!\n");
+		} else {
+			DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
+			dpu_wait_pq_update_done(ctx);
+		}
 	}
 	up(&ctx->cabc_lock);
 }
@@ -1779,6 +1791,7 @@ static void dpu_clean_all(struct dpu_context *ctx)
 
 static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 {
+	int ret;
 
 	if (ctx->if_type == SPRD_DPU_IF_EDPI)
 		dpu_wait_stop_done(ctx);
@@ -1788,8 +1801,19 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 	dpu_clean_all(ctx);
 
 	if (ctx->is_single_run) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		if (ctx->cmd_dpi_mode) {
+			spin_lock_irq(&ctx->irq_lock);
+			ctx->dpu_run_flag = true;
+			ctx->evt_te = false;
+			spin_unlock_irq(&ctx->irq_lock);
+			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+								msecs_to_jiffies(20));
+			if (!ret)
+				pr_err("bgcolor set wait for te time out!\n");
+		} else {
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		}
 	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
 		ctx->stopped = false;
@@ -2361,6 +2385,7 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	lcd_node = sprd_get_panel_node_by_name();
 	oled_bl_node = of_get_child_by_name(lcd_node, "oled-backlight");
 	if (!oled_bl_node) {
+		ctx->is_oled_bl = 0;
 		bl_np = of_parse_phandle(np, "sprd,backlight", 0);
 		if (bl_np) {
 			enhance->bl_dev = of_find_backlight_by_node(bl_np);
@@ -2373,6 +2398,8 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		} else {
 			pr_warn("dpu backlight node not found\n");
 		}
+	} else {
+		ctx->is_oled_bl = 1;
 	}
 
 	ret = of_property_read_u32(np, "sprd,corner-radius",
@@ -2423,8 +2450,10 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 
 	ctx->enhance = enhance;
 	enhance->cabc_state = CABC_DISABLED;
-	INIT_WORK(&ctx->cabc_work, dpu_cabc_work_func);
-	INIT_WORK(&ctx->cabc_bl_update, dpu_cabc_bl_update_func);
+	if(!ctx->is_oled_bl) {
+		INIT_WORK(&ctx->cabc_work, dpu_cabc_work_func);
+		INIT_WORK(&ctx->cabc_bl_update, dpu_cabc_bl_update_func);
+	}
 
 	ctx->base_offset[0] = 0x0;
 	ctx->base_offset[1] = DPU_MAX_REG_OFFSET / 4;
@@ -2629,7 +2658,7 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 		pr_err("The type %d is unavaiable\n", enhance->typeindex_cpy.type);
 		break;
 	}
-	if (!no_update)
+	if (!no_update && !ctx->cmd_dpi_mode)
 		dpu_wait_pq_lut_reg_update_done(ctx);
 }
 
@@ -2646,7 +2675,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 	struct cabc_para cabc_param;
 	static u32 lut3d_table_index;
 	u32 *p32, *tmp32;
-	int i, j;
+	int i, j, ret;
 	bool no_update = false;
 
 	if (!ctx->enabled) {
@@ -2817,22 +2846,26 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		pr_info("enhance CABC mode = 0x%x\n", *p32);
 		return;
 	case ENHANCE_CFG_ID_CABC_PARAM:
-		memcpy(&cabc_param, param, sizeof(cabc_param));
-		enhance->cabc_para.bl_fix = cabc_param.bl_fix;
-		enhance->cabc_para.cfg0 = cabc_param.cfg0;
-		enhance->cabc_para.cfg1 = cabc_param.cfg1;
-		enhance->cabc_para.cfg2 = cabc_param.cfg2;
-		enhance->cabc_para.cfg3 = cabc_param.cfg3;
-		enhance->cabc_para.cfg4 = cabc_param.cfg4;
+		if (!ctx->is_oled_bl) {
+			memcpy(&cabc_param, param, sizeof(cabc_param));
+			enhance->cabc_para.bl_fix = cabc_param.bl_fix;
+			enhance->cabc_para.cfg0 = cabc_param.cfg0;
+			enhance->cabc_para.cfg1 = cabc_param.cfg1;
+			enhance->cabc_para.cfg2 = cabc_param.cfg2;
+			enhance->cabc_para.cfg3 = cabc_param.cfg3;
+			enhance->cabc_para.cfg4 = cabc_param.cfg4;
+		}
 		return;
 	case ENHANCE_CFG_ID_CABC_RUN:
-		if (enhance->cabc_state != CABC_DISABLED)
+		if (enhance->cabc_state != CABC_DISABLED && !ctx->is_oled_bl)
 			schedule_work(&ctx->cabc_work);
 		return;
 	case ENHANCE_CFG_ID_CABC_STATE:
-		p32 = param;
-		enhance->cabc_state = *p32;
-		enhance->frame_no = 0;
+		if (!ctx->is_oled_bl) {
+			p32 = param;
+			enhance->cabc_state = *p32;
+			enhance->frame_no = 0;
+		}
 		return;
 	case ENHANCE_CFG_ID_UD:
 		memcpy(&enhance->ud_copy, param, sizeof(enhance->ud_copy));
@@ -2853,7 +2886,16 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 		break;
 	}
 
-	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
+	if (ctx->cmd_dpi_mode) {
+		spin_lock_irq(&ctx->irq_lock);
+		ctx->dpu_run_flag = true;
+		ctx->evt_te = false;
+		spin_unlock_irq(&ctx->irq_lock);
+		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+							msecs_to_jiffies(20));
+		if (!ret)
+			pr_err("enhance set wait for te time out!\n");
+	} else	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
 		if (id == ENHANCE_CFG_ID_SCL) {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(3));
 			dpu_wait_all_regs_update_done(ctx);

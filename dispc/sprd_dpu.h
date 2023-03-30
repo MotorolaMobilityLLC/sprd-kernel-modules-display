@@ -181,6 +181,7 @@ struct dpu_context {
 	struct semaphore cabc_lock;
 	struct work_struct cabc_work;
 	struct work_struct cabc_bl_update;
+	bool is_oled_bl;
 
 	/* write back parameters */
 	int wb_en;
