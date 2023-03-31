@@ -265,7 +265,8 @@ int gsp_sync_fence_wait(struct gsp_fence_data *data)
 {
 	signed long ret = 0;
 	int i;
-
+	int len = 50;
+	char buf[50];
 	/* wait acuqire fence array */
 	for (i = 0; i < data->wait_cnt; i++) {
 		if (!data->wait_fen_arr[i]) {
@@ -280,11 +281,19 @@ int gsp_sync_fence_wait(struct gsp_fence_data *data)
 		 */
 		ret = dma_fence_wait_timeout(data->wait_fen_arr[i],
 				true, msecs_to_jiffies(GSP_FENCE_WAIT_TIMEOUT));
-		if (ret <= 0) {
-			GSP_ERR("wait %d/%d fence failed, ret:%ld\n",
-				i + 1, data->wait_cnt, ret);
-			return -1;
+		if(ret == 0) {
+			snprintf(buf, len, "%s-%s-%llu-%lld",
+			data->wait_fen_arr[i]->ops->get_driver_name(data->wait_fen_arr[i]),
+			data->wait_fen_arr[i]->ops->get_timeline_name(data->wait_fen_arr[i]),
+			data->wait_fen_arr[i]->context,
+			data->wait_fen_arr[i]->seqno);
+			GSP_ERR("wait fence timed out, index:%d, name:%s\n", i + 1, buf);
+			return -EBUSY;
+		}else if(ret < 0) {
+			GSP_ERR("wait %d/%d fence failed, ret:%ld\n", i + 1, data->wait_cnt, ret);
+			return ret;
 		}
+
 		dma_fence_put(data->wait_fen_arr[i]);
 		data->wait_fen_arr[i] = NULL;
 	}
