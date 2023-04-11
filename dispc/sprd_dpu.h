@@ -151,6 +151,7 @@ struct dpu_context {
 	u8 if_type;
 	struct videomode vm;
 	struct semaphore lock;
+	struct semaphore wb_lock;
 	struct mutex vrr_lock;
 	bool enabled;
 	bool stopped;
@@ -185,6 +186,7 @@ struct dpu_context {
 	size_t wb_buf_size;
 	bool wb_configed;
 	bool wb_pending;
+	bool wb_idle_flag;
 
 	/* te check parameters */
 	wait_queue_head_t te_wq;

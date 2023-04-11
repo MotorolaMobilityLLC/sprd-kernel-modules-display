@@ -127,6 +127,7 @@
 #define REG_GAMMA_LUT_WDATA	0x304
 #define REG_GAMMA_LUT_RDATA	0x308
 #define REG_DPU_STS0		0x360
+#define REG_DPU_STS12		0x390
 #define REG_SLP_CFG4		0x3C0
 #define REG_SLP_CFG5		0x3C4
 #define REG_SLP_CFG6		0x3C8
@@ -542,6 +543,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu write back done isr */
 	if (reg_val & BIT_DPU_INT_WB_DONE) {
+		ctx->wb_idle_flag = true;
 		/*
 		 * The write back is a time-consuming operation. If there is a
 		 * flip occurs before write back done, the write back buffer is
@@ -628,6 +630,35 @@ static int dpu_wait_update_done(struct dpu_context *ctx)
 
 static void dpu_stop(struct dpu_context *ctx)
 {
+	int i;
+
+	if (!ctx->wb_idle_flag) {
+		for (i = 1; ; i++) {
+			if (ctx->wb_idle_flag) {
+				pr_info("dpu wb is idle, prepare to stop\n");
+				goto wb_is_idle;
+			}
+			mdelay(1);
+			if (i > 16) {
+				pr_err("wait wb done over 16ms, change to wait wb err bit\n");
+				break;
+			}
+		}
+
+		for (i = 1; ; i++) {
+			if (DPU_REG_RD(ctx->base + REG_DPU_STS12) & BIT(26))
+				mdelay(1);
+			else {
+				pr_info("dpu wb err disappeared, prepare to stop\n");
+				break;
+			}
+			if (!(i % 3000)) {
+				pr_err("wait for dpu wb err disappeared %d ms timeout\n", i);
+			}
+		}
+	}
+
+wb_is_idle:
 	if (ctx->if_type == SPRD_DPU_IF_DPI)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_STOP);
 
@@ -707,23 +738,34 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 	int mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
 	int mode_height = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) >> 16;
 
-	ctx->wb_layer.dst_w = mode_width;
-	ctx->wb_layer.dst_h = mode_height;
-	ctx->wb_layer.xfbc = ctx->wb_xfbc_en;
-	ctx->wb_layer.pitch[0] = ALIGN(mode_width, 16) * 4;
-	ctx->wb_layer.fbc_hsize_r = XFBC8888_HEADER_SIZE(mode_width,
-					mode_height) / 128;
+	if (ctx->wb_size_changed) {
+		ctx->wb_layer.dst_w = mode_width;
+		ctx->wb_layer.dst_h = mode_height;
+		ctx->wb_layer.src_w = mode_width;
+		ctx->wb_layer.src_h = mode_height;
+		ctx->wb_layer.pitch[0] = ALIGN(mode_width, 16) * 4;
+		ctx->wb_layer.fbc_hsize_r = XFBC8888_HEADER_SIZE(mode_width,
+							mode_height) / 128;
+		DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
+		if (ctx->wb_xfbc_en) {
+			DPU_REG_WR(ctx->base + REG_WB_CFG, (ctx->wb_layer.fbc_hsize_r << 16) | BIT(0));
+		} else {
+			DPU_REG_WR(ctx->base + REG_WB_CFG, 0);
+		}
+	}
 
-	DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
-
-	ctx->wb_layer.xfbc = ctx->wb_xfbc_en;
-
-	if (ctx->wb_xfbc_en && !debug)
-		DPU_REG_WR(ctx->base + REG_WB_CFG, (ctx->wb_layer.fbc_hsize_r << 16) | BIT(0));
-	else
+	if (debug) {
+		/* writeback debug trigger */
+		mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
+		DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
 		DPU_REG_WR(ctx->base + REG_WB_CFG, 0);
+	}
 
-	DPU_REG_WR(ctx->base + REG_WB_BASE_ADDR, ctx->wb_addr_p);
+	if (debug || ctx->wb_size_changed) {
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2));
+		dpu_wait_update_done(ctx);
+		ctx->wb_size_changed = false;
+	}
 
 	vcnt = (DPU_REG_RD(ctx->base + REG_DPU_STS0) & 0x1FFF);
 	/*
@@ -742,6 +784,8 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2));
 
 		dpu_wait_update_done(ctx);
+
+		ctx->wb_idle_flag = false;
 
 		pr_debug("write back trigger\n");
 	} else
@@ -764,17 +808,27 @@ static void dpu_wb_work_func(struct work_struct *data)
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, wb_work);
 
+	down(&ctx->wb_lock);
 	down(&ctx->lock);
 
 	if (!ctx->enabled) {
 		up(&ctx->lock);
+		up(&ctx->wb_lock);
 		pr_err("dpu is not initialized\n");
 		return;
 	}
 
 	if (ctx->flip_pending) {
 		up(&ctx->lock);
+		up(&ctx->wb_lock);
 		pr_warn("dpu flip is disabled\n");
+		return;
+	}
+
+	if (ctx->wb_pending) {
+		up(&ctx->lock);
+		up(&ctx->wb_lock);
+		pr_warn("display mode is going on changing\n");
 		return;
 	}
 
@@ -784,6 +838,7 @@ static void dpu_wb_work_func(struct work_struct *data)
 		dpu_wb_flip(ctx);
 
 	up(&ctx->lock);
+	up(&ctx->wb_lock);
 }
 
 static int dpu_write_back_config(struct dpu_context *ctx)
@@ -791,16 +846,27 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	struct sprd_dpu *dpu =
 		(struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
 	struct drm_device *drm = dpu->crtc->base.dev;
+	int mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
 
-	ctx->wb_configed = true;
+	if (ctx->fastcall_en) {
+		pr_info("widevine use fastcall, not support write back\n");
+		return 0;
+	}
+
 	if (ctx->wb_configed) {
+		DPU_REG_WR(ctx->base + REG_WB_BASE_ADDR, ctx->wb_addr_p);
+		DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
+		if (ctx->wb_xfbc_en)
+			DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
+		else
+			DPU_REG_WR(ctx->base + REG_WB_CFG, 0);
 		pr_debug("write back has configed\n");
 		return 0;
 	}
 
 	ctx->wb_buf_size = XFBC8888_BUFFER_SIZE(ctx->vm.hactive,
 						ctx->vm.vactive);
-	pr_info("use cma memory for writeback, size:0x%zx\n", ctx->wb_buf_size);
+	pr_info("use wb_reserved memory for writeback, size:0x%zx\n", ctx->wb_buf_size);
 	ctx->wb_addr_v = dma_alloc_wc(drm->dev, ctx->wb_buf_size, &ctx->wb_addr_p, GFP_KERNEL);
 	if (!ctx->wb_addr_p) {
 		ctx->max_vsync_count = 0;
@@ -813,10 +879,16 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	ctx->wb_layer.alpha = 0xff;
 	ctx->wb_layer.format = DRM_FORMAT_ABGR8888;
 	ctx->wb_layer.addr[0] = ctx->wb_addr_p;
+	DPU_REG_WR(ctx->base + REG_WB_BASE_ADDR, ctx->wb_addr_p);
+	DPU_REG_WR(ctx->base + REG_WB_PITCH, ALIGN((mode_width), 16));
+	if (ctx->wb_xfbc_en) {
+		ctx->wb_layer.xfbc = ctx->wb_xfbc_en;
+		DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
+	}
 
 	ctx->max_vsync_count = 4;
-
 	ctx->wb_configed = true;
+	ctx->wb_idle_flag = true;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
 
@@ -943,9 +1015,11 @@ static int dpu_init(struct dpu_context *ctx)
 
 	enhance->frame_no = 0;
 
-	ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_SECURE, 0, 0);
-	if (ret)
-		pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
+	if (ctx->fastcall_en) {
+		ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_SECURE, 0, 0);
+		if (ret)
+			pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
+	}
 
 	return 0;
 }
@@ -957,9 +1031,11 @@ static void dpu_fini(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_DPU_INT_EN, 0x00);
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xff);
 
-	ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_NON_SECURE, 0, 0);
-	if (ret)
-		pr_err("Trusty fastcall clear firewall failed, ret = %d\n", ret);
+	if (ctx->fastcall_en) {
+		ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_NON_SECURE, 0, 0);
+		if (ret)
+			pr_err("Trusty fastcall clear firewall failed, ret = %d\n", ret);
+	}
 
 	ctx->panel_ready = false;
 }
@@ -1195,60 +1271,110 @@ static void dpu_layer(struct dpu_context *ctx,
 		struct sprd_layer_state *hwlayer)
 {
 	const struct drm_format_info *info;
-	u32 size, offset, ctrl, reg_val, pitch;
+	struct layer_reg tmp = {};
+	u32 wd, pitch, secure_val;
 	int i;
 
 	/* for secure displaying, just use layer 7 as secure layer */
-	if (hwlayer->secure_en || ctx->secure_debug)
+	if ((hwlayer->secure_en || ctx->secure_debug) && ctx->fastcall_en)
 		hwlayer->index = 7;
 
-	offset = (hwlayer->dst_x & 0xffff) | ((hwlayer->dst_y) << 16);
-
-	if (hwlayer->pallete_en) {
-		size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_POS,
-				hwlayer->index), offset);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_SIZE,
-				hwlayer->index), size);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_ALPHA,
-				hwlayer->index), hwlayer->alpha);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PALLETE,
-				hwlayer->index), hwlayer->pallete_color);
-
-		/* pallete layer enable */
-		reg_val = BIT_DPU_LAY_EN |
-			  BIT_DPU_LAY_LAYER_ALPHA |
-			  BIT_DPU_LAY_PALLETE_EN;
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CTRL,
-				hwlayer->index), reg_val);
-
-		pr_debug("dst_x = %d, dst_y = %d, dst_w = %d, dst_h = %d, pallete:%d\n",
-			hwlayer->dst_x, hwlayer->dst_y,
-			hwlayer->dst_w, hwlayer->dst_h, hwlayer->pallete_color);
-		return;
-	}
+	tmp.pos = (hwlayer->dst_x & 0xffff) | ((hwlayer->dst_y) << 16);
 
 	if (hwlayer->src_w && hwlayer->src_h)
-		size = (hwlayer->src_w & 0xffff) | ((hwlayer->src_h) << 16);
+		tmp.size = (hwlayer->src_w & 0xffff) | ((hwlayer->src_h) << 16);
 	else
-		size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
+		tmp.size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
+
+	tmp.alpha = hwlayer->alpha;
+
+	if (hwlayer->pallete_en) {
+		tmp.size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
+		tmp.pallete = hwlayer->pallete_color;
+
+		/* pallete layer enable */
+		tmp.ctrl = BIT_DPU_LAY_EN |
+				BIT_DPU_LAY_LAYER_ALPHA |
+				BIT_DPU_LAY_PALLETE_EN;
+
+		pr_debug("pallete:0x%x\n", tmp.pallete);
+	} else {
+		for (i = 0; i < hwlayer->planes; i++) {
+			if (hwlayer->addr[i] % 16)
+  				pr_err("layer addr[%d] is not 16 bytes align, it's 0x%08x\n",
+  					i, hwlayer->addr[i]);
+  			tmp.addr[i] = hwlayer->addr[i];
+  		}
+
+  		tmp.crop_start = (hwlayer->src_y << 16) | hwlayer->src_x;
+
+  		info = drm_format_info(hwlayer->format);
+  		wd = info->cpp[0];
+  		if (wd == 0) {
+  			pr_err("layer[%d] bytes per pixel is invalid\n",
+  				hwlayer->index);
+  			return;
+  		}
+
+  		if (hwlayer->planes == 3)
+  			/* UV pitch is 1/2 of Y pitch*/
+  			tmp.pitch = (hwlayer->pitch[0] / wd) |
+  					(hwlayer->pitch[0] / wd << 15);
+  		else
+  			tmp.pitch = hwlayer->pitch[0] / wd;
+
+  		tmp.ctrl = dpu_img_ctrl(hwlayer->format, hwlayer->blending,
+  			hwlayer->xfbc, hwlayer->y2r_coef, hwlayer->rotation);
+	}
+
+	if (!ctx->fastcall_en) {
+		secure_val = DPU_REG_RD(ctx->base + REG_DPU_SECURE);
+		if (hwlayer->secure_en || ctx->secure_debug) {
+			if (!secure_val) {
+				disp_ca_connect();
+				udelay(ctx->time);
+			}
+			ctx->tos_msg->cmd = TA_FIREWALL_SET;
+			ctx->tos_msg->version = DPU_R5P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+
+			memcpy(ctx->tos_msg + 1, &tmp, sizeof(tmp));
+
+			ctx->tos_msg->cmd = TA_REG_SET;
+			ctx->tos_msg->version = DPU_R5P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg) + sizeof(tmp));
+			disp_ca_wait_response();
+
+			return;
+		} else if (secure_val) {
+			ctx->tos_msg->cmd = TA_REG_CLR;
+			ctx->tos_msg->version = DPU_R5P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+		}
+	}
 
 	for (i = 0; i < hwlayer->planes; i++) {
 		if (hwlayer->addr[i] % 16)
 			pr_err("layer addr[%d] is not 16 bytes align, it's 0x%08x\n",
 				i, hwlayer->addr[i]);
 		DPU_REG_WR(ctx->base + DPU_LAY_PLANE_ADDR(REG_LAY_BASE_ADDR,
-				hwlayer->index, i), hwlayer->addr[i]);
+ 					hwlayer->index, i), tmp.addr[i]);
 	}
 
 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_POS,
-			hwlayer->index), offset);
-	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_SIZE,
-			hwlayer->index), size);
-	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CROP_START,
-			hwlayer->index), hwlayer->src_y << 16 | hwlayer->src_x);
-	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_ALPHA,
-			hwlayer->index), hwlayer->alpha);
+ 			hwlayer->index), tmp.pos);
+ 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_SIZE,
+ 			hwlayer->index), tmp.size);
+ 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CROP_START,
+ 			hwlayer->index), tmp.crop_start);
+ 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_ALPHA,
+ 			hwlayer->index), tmp.alpha);
+ 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CTRL,
+ 			hwlayer->index), tmp.ctrl);
+ 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PALLETE,
+ 				hwlayer->index), tmp.pallete);
 
 	info = drm_format_info(hwlayer->format);
 	if (hwlayer->planes == 3) {
@@ -1262,12 +1388,6 @@ static void dpu_layer(struct dpu_context *ctx,
 		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PITCH,
 				hwlayer->index), pitch);
 	}
-
-	ctrl = dpu_img_ctrl(hwlayer->format, hwlayer->blending,
-		hwlayer->xfbc, hwlayer->y2r_coef, hwlayer->rotation);
-
-	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CTRL,
-			hwlayer->index), ctrl);
 
 	pr_debug("dst_x = %d, dst_y = %d, dst_w = %d, dst_h = %d\n",
 				hwlayer->dst_x, hwlayer->dst_y,
@@ -1449,8 +1569,9 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 count)
 {
 	int i;
-	u32 reg_val, mmu_reg_val;
+	u32 reg_val, mmu_reg_val, secure_val;
 	struct sprd_plane_state *state;
+	struct sprd_layer_state *layer;
 	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 
@@ -1497,8 +1618,18 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 	/* update trigger and wait */
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		if (!ctx->stopped) {
+			secure_val = DPU_REG_RD(ctx->base + REG_DPU_SECURE);
+			state = to_sprd_plane_state(planes[0].base.state);
+			layer = &state->layer;
+
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_REG_UPDATE);
-			dpu_wait_update_done(ctx);
+			if ((!layer->secure_en) && secure_val && (!ctx->fastcall_en)) {
+				dpu_wait_update_done(ctx);
+				ctx->tos_msg->cmd = TA_FIREWALL_CLR;
+				disp_ca_write(&(ctx->tos_msg), sizeof(ctx->tos_msg));
+				disp_ca_wait_response();
+			} else
+				dpu_wait_update_done(ctx);
 		}
 
 		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
@@ -1649,6 +1780,14 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		}
 	} else {
 		pr_warn("dpu backlight node not found\n");
+	}
+
+	if (of_property_read_bool(np, "sprd,widevine-use-fastcall")) {
+		ctx->fastcall_en = true;
+		pr_info("read widevine-use-fastcall success, fastcall_en = true\n");
+	} else {
+		ctx->fastcall_en = false;
+		pr_info("read widevine-use-fastcall failed, fastcall_en = false\n");
 	}
 
 	ret = of_property_read_u32(np, "sprd,corner-radius",
