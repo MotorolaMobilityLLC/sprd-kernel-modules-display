@@ -295,11 +295,12 @@ static void sprd_dpu_atomic_flush(struct sprd_crtc *crtc)
 static int sprd_dpu_enable_vblank(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
+	struct dpu_context *ctx = &dpu->ctx;
 
 	DRM_INFO("%s()\n", __func__);
 
-	if (dpu->core->enable_vsync)
-		dpu->core->enable_vsync(&dpu->ctx);
+	if (dpu->core->enable_vsync && ctx->enabled)
+		dpu->core->enable_vsync(ctx);
 
 	return 0;
 }
@@ -307,10 +308,11 @@ static int sprd_dpu_enable_vblank(struct sprd_crtc *crtc)
 static void sprd_dpu_disable_vblank(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
+	struct dpu_context *ctx = &dpu->ctx;
 
 	DRM_INFO("%s()\n", __func__);
 
-	if (dpu->core->disable_vsync)
+	if (dpu->core->disable_vsync && ctx->enabled)
 		dpu->core->disable_vsync(&dpu->ctx);
 }
 
