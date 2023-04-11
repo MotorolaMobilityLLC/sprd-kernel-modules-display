@@ -114,6 +114,7 @@ struct dpu_glb_ops {
 	void (*enable)(struct dpu_context *ctx);
 	void (*disable)(struct dpu_context *ctx);
 	void (*reset)(struct dpu_context *ctx);
+	void (*suspend_reset)(struct dpu_context *ctx);
 	void (*power)(struct dpu_context *ctx, int enable);
 };
 

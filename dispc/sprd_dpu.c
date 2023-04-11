@@ -459,6 +459,8 @@ void sprd_dpu_disable(struct sprd_dpu *dpu)
 		dpu->core->fini(ctx);
 	if (dpu->clk->disable)
 		dpu->clk->disable(ctx);
+	if (dpu->glb->suspend_reset)
+		dpu->glb->suspend_reset(ctx);
 	if (dpu->glb->disable)
 		dpu->glb->disable(ctx);
 	if (dpu->glb->power)

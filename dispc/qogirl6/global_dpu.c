@@ -330,7 +330,41 @@ static void dpu_glb_disable(struct dpu_context *ctx)
 	clk_disable_unprepare(clk_ap_ahb_disp_eb);
 }
 
-static void dpu_reset(struct dpu_context *ctx)
+static void dpu_resume_reset(struct dpu_context *ctx)
+{
+	/* soft reset iommu */
+	regmap_update_bits(mmu_reset.regmap,
+		    mmu_reset.enable_reg,
+		    mmu_reset.mask_bit,
+		    mmu_reset.mask_bit);
+	udelay(10);
+	regmap_update_bits(mmu_reset.regmap,
+		    mmu_reset.enable_reg,
+		    mmu_reset.mask_bit,
+		    (unsigned int)(~mmu_reset.mask_bit));
+
+	udelay(10);
+
+	/* soft reset dpu */
+	regmap_update_bits(disp_reset.regmap,
+		    disp_reset.enable_reg,
+		    disp_reset.mask_bit,
+		    disp_reset.mask_bit);
+	udelay(10);
+	regmap_update_bits(disp_reset.regmap,
+		    disp_reset.enable_reg,
+		    disp_reset.mask_bit,
+		    (unsigned int)(~disp_reset.mask_bit));
+}
+
+/*
+ * FIXME:
+ * If dpu occurs underflow right before system suspend.
+ * The hardware dispc active signal will be still be high and can not be cleared.
+ * Dispc active high will causing ap can not enter deep sleep mode.
+ * So we add reset operation before suspend to enable active signal clear.
+ */
+static void dpu_suspend_reset(struct dpu_context *ctx)
 {
 	/* soft reset iommu */
 	regmap_update_bits(mmu_reset.regmap,
@@ -371,7 +405,8 @@ const struct dpu_clk_ops qogirl6_dpu_clk_ops = {
 
 const struct dpu_glb_ops qogirl6_dpu_glb_ops = {
 	.parse_dt = dpu_glb_parse_dt,
-	.reset = dpu_reset,
+	.reset = dpu_resume_reset,
+	.suspend_reset = dpu_suspend_reset,
 	.enable = dpu_glb_enable,
 	.disable = dpu_glb_disable,
 	.power = dpu_power_domain,
