@@ -1177,7 +1177,7 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 y2r_coef,
 		/*Y endian */
 		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
 		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B1B0B3B2;
+		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0 << 2;
 		break;
 	case DRM_FORMAT_NV16:
 		/*2-Lane: Yuv422 */
@@ -1185,7 +1185,7 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 y2r_coef,
 		/*Y endian */
 		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0;
 		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B1B0B3B2;
+		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0 << 2;
 		break;
 	case DRM_FORMAT_NV61:
 		/*2-Lane: Yuv422 */

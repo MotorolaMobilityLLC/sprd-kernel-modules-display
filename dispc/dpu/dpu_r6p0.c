@@ -2316,7 +2316,10 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 
 static void enable_vsync(struct dpu_context *ctx)
 {
-	DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC);
+	if (ctx->enabled)
+		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC);
+	else
+		pr_err("dpu do not has power\n");
 }
 
 static void disable_vsync(struct dpu_context *ctx)

@@ -341,6 +341,25 @@ static int dpu_glb_parse_dt(struct dpu_context *ctx,
 	return 0;
 }
 
+int dpu_r6p0_glb_enable(struct dpu_context *ctx)
+{
+	int ret;
+
+	ret = clk_prepare_enable(clk_dpuvsp_eb);
+	if (ret) {
+		pr_err("enable clk_dpuvsp_eb failed!\n");
+		return ret;
+	}
+
+	ret = clk_prepare_enable(clk_dpuvsp_disp_eb);
+	if (ret) {
+		pr_err("enable clk_dpuvsp_disp_eb failed!\n");
+		return ret;
+	}
+
+	return ret;
+}
+
 static void dpu_glb_enable(struct dpu_context *ctx)
 {
 }

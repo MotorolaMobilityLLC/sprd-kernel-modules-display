@@ -268,6 +268,7 @@ void sprd_dpu_stop(struct sprd_dpu *dpu);
 void sprd_dpu_resume(struct sprd_dpu *dpu);
 extern int dpu_r6p0_enable_div6_clk(struct dpu_context *ctx);
 extern int dpu_r6p1_enable_div6_clk(struct dpu_context *ctx);
+extern int dpu_r6p0_glb_enable(struct dpu_context *ctx);
 
 #ifdef CONFIG_DRM_SPRD_DPU0
 void sprd_dpu_atomic_disable_force(struct drm_crtc *crtc);

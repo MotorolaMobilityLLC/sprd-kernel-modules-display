@@ -107,6 +107,7 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
 	struct sprd_crtc *crtc = to_sprd_crtc(encoder->crtc);
 	struct sprd_dpu *dpu = crtc->priv;
+	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
 
 	DRM_INFO("%s(last_dpms=%d, dpms=%d)\n",
 			__func__, dsi->ctx.last_dpms, dsi->ctx.dpms);
@@ -118,14 +119,6 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	if (!encoder->crtc || !encoder->crtc->state->active ||
 	    (encoder->crtc->state->mode_changed &&
 	     !encoder->crtc->state->active_changed)) {
-		/* set dsi context esd reset status to
-		 * false for div6 esd recovery workaround
-		 * when exit this function.
-		 */
-		if (!strcmp(dpu->ctx.version, "dpu-r6p0")) {
-			if (dsi->ctx.is_esd_rst)
-				dsi->ctx.is_esd_rst = false;
-		}
 		DRM_INFO("skip dsi resume\n");
 		mutex_unlock(&dsi->lock);
 		return;
@@ -133,6 +126,14 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 
 	if (dsi->ctx.enabled) {
 		DRM_INFO("dsi is initialized\n");
+		if (!strcmp(dpu->ctx.version, "dpu-r6p0")) {
+			if (!dpu->ctx.enabled) {
+				DRM_ERROR("dpu has no power, powered dpu\n");
+				dpu_r6p0_glb_enable(&dpu->ctx);
+				sprd_dpu_resume(dpu);
+			}
+		}
+
 		mutex_unlock(&dsi->lock);
 		return;
 	}
@@ -182,12 +183,11 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	 * div6 source when dpu enable div6 function.
 	 */
 	if (!strcmp(dpu->ctx.version, "dpu-r6p0")) {
-		if (!dsi->ctx.is_esd_rst) {
+		if (!panel->is_esd_rst) {
 			sprd_dpu_resume(dpu);
 		} else {
 			if (dsi->ctx.dpi_clk_div)
 				dpu_r6p0_enable_div6_clk(&dpu->ctx);
-			dsi->ctx.is_esd_rst = false;
 		}
 	}
 	/*
@@ -210,7 +210,6 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
 	struct sprd_crtc *crtc = to_sprd_crtc(encoder->crtc);
 	struct sprd_dpu *dpu = crtc->priv;
-	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
 
 	DRM_INFO("%s(last_dpms=%d, dpms=%d)\n",
 			__func__, dsi->ctx.last_dpms, dsi->ctx.dpms);
@@ -219,6 +218,7 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 	/* add if condition to avoid suspend dsi for SR feature */
 	if (encoder->crtc->state->mode_changed &&
 	    !encoder->crtc->state->active_changed) {
+			DRM_INFO("skip dsi encoder disable\n");
 			mutex_unlock(&dsi->lock);
 			return;
 	}
@@ -251,17 +251,6 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 				sprd_dphy_ulps_enter(dsi->phy);
 			drm_panel_unprepare(dsi->panel);
 		}
-	}
-
-	/* workaround:
-	 * dpu r6p0 need resume after dsi resume on div6 scences
-	 * for dsi core and dpi clk depends on dphy clk. And esd
-	 * recovery do not resume dpu, so dpu need get panel esd
-	 * reset status to enabe global registers or not.
-	 */
-	if (!strcmp(dpu->ctx.version, "dpu-r6p0")) {
-		if (panel->is_esd_rst)
-			dsi->ctx.is_esd_rst = true;
 	}
 
 	sprd_dphy_disable(dsi->phy);

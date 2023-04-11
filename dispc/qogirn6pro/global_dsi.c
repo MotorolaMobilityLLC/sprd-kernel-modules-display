@@ -12,6 +12,7 @@
 #include <linux/reset.h>
 
 #include "sprd_dsi.h"
+#include "sprd_dsi_panel.h"
 
 static struct clk *clk_dsi0_eb;
 static struct clk *clk_dsi1_eb;
@@ -113,9 +114,46 @@ static int dsi_core_clk_switch(struct dsi_context *ctx)
 
 static void dsi_glb_enable(struct dsi_context *ctx)
 {
+	struct sprd_dsi *dsi;
+	struct sprd_panel *panel;
 	int ret;
+	static bool need_esd_rst_check;
 
-	if (!ctx->is_esd_rst) {
+	if (!need_esd_rst_check) {
+		ret = clk_prepare_enable(clk_dpuvsp_eb);
+		if (ret) {
+			pr_err("enable clk_dpuvsp_eb failed!\n");
+			return;
+		}
+
+		ret = clk_prepare_enable(clk_dpuvsp_disp_eb);
+		if (ret) {
+			pr_err("enable clk_dpuvsp_disp_eb failed!\n");
+			return;
+		}
+
+		ret = clk_prepare_enable(clk_dsi0_eb);
+		if (ret) {
+			pr_err("enable clk_dsi0_eb failed!\n");
+		}
+
+		need_esd_rst_check = true;
+		return;
+	}
+
+	dsi = container_of(ctx, struct sprd_dsi, ctx);
+	if (!dsi || !dsi->panel) {
+		pr_err("dsi or dsi->panel is NULL\n");
+		return;
+	}
+
+	panel = container_of(dsi->panel, struct sprd_panel, base);
+	if (!panel) {
+		pr_err("panel is NULL\n");
+		return;
+	}
+
+	if (!panel->is_esd_rst) {
 		ret = clk_prepare_enable(clk_dpuvsp_eb);
 		if (ret) {
 			pr_err("enable clk_dpuvsp_eb failed!\n");
