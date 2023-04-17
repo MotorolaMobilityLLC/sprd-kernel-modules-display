@@ -332,29 +332,50 @@ static void dpu_glb_disable(struct dpu_context *ctx)
 
 static void dpu_resume_reset(struct dpu_context *ctx)
 {
-	/* soft reset iommu */
-	regmap_update_bits(mmu_reset.regmap,
-		    mmu_reset.enable_reg,
-		    mmu_reset.mask_bit,
-		    mmu_reset.mask_bit);
-	udelay(10);
-	regmap_update_bits(mmu_reset.regmap,
-		    mmu_reset.enable_reg,
-		    mmu_reset.mask_bit,
-		    (unsigned int)(~mmu_reset.mask_bit));
+	u32 val;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+	/*
+	 * FIXME:
+	 * When gsp is busy, dpu executes dpu_reset.
+	 * Check gsp_busy status and add lock.
+	 * Just handle HDCP scence, power key lock/unlock.
+	 * When gsp is busy, dpu doesn't execute dpu reset request until gsp finishes operation.
+	 */
+	mutex_lock(&dpu->dpu_gsp_lock);
 
-	udelay(10);
+	do {
+		val = readl(ctx->gsp_base);
+		mdelay(10);
+	} while (val & BIT(2));
 
-	/* soft reset dpu */
-	regmap_update_bits(disp_reset.regmap,
-		    disp_reset.enable_reg,
-		    disp_reset.mask_bit,
-		    disp_reset.mask_bit);
-	udelay(10);
-	regmap_update_bits(disp_reset.regmap,
-		    disp_reset.enable_reg,
-		    disp_reset.mask_bit,
-		    (unsigned int)(~disp_reset.mask_bit));
+	if (!(val & BIT(2))) {
+			/* soft reset iommu */
+			regmap_update_bits(mmu_reset.regmap,
+							mmu_reset.enable_reg,
+							mmu_reset.mask_bit,
+							mmu_reset.mask_bit);
+			udelay(10);
+			regmap_update_bits(mmu_reset.regmap,
+							mmu_reset.enable_reg,
+							mmu_reset.mask_bit,
+							(unsigned int)(~mmu_reset.mask_bit));
+
+			udelay(10);
+
+			/* soft reset dpu */
+			regmap_update_bits(disp_reset.regmap,
+							disp_reset.enable_reg,
+							disp_reset.mask_bit,
+							disp_reset.mask_bit);
+			udelay(10);
+			regmap_update_bits(disp_reset.regmap,
+							disp_reset.enable_reg,
+							disp_reset.mask_bit,
+							(unsigned int)(~disp_reset.mask_bit));
+	}
+
+	mutex_unlock(&dpu->dpu_gsp_lock);
 }
 
 /*
@@ -366,29 +387,50 @@ static void dpu_resume_reset(struct dpu_context *ctx)
  */
 static void dpu_suspend_reset(struct dpu_context *ctx)
 {
-	/* soft reset iommu */
-	regmap_update_bits(mmu_reset.regmap,
-		    mmu_reset.enable_reg,
-		    mmu_reset.mask_bit,
-		    mmu_reset.mask_bit);
-	udelay(10);
-	regmap_update_bits(mmu_reset.regmap,
-		    mmu_reset.enable_reg,
-		    mmu_reset.mask_bit,
-		    (unsigned int)(~mmu_reset.mask_bit));
+	u32 val;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+	/*
+	 * FIXME:
+	 * When gsp is busy, dpu executes dpu_reset.
+	 * Check gsp_busy status and add lock.
+	 * Just handle HDCP scence, power key lock/unlock.
+	 * When gsp is busy, dpu doesn't execute dpu reset request until gsp finishes operation.
+	 */
+	mutex_lock(&dpu->dpu_gsp_lock);
 
-	udelay(10);
+	do {
+		val = readl(ctx->gsp_base);
+		mdelay(10);
+	} while (val & BIT(2));
 
-	/* soft reset dpu */
-	regmap_update_bits(disp_reset.regmap,
-		    disp_reset.enable_reg,
-		    disp_reset.mask_bit,
-		    disp_reset.mask_bit);
-	udelay(10);
-	regmap_update_bits(disp_reset.regmap,
-		    disp_reset.enable_reg,
-		    disp_reset.mask_bit,
-		    (unsigned int)(~disp_reset.mask_bit));
+	if (!(val & BIT(2))) {
+			/* soft reset iommu */
+			regmap_update_bits(mmu_reset.regmap,
+							mmu_reset.enable_reg,
+							mmu_reset.mask_bit,
+							mmu_reset.mask_bit);
+			udelay(10);
+			regmap_update_bits(mmu_reset.regmap,
+							mmu_reset.enable_reg,
+							mmu_reset.mask_bit,
+							(unsigned int)(~mmu_reset.mask_bit));
+
+			udelay(10);
+
+			/* soft reset dpu */
+			regmap_update_bits(disp_reset.regmap,
+							disp_reset.enable_reg,
+							disp_reset.mask_bit,
+							disp_reset.mask_bit);
+			udelay(10);
+			regmap_update_bits(disp_reset.regmap,
+							disp_reset.enable_reg,
+							disp_reset.mask_bit,
+							(unsigned int)(~disp_reset.mask_bit));
+	}
+
+	mutex_unlock(&dpu->dpu_gsp_lock);
 }
 
 static void dpu_power_domain(struct dpu_context *ctx, int enable)
