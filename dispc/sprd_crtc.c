@@ -420,14 +420,6 @@ static int sprd_crtc_create_properties(struct sprd_crtc *crtc, const char *versi
 	drm_object_attach_property(&crtc->base.base, prop, 0);
 	crtc->frame_rate_property = prop;
 
-	/* create dpu blend layer count limit property */
-	prop = drm_property_create_range(crtc->base.dev, 0,
-			"blend layer limit", 0, UINT_MAX);
-	if (!prop)
-		return -ENOMEM;
-	drm_object_attach_property(&crtc->base.base, prop, 0);
-	crtc->blend_limit_property = prop;
-
 	/* create vrr enabled property */
 	prop = drm_property_create_range(crtc->base.dev, 0,
 				"vrr enabled", 0, UINT_MAX);

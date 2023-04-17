@@ -362,12 +362,7 @@ static int sprd_dpu_atomic_get_property(struct sprd_crtc *crtc,
 {
 	struct sprd_dpu *dpu = crtc->priv;
 
-	if (property == crtc->blend_limit_property) {
-		if (dpu->ctx.vrr_max_layers != 0)
-			*val = dpu->ctx.vrr_max_layers;
-		else
-			*val = dpu->ctx.max_cap_layers;
-	} else if (property == crtc->vrr_enabled_property) {
+	 if (property == crtc->vrr_enabled_property) {
 		*val = dpu->ctx.vrr_enabled;
 	} else {
 		DRM_ERROR("property %s is invalid\n", property->name);
@@ -760,16 +755,6 @@ static int sprd_parse_vrr_config(struct sprd_dpu *dpu)
 		dpu->ctx.vrr_enabled = true;
 	} else {
 		dpu->ctx.vrr_enabled = false;
-		dpu->ctx.vrr_max_layers = 0;
-	}
-
-	rc = of_property_read_u32(lcd_node, "sprd,vrr-max-layers", &val);
-	if (!rc) {
-		DRM_INFO("dpu support no more than %d layers blending\n", val);
-		dpu->ctx.vrr_max_layers = val;
-	} else {
-		DRM_DEBUG("no blend limit config found\n");
-		dpu->ctx.vrr_max_layers = 0;
 	}
 
 	rc = of_property_read_u32(lcd_node, "sprd,dsi-work-mode", &val);

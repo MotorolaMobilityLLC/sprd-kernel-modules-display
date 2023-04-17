@@ -247,7 +247,6 @@ struct dpu_context {
 	uint32_t max_cap_layers;
 
 	/* blend size limit config parameters */
-	uint32_t vrr_max_layers;
 	bool vrr_enabled;
 
 	/* command panel vrr config parameters */
