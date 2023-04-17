@@ -19,8 +19,8 @@
 #include <linux/trusty/smcall.h>
 #include <drm/drm_prime.h>
 
+#include "corner_param.h"
 #include "dpu_enhance_param.h"
-#include "dpu_r4p0_corner_param.h"
 #include "disp_trusty.h"
 #include "sprd_crtc.h"
 #include "sprd_plane.h"

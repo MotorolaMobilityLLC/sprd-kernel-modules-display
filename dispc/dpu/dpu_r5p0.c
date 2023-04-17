@@ -19,8 +19,8 @@
 #include <linux/trusty/smcall.h>
 #include <drm/drm_prime.h>
 
+#include "corner_param.h"
 #include "dpu_enhance_param.h"
-#include "dpu_r5p0_corner_param.h"
 #include "disp_trusty.h"
 #include "sprd_crtc.h"
 #include "sprd_plane.h"
@@ -439,10 +439,10 @@ static void dpu_corner_init(struct dpu_context *ctx)
 	for (i = 0; i < corner_radius; i++) {
 		DPU_REG_WR(ctx->base + REG_TOP_CORNER_LUT_ADDR, i);
 		DPU_REG_WR(ctx->base + REG_TOP_CORNER_LUT_WDATA,
-				dpu_r5p0_corner_param[corner_radius][i]);
+				corner_param[corner_radius][i]);
 		DPU_REG_WR(ctx->base + REG_BOT_CORNER_LUT_ADDR, i);
 		DPU_REG_WR(ctx->base + REG_BOT_CORNER_LUT_WDATA,
-				dpu_r5p0_corner_param[corner_radius][corner_radius - i - 1]);
+				corner_param[corner_radius][corner_radius - i - 1]);
 	}
 
 	DPU_REG_SET(ctx->base + REG_CORNER_CONFIG,

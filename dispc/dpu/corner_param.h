@@ -3,12 +3,12 @@
  * Copyright (C) 2020 Unisoc Inc.
  */
 
-#ifndef __DPU_R5P0_CORNER_PARAM_H_
-#define __DPU_R5P0_CORNER_PARAM_H_
+#ifndef __CORNER_PARAM_H_
+#define __CORNER_PARAM_H_
 
 #define RADIUS_MAX		128
 
-unsigned int dpu_r5p0_corner_param[RADIUS_MAX][RADIUS_MAX] = {
+static unsigned int corner_param[RADIUS_MAX][RADIUS_MAX] = {
 	/******************* r = 0 *********************/
 	{0},
 

@@ -14,6 +14,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/trusty/smcall.h>
 #include <asm/cacheflush.h>
+#include "corner_param.h"
 #include "sprd_bl.h"
 #include "sprd_dpu.h"
 #include "dpu_enhance_param.h"
@@ -62,6 +63,13 @@
 
 #define DSC1_REG(reg) (reg + DSC1_REG_OFFSET)
 
+/* Corner config registers */
+#define REG_CORNER_CONFIG			0x4d0
+#define REG_TOP_CORNER_LUT_ADDR		0x4d4
+#define REG_TOP_CORNER_LUT_WDATA	0x4d8
+#define REG_BOT_CORNER_LUT_ADDR		0x4e0
+#define REG_BOT_CORNER_LUT_WDATA	0x4e4
+
 /*Global control registers */
 #define REG_DPU_CTRL					0x08
 #define REG_DPU_CFG0					0x0C
@@ -70,6 +78,10 @@
 #define REG_BLEND_SIZE					0x1C
 #define REG_SCL_EN					0x20
 #define REG_BG_COLOR					0x24
+
+/* Corner config bits */
+#define BIT_TOP_CORNER_EN				BIT(0)
+#define BIT_BOT_CORNER_EN				BIT(16)
 
 /* DPU Secure reg */
 #define REG_DPU_SECURE					0x14
@@ -566,6 +578,27 @@ static int dpu_cabc_trigger(struct dpu_context *ctx);
 static void dpu_version(struct dpu_context *ctx)
 {
 	ctx->version = "dpu-r6p1";
+}
+
+static void dpu_corner_init(struct dpu_context *ctx)
+{
+	int corner_radius = ctx->corner_radius;
+	int i;
+
+	DPU_REG_SET(ctx->base + REG_CORNER_CONFIG,
+			corner_radius << 24 | corner_radius << 8);
+
+	for (i = 0; i < corner_radius; i++) {
+		DPU_REG_WR(ctx->base + REG_TOP_CORNER_LUT_ADDR, i);
+		DPU_REG_WR(ctx->base + REG_TOP_CORNER_LUT_WDATA,
+				corner_param[corner_radius][i]);
+		DPU_REG_WR(ctx->base + REG_BOT_CORNER_LUT_ADDR, i);
+		DPU_REG_WR(ctx->base + REG_BOT_CORNER_LUT_WDATA,
+				corner_param[corner_radius][corner_radius - i - 1]);
+	}
+
+	DPU_REG_SET(ctx->base + REG_CORNER_CONFIG,
+			BIT_TOP_CORNER_EN | BIT_BOT_CORNER_EN);
 }
 
 static void dpu_dump(struct dpu_context *ctx)
@@ -1445,6 +1478,9 @@ static int dpu_init(struct dpu_context *ctx)
 	if (!ret)
 		dpu_enhance_reload(ctx);
 
+	if (ctx->corner_radius)
+		dpu_corner_init(ctx);
+
 	dpu_write_back_config(ctx);
 
 	dpu_dvfs_task_init(ctx);
@@ -2228,6 +2264,12 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	} else {
 		pr_warn("dpu backlight node not found\n");
 	}
+
+	ret = of_property_read_u32(np, "sprd,corner-radius",
+					&ctx->corner_radius);
+	if (!ret)
+		pr_info("round corner support, radius = %d.\n",
+					ctx->corner_radius);
 
 	if (of_property_read_bool(np, "sprd,widevine-use-fastcall")) {
 		ctx->fastcall_en = true;
