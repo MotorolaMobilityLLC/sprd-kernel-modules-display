@@ -511,10 +511,6 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = sprd_dpu_sysfs_init(&dpu->dev);
-	if (ret)
-		return ret;
-
 	platform_set_drvdata(pdev, dpu);
 
 	return component_add(&pdev->dev, &dpu_component_ops);
