@@ -245,11 +245,10 @@ static ssize_t enhance_mode_write(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_set)
 		return -EIO;
 
-	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_MODE, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_MODE, buf, count);
 
 	return count;
 }
@@ -266,11 +265,8 @@ static ssize_t cabc_hist_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->cabc_lock);
 	if (!ctx->enabled) {
@@ -278,7 +274,7 @@ static ssize_t cabc_hist_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->cabc_lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_HIST, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_HIST, buf, count);
 	up(&ctx->cabc_lock);
 
 	return count;
@@ -296,11 +292,8 @@ static ssize_t cabc_hist_v2_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->cabc_lock);
 	if (!ctx->enabled) {
@@ -308,7 +301,7 @@ static ssize_t cabc_hist_v2_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->cabc_lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_HIST_V2, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_HIST_V2, buf, count);
 	up(&ctx->cabc_lock);
 
 	return count;
@@ -326,17 +319,14 @@ static ssize_t cabc_cur_bl_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	if (!ctx->enabled) {
 		pr_err("dpu is not initialized\n");
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_CUR_BL, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_CUR_BL, buf, count);
 
 	return count;
 
@@ -355,11 +345,8 @@ static ssize_t vsync_count_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -367,7 +354,7 @@ static ssize_t vsync_count_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_VSYNC_COUNT, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_VSYNC_COUNT, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -386,17 +373,14 @@ static ssize_t frame_no_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	if (!ctx->enabled) {
 		pr_err("dpu is not initialized\n");
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_FRAME_NO, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_FRAME_NO, buf, count);
 
 	return count;
 }
@@ -414,18 +398,15 @@ static ssize_t cabc_param_write(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_set)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
+	if (off != 0)
+		return -EINVAL;
 
-	if (off + count > attr->size)
-		count = attr->size - off;
-
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_PARAM, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_PARAM, buf, count);
 
 	return count;
 }
 
-static BIN_ATTR_WO(cabc_param, 144);
+static BIN_ATTR_WO(cabc_param, 292);
 
 static ssize_t cabc_run_write(struct file *fp, struct kobject *kobj,
 			struct bin_attribute *attr, char *buf,
@@ -438,13 +419,10 @@ static ssize_t cabc_run_write(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_set)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
+	if (off != 0)
+		return -EINVAL;
 
-	if (off + count > attr->size)
-		count = attr->size - off;
-
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_RUN, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_RUN, buf, count);
 
 	return count;
 }
@@ -469,7 +447,7 @@ static ssize_t cabc_state_read(struct file *fp, struct kobject *kobj,
 		count = attr->size - off;
 
 	down(&ctx->cabc_lock);
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_STATE, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CABC_STATE, buf, count);
 	up(&ctx->cabc_lock);
 
 	return count;
@@ -482,6 +460,7 @@ static ssize_t cabc_state_write(struct file *fp, struct kobject *kobj,
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct sprd_dpu *dpu = dev_get_drvdata(dev);
 	struct dpu_context *ctx = &dpu->ctx;
+
 	if (!dpu->core->enhance_set)
 		return -EIO;
 
@@ -492,7 +471,7 @@ static ssize_t cabc_state_write(struct file *fp, struct kobject *kobj,
 		count = attr->size - off;
 
 	down(&ctx->cabc_lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_STATE, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CABC_STATE, buf, count);
 	up(&ctx->cabc_lock);
 
 	return count;
@@ -864,11 +843,8 @@ static ssize_t ltm_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -876,7 +852,7 @@ static ssize_t ltm_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_LTM, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_LTM, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -899,11 +875,11 @@ static ssize_t ltm_write(struct file *fp, struct kobject *kobj,
 
 	if (!strcmp("dpu-r6p0", ctx->version) || !strcmp("dpu-r6p1", ctx->version)) {
 		down(&ctx->cabc_lock);
-		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf, count);
 		up(&ctx->cabc_lock);
 	} else {
 		down(&ctx->lock);
-		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LTM, buf, count);
 		up(&ctx->lock);
 	}
 
@@ -922,11 +898,8 @@ static ssize_t gamma_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -934,7 +907,7 @@ static ssize_t gamma_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_GAMMA, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_GAMMA, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -952,11 +925,11 @@ static ssize_t gamma_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_GAMMA, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_GAMMA, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -982,7 +955,7 @@ static ssize_t slp_lut_show(struct device *dev,
 		return -EINVAL;
 	}
 
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_SLP_LUT, data);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_SLP_LUT, data, sizeof(data));
 	up(&ctx->lock);
 
 	for (i = 0; i < 256; i++)
@@ -1005,11 +978,8 @@ static ssize_t slp_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -1017,7 +987,7 @@ static ssize_t slp_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_SLP, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_SLP, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1039,7 +1009,7 @@ static ssize_t slp_write(struct file *fp, struct kobject *kobj,
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_SLP, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_SLP, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1057,11 +1027,8 @@ static ssize_t cm_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -1069,7 +1036,7 @@ static ssize_t cm_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CM, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_CM, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1087,16 +1054,16 @@ static ssize_t cm_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	if (!strcmp("dpu-r6p0", ctx->version) || !strcmp("dpu-r6p1", ctx->version)) {
 		down(&ctx->cabc_lock);
-		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf, count);
 		up(&ctx->cabc_lock);
 	} else {
 		down(&ctx->lock);
-		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf);
+		dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_CM, buf, count);
 		up(&ctx->lock);
 	}
 
@@ -1115,11 +1082,8 @@ static ssize_t epf_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -1127,7 +1091,7 @@ static ssize_t epf_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_EPF, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_EPF, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1145,11 +1109,11 @@ static ssize_t epf_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_EPF, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_EPF, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1167,11 +1131,8 @@ static ssize_t ud_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -1179,7 +1140,7 @@ static ssize_t ud_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_UD, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_UD, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1197,11 +1158,11 @@ static ssize_t ud_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_UD, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_UD, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1219,11 +1180,8 @@ static ssize_t hsv_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -1231,7 +1189,7 @@ static ssize_t hsv_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_HSV, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_HSV, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1249,11 +1207,11 @@ static ssize_t hsv_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count > attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_HSV, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_HSV, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1278,7 +1236,7 @@ static ssize_t scl_show(struct device *dev,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_SCL, param);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_SCL, param, sizeof(param));
 	up(&ctx->lock);
 
 	ret = snprintf(buf, PAGE_SIZE, "%d x %d\n", param[0], param[1]);
@@ -1299,7 +1257,7 @@ static ssize_t scl_store(struct device *dev,
 
 	down(&ctx->lock);
 	str_to_u32_array(buf, 10, param, 2);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_SCL, param);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_SCL, param, sizeof(param));
 	up(&ctx->lock);
 
 	return count;
@@ -1317,11 +1275,8 @@ static ssize_t lut3d_read(struct file *fp, struct kobject *kobj,
 	if (!dpu->core->enhance_get)
 		return -EIO;
 
-	if (off >= attr->size)
-		return 0;
-
-	if (off + count > attr->size)
-		count = attr->size - off;
+	if (off != 0)
+		return -EINVAL;
 
 	down(&ctx->lock);
 	if (!ctx->enabled) {
@@ -1329,7 +1284,7 @@ static ssize_t lut3d_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_LUT3D, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_LUT3D, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1347,11 +1302,11 @@ static ssize_t lut3d_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LUT3D, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_LUT3D, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1370,7 +1325,7 @@ static ssize_t enable_read(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
@@ -1379,7 +1334,7 @@ static ssize_t enable_read(struct file *fp, struct kobject *kobj,
 		up(&ctx->lock);
 		return -EINVAL;
 	}
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_ENABLE, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_ENABLE, buf, count);
 
 	up(&ctx->lock);
 
@@ -1398,11 +1353,11 @@ static ssize_t enable_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_ENABLE, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_ENABLE, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1421,11 +1376,11 @@ static ssize_t disable_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_DISABLE, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_DISABLE, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1444,7 +1399,7 @@ static ssize_t luts_print_write(struct file *fp, struct kobject *kobj,
 		return -EIO;
 
 	/* I need to get my data in one piece */
-	if (off != 0 || count != attr->size)
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
@@ -1454,7 +1409,7 @@ static ssize_t luts_print_write(struct file *fp, struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_UPDATE_LUTS, buf);
+	dpu->core->enhance_get(ctx, ENHANCE_CFG_ID_UPDATE_LUTS, buf, count);
 	up(&ctx->lock);
 
 	return count;
@@ -1477,11 +1432,11 @@ static ssize_t update_luts_write(struct file *fp, struct kobject *kobj,
 	 * header:type + index , type: enhance_type,
 	 * index: the choosed luts table
 	 */
-	if (off != 0 && (count == 2052 || count == 4 || count == 10))
+	if (off != 0)
 		return -EINVAL;
 
 	down(&ctx->lock);
-	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_UPDATE_LUTS, buf);
+	dpu->core->enhance_set(ctx, ENHANCE_CFG_ID_UPDATE_LUTS, buf, count);
 	up(&ctx->lock);
 
 	return count;

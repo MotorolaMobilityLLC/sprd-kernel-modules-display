@@ -1129,6 +1129,41 @@ static void dpu_capability(struct dpu_context *ctx,
 	cap->fmts_cnt = ARRAY_SIZE(primary_fmts);
 }
 
+static int32_t enhance_check_param(u32 id, size_t count)
+{
+	u32 check_size;
+
+	switch (id) {
+	case ENHANCE_CFG_ID_ENABLE:
+	case ENHANCE_CFG_ID_DISABLE:
+	case ENHANCE_CFG_ID_MODE:
+		check_size = sizeof(u32);
+		break;
+	case ENHANCE_CFG_ID_HSV:
+		check_size = sizeof(struct hsv_lut);
+		break;
+	case ENHANCE_CFG_ID_CM:
+		check_size = sizeof(struct cm_cfg);
+		break;
+	case ENHANCE_CFG_ID_SLP:
+		check_size = sizeof(struct slp_cfg);
+		break;
+	case ENHANCE_CFG_ID_GAMMA:
+		check_size = sizeof(struct gamma_lut);
+		break;
+	case ENHANCE_CFG_ID_EPF:
+		check_size = sizeof(struct epf_cfg);
+		break;
+	default:
+		return 0;
+	}
+
+	if (count >= check_size)
+		return 0;
+
+	return -EINVAL;
+}
+
 static void dpu_enhance_backup(struct dpu_context *ctx, u32 id, void *param)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
@@ -1184,13 +1219,18 @@ static void dpu_epf_set(struct dpu_context *ctx, struct epf_cfg *epf)
 	DPU_REG_WR(ctx->base + REG_EPF_DIFF, (epf->max_diff << 8) | epf->min_diff);
 }
 
-static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
+static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
 	struct hsv_lut *hsv;
 	u32 *p, i;
+
+	if (enhance_check_param(id, count)) {
+		pr_info("enhance checksize failed before set, id = %d\n", id);
+		return;
+	}
 
 	if (!ctx->enabled) {
 		dpu_enhance_backup(ctx, id, param);
@@ -1280,13 +1320,18 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 	enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 }
 
-static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
+static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct epf_cfg *ep;
 	struct slp_cfg *slp;
 	struct gamma_lut *gamma;
 	u32 *p32, i, val;
+
+	if (enhance_check_param(id, count)) {
+		pr_info("enhance checksize failed before get, id = %d\n", id);
+		return;
+	}
 
 	switch (id) {
 	case ENHANCE_CFG_ID_ENABLE:

@@ -293,6 +293,7 @@
 #define GAMMA_LUT_MODE					2
 #define HSV_LUT_MODE					3
 #define LUT3D_MODE					5
+#define LUT3D_MAX_INDEX					8
 #define LUTS_SIZE_4K					(GAMMA_LUT_MODE + HSV_LUT_MODE + LUT3D_MODE * 6)
 #define LUTS_COPY_TIME					(LUTS_SIZE_4K * 2)
 #define DPU_LUTS_SIZE					(LUTS_SIZE_4K * 4096)
@@ -2373,6 +2374,108 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	return 0;
 }
 
+static uint32_t dpu_luts_check_size(struct luts_typeindex *typeindex, bool *err_flag, bool get_flag)
+{
+	uint32_t size = LUTS_HEAD_SIZE;
+	int mode, mode_index;
+
+	switch (typeindex->type) {
+	case LUTS_GAMMA_TYPE:
+		if (typeindex->index >= GAMMA_LUT_MODE) {
+			*err_flag = 1;
+			pr_err("invalid gamma lut mode: %d\n", typeindex->index);
+		}
+		break;
+	case LUTS_HSV_TYPE:
+		if (get_flag == false)
+			size += LUTS_HSV_PARA_SIZE;
+		if (typeindex->index >= HSV_LUT_MODE) {
+			*err_flag = 1;
+			pr_err("invalid hsv lut mode: %d\n", typeindex->index);
+		}
+		break;
+	case LUTS_LUT3D_TYPE:
+		if (get_flag == false) {
+			mode = typeindex->index;
+		} else {
+			mode = typeindex->index >> 8;
+			mode_index = typeindex->index & 0xff;
+			if (mode_index >= LUT3D_MAX_INDEX) {
+				*err_flag = 1;
+				pr_err("invalid 3dlut index: %d\n", mode_index);
+			}
+		}
+		if (mode >= LUT3D_MODE) {
+			*err_flag = 1;
+			pr_err("invalid 3dlut mode: %d\n", mode);
+		}
+		break;
+	case LUTS_ALL:
+		size += LUTS_2K_SIZE;
+		break;
+	default:
+		pr_err("Dpu lut type %d is unavaiable\n", typeindex->type);
+		*err_flag = 1;
+		break;
+	}
+
+	return size;
+}
+
+static int32_t enhance_check_param(u32 id, void *param, size_t count, bool get_flag)
+{
+	bool err_flag = 0;
+	u32 check_size;
+
+	switch (id) {
+	case ENHANCE_CFG_ID_HSV:
+		check_size = sizeof(struct hsv_params) + sizeof(struct hsv_luts);
+		break;
+	case ENHANCE_CFG_ID_CM:
+		check_size = sizeof(struct cm_cfg);
+		break;
+	case ENHANCE_CFG_ID_GAMMA:
+		check_size = sizeof(struct gamma_lut);
+		break;
+	case ENHANCE_CFG_ID_EPF:
+		check_size = sizeof(struct epf_cfg);
+		break;
+	case ENHANCE_CFG_ID_LUT3D:
+		check_size = sizeof(struct rgb_integrate_arr);
+		break;
+	case ENHANCE_CFG_ID_CABC_PARAM:
+		check_size = sizeof(struct cabc_para);
+		break;
+	case ENHANCE_CFG_ID_CABC_HIST_V2:
+		check_size = CABC_HIST_V2_SIZE;
+		break;
+	case ENHANCE_CFG_ID_CABC_CUR_BL:
+		check_size = sizeof(u16);
+		break;
+	case ENHANCE_CFG_ID_ENABLE:
+	case ENHANCE_CFG_ID_DISABLE:
+	case ENHANCE_CFG_ID_CABC_STATE:
+	case ENHANCE_CFG_ID_MODE:
+	case ENHANCE_CFG_ID_VSYNC_COUNT:
+	case ENHANCE_CFG_ID_FRAME_NO:
+		check_size = sizeof(u32);
+		break;
+	case ENHANCE_CFG_ID_UD:
+		check_size = sizeof(struct ud_cfg);
+		break;
+	case ENHANCE_CFG_ID_UPDATE_LUTS:
+		check_size = dpu_luts_check_size((struct luts_typeindex *)param, &err_flag, get_flag);
+		break;
+	default:
+		return 0;
+	}
+
+	if (count >= check_size && err_flag == 0)
+		return 0;
+
+	return -EINVAL;
+}
+
 static void dpu_luts_copyfrom_user(u32 *param, struct dpu_enhance *enhance)
 {
 	static u32 i;
@@ -2395,14 +2498,18 @@ static void dpu_luts_backup(struct dpu_context *ctx, struct dpu_enhance *enhance
 {
 	u32 *p32 = param;
 	struct hsv_params *hsv_cfg;
+	u16 type;
+	u16 index;
 	int ret = 0;
 
 	memcpy(&enhance->typeindex_cpy, param, sizeof(enhance->typeindex_cpy));
+	type = enhance->typeindex_cpy.type;
+	index = enhance->typeindex_cpy.index;
 
-	switch (enhance->typeindex_cpy.type) {
+	switch (type) {
 	case LUTS_GAMMA_TYPE:
 		enhance->lut_addrs_cpy.lut_gamma_addr = enhance->dpu_luts_paddr +
-			DPU_LUTS_GAMMA_OFFSET + enhance->typeindex_cpy.index * 4096;
+			DPU_LUTS_GAMMA_OFFSET + index * 4096;
 		enhance->enhance_en |= BIT(3) | BIT(5);
 		break;
 	case LUTS_HSV_TYPE:
@@ -2412,12 +2519,12 @@ static void dpu_luts_backup(struct dpu_context *ctx, struct dpu_enhance *enhance
 			((hsv_cfg->h1 & 0x3) << 8) |
 			((hsv_cfg->h2 & 0x3) << 12);
 		enhance->lut_addrs_cpy.lut_hsv_addr = enhance->dpu_luts_paddr +
-			DPU_LUTS_HSV_OFFSET + enhance->typeindex_cpy.index * 4096;
+			DPU_LUTS_HSV_OFFSET + index * 4096;
 		enhance->enhance_en |= BIT(1);
 		break;
 	case LUTS_LUT3D_TYPE:
 		enhance->lut_addrs_cpy.lut_lut3d_addr = enhance->dpu_luts_paddr +
-			DPU_LUTS_LUT3D_OFFSET + enhance->typeindex_cpy.index * 4096 * 6;
+			DPU_LUTS_LUT3D_OFFSET + index * 4096 * 6;
 		enhance->enhance_en |= BIT(4);
 		break;
 	case LUTS_ALL:
@@ -2430,7 +2537,7 @@ static void dpu_luts_backup(struct dpu_context *ctx, struct dpu_enhance *enhance
 		dpu_luts_copyfrom_user(p32, enhance);
 		break;
 	default:
-		pr_err("The type %d is unavaiable\n", enhance->typeindex_cpy.type);
+		pr_err("The type %d is unavaiable\n", type);
 		break;
 	}
 }
@@ -2510,16 +2617,20 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct hsv_params *hsv_cfg;
 	u32 *p32 = param;
+	u16 type;
+	u16 index;
 	bool no_update = false;
 
 	memcpy(&enhance->typeindex_cpy, param, sizeof(enhance->typeindex_cpy));
+	type = enhance->typeindex_cpy.type;
+	index = enhance->typeindex_cpy.index;
 
-	switch (enhance->typeindex_cpy.type) {
+	switch (type) {
 	case LUTS_GAMMA_TYPE:
 		DPU_REG_WR(ctx->base + REG_GAMMA_LUT_BASE_ADDR,
 			enhance->dpu_luts_paddr + DPU_LUTS_GAMMA_OFFSET +
-			enhance->typeindex_cpy.index * 4096);
-		enhance->gamma_lut_index = enhance->typeindex_cpy.index;
+			index * 4096);
+		enhance->gamma_lut_index = index;
 		enhance->lut_addrs_cpy.lut_gamma_addr =
 			DPU_REG_RD(ctx->base + REG_GAMMA_LUT_BASE_ADDR);
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(3) | BIT(5));
@@ -2534,8 +2645,8 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 			((hsv_cfg->h2 & 0x3) << 12));
 		enhance->hsv_cfg_copy = DPU_REG_RD(ctx->base + REG_HSV_CFG);
 		DPU_REG_WR(ctx->base + REG_HSV_LUT_BASE_ADDR, enhance->dpu_luts_paddr +
-			DPU_LUTS_HSV_OFFSET + enhance->typeindex_cpy.index * 4096);
-		enhance->hsv_lut_index = enhance->typeindex_cpy.index;
+			DPU_LUTS_HSV_OFFSET + index * 4096);
+		enhance->hsv_lut_index = index;
 		enhance->lut_addrs_cpy.lut_hsv_addr =
 			DPU_REG_RD(ctx->base + REG_HSV_LUT_BASE_ADDR);
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(1));
@@ -2544,8 +2655,8 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 		break;
 	case LUTS_LUT3D_TYPE:
 		DPU_REG_WR(ctx->base + REG_THREED_LUT_BASE_ADDR, enhance->dpu_luts_paddr +
-			DPU_LUTS_LUT3D_OFFSET + enhance->typeindex_cpy.index * 4096 * 6);
-		enhance->lut3d_index = enhance->typeindex_cpy.index;
+			DPU_LUTS_LUT3D_OFFSET + index * 4096 * 6);
+		enhance->lut3d_index = index;
 		enhance->lut_addrs_cpy.lut_lut3d_addr =
 			DPU_REG_RD(ctx->base + REG_THREED_LUT_BASE_ADDR);
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(4));
@@ -2559,14 +2670,14 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 		break;
 	default:
 		no_update = true;
-		pr_err("The type %d is unavaiable\n", enhance->typeindex_cpy.type);
+		pr_err("The type %d is unavaiable\n", type);
 		break;
 	}
 	if (!no_update)
 		dpu_wait_pq_lut_reg_update_done(ctx);
 }
 
-static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
+static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct slp_cfg *slp;
@@ -2581,6 +2692,12 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 	u32 *p32, *tmp32;
 	int i, j;
 	bool no_update = false;
+	bool get_param_flag = false;
+
+	if (enhance_check_param(id, param, count, get_param_flag)) {
+		pr_info("enhance checksize failed before set, id = %d\n", id);
+		return;
+	}
 
 	if (!ctx->enabled) {
 		dpu_enhance_backup(ctx, id, param);
@@ -2819,9 +2936,10 @@ static void dpu_luts_copyto_user(u32 *param, struct dpu_enhance *enhance)
 	pr_info("%s type =%d, index =%d\n", __func__,
 		type_index->type, type_index->index);
 
-	if (type_index->type == LUTS_GAMMA_TYPE) {
+	switch (type_index->type) {
+	case LUTS_GAMMA_TYPE:
 		p32 = enhance->lut_gamma_vaddr + 1024 * type_index->index;
-		pr_info("gamma:type_index %d\n", type_index->type);
+		pr_info("gamma: mode%d\n", type_index->index);
 		for (j = 0; j < 256; j++) {
 			r = (*p32 >> 20) & 0x3ff;
 			g = (*p32 >> 10) & 0x3ff;
@@ -2829,12 +2947,11 @@ static void dpu_luts_copyto_user(u32 *param, struct dpu_enhance *enhance)
 			p32 += 2;
 			pr_info("r %d, g %d, b %d\n", r, g, b);
 		}
-	}
-
-	if (type_index->type == LUTS_HSV_TYPE) {
+		break;
+	case LUTS_HSV_TYPE:
 		p32 = enhance->lut_hsv_vaddr + 1024 * type_index->index;
 		ptmp = p32;
-		pr_info("hsv_mode%d\n", type_index->type);
+		pr_info("hsv: mode%d\n", type_index->index);
 		for (i = 0; i < 4; i++) {
 			p32 = ptmp;
 			pr_info("hsv_lut_index%d\n\n", i);
@@ -2846,9 +2963,8 @@ static void dpu_luts_copyto_user(u32 *param, struct dpu_enhance *enhance)
 			}
 			ptmp++;
 		}
-	}
-
-	if (type_index->type == LUTS_LUT3D_TYPE) {
+		break;
+	case LUTS_LUT3D_TYPE:
 		p32 = enhance->lut_lut3d_vaddr;
 		mode = type_index->index >> 8;
 		mode_index = type_index->index & 0xff;
@@ -2862,10 +2978,14 @@ static void dpu_luts_copyto_user(u32 *param, struct dpu_enhance *enhance)
 			pr_info("r %d, g %d, b %d\n", r, g, b);
 			p32 += 8;
 		}
+		break;
+	default:
+		pr_err("The type %d is unavaiable\n", type_index->type);
+		break;
 	}
 }
 
-static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
+static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct epf_cfg *epf;
@@ -2881,6 +3001,12 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 	u32 *dpu_lut_addr, *dpu_lut_raddr, *p32;
 	int *vsynccount;
 	int *frameno;
+	bool get_param_flag = true;
+
+	if (enhance_check_param(id, param, count, get_param_flag)) {
+		pr_info("enhance checksize failed before get, id = %d\n", id);
+		return;
+	}
 
 	switch (id) {
 	case ENHANCE_CFG_ID_ENABLE:

@@ -51,6 +51,12 @@
 #define ENHANCE_MODE_CAMERA		BIT(6)
 #define ENHANCE_MODE_FULL_FRAME		BIT(7)
 
+#define CABC_HIST_SIZE		128
+#define CABC_HIST_V2_SIZE	256
+#define LUTS_HEAD_SIZE		sizeof(struct luts_typeindex)
+#define LUTS_HSV_PARA_SIZE	sizeof(struct hsv_params)
+#define LUTS_2K_SIZE		2048
+
 enum {
 	SPRD_DPU_IF_DBI = 0,
 	SPRD_DPU_IF_DPI,
@@ -106,8 +112,8 @@ struct dpu_core_ops {
 			 struct sprd_crtc_capability *cap);
 	void (*bg_color)(struct dpu_context *ctx, u32 color);
 	int (*context_init)(struct dpu_context *ctx, struct device_node *np);
-	void (*enhance_set)(struct dpu_context *ctx, u32 id, void *param);
-	void (*enhance_get)(struct dpu_context *ctx, u32 id, void *param);
+	void (*enhance_set)(struct dpu_context *ctx, u32 id, void *param, size_t count);
+	void (*enhance_get)(struct dpu_context *ctx, u32 id, void *param, size_t count);
 	bool (*check_raw_int)(struct dpu_context *ctx, u32 mask);
 	int (*modeset)(struct dpu_context *ctx, struct drm_display_mode *mode);
 	void (*dma_request)(struct dpu_context *ctx);

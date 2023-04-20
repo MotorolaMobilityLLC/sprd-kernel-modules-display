@@ -1659,6 +1659,56 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	return 0;
 }
 
+static int32_t enhance_check_param(u32 id, size_t count)
+{
+	u32 check_size;
+
+	switch (id) {
+	case ENHANCE_CFG_ID_HSV:
+		check_size = sizeof(struct hsv_lut);
+		break;
+	case ENHANCE_CFG_ID_CM:
+		check_size = sizeof(struct cm_cfg);
+		break;
+	case ENHANCE_CFG_ID_LTM:
+		check_size = sizeof(struct ltm_cfg);
+		break;
+	case ENHANCE_CFG_ID_GAMMA:
+		check_size = sizeof(struct gamma_lut);
+		break;
+	case ENHANCE_CFG_ID_EPF:
+		check_size = sizeof(struct epf_cfg);
+		break;
+	case ENHANCE_CFG_ID_LUT3D:
+		check_size = sizeof(struct threed_lut);
+		break;
+	case ENHANCE_CFG_ID_CABC_PARAM:
+		check_size = sizeof(struct cabc_para);
+		break;
+	case ENHANCE_CFG_ID_CABC_HIST:
+		check_size = CABC_HIST_SIZE;
+		break;
+	case ENHANCE_CFG_ID_CABC_CUR_BL:
+		check_size = sizeof(u16);
+		break;
+	case ENHANCE_CFG_ID_ENABLE:
+	case ENHANCE_CFG_ID_DISABLE:
+	case ENHANCE_CFG_ID_CABC_STATE:
+	case ENHANCE_CFG_ID_MODE:
+	case ENHANCE_CFG_ID_VSYNC_COUNT:
+	case ENHANCE_CFG_ID_FRAME_NO:
+		check_size = sizeof(u32);
+		break;
+	default:
+		return 0;
+	}
+
+	if (count >= check_size)
+		return 0;
+
+	return -EINVAL;
+}
+
 static void dpu_epf_set(struct dpu_context *ctx, struct epf_cfg *epf)
 {
 	DPU_REG_WR(ctx->base + REG_EPF_EPSILON, (epf->epsilon1 << 16) | epf->epsilon0);
@@ -1787,7 +1837,7 @@ static void dpu_enhance_backup(struct dpu_context *ctx, u32 id, void *param)
 	}
 }
 
-static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
+static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct ltm_cfg *ltm;
@@ -1799,6 +1849,11 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 	bool dpu_stopped;
 	u32 *p;
 	int i;
+
+	if (enhance_check_param(id, count)) {
+		pr_info("enhance checksize failed before set, id = %d\n", id);
+		return;
+	}
 
 	if (!ctx->enabled) {
 		dpu_enhance_backup(ctx, id, param);
@@ -1952,7 +2007,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param)
 	enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 }
 
-static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
+static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct epf_cfg *epf;
@@ -1963,6 +2018,11 @@ static void dpu_enhance_get(struct dpu_context *ctx, u32 id, void *param)
 	u32 *p32;
 	int i, val;
 	u16 *p16;
+
+	if (enhance_check_param(id, count)) {
+		pr_info("enhance checksize failed before get, id = %d\n", id);
+		return;
+	}
 
 	switch (id) {
 	case ENHANCE_CFG_ID_ENABLE:
