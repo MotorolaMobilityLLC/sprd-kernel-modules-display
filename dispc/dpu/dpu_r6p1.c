@@ -689,7 +689,8 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		drm_crtc_handle_vblank(&dpu->crtc->base);
 
 		/* write back feature */
-		if ((ctx->vsync_count == ctx->max_vsync_count) && ctx->wb_en)
+		if ((ctx->vsync_count == ctx->max_vsync_count)
+			&& ctx->wb_en && ctx->need_wb_work)
 			schedule_work(&ctx->wb_work);
 
 		/* cabc update backlight */
@@ -743,7 +744,8 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		 * no need to display. Otherwise the new frame will be covered
 		 * by the write back buffer, which is not what we wanted.
 		 */
-		if (ctx->wb_en && (ctx->vsync_count > ctx->max_vsync_count)) {
+		if ((ctx->vsync_count > ctx->max_vsync_count)
+			&& ctx->wb_en && ctx->need_wb_work) {
 			ctx->wb_en = false;
 			schedule_work(&ctx->wb_work);
 			/*reg_val |= DPU_INT_FENCE_SIGNAL_REQUEST;*/
@@ -1078,26 +1080,22 @@ static void dpu_wb_work_func(struct work_struct *data)
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, wb_work);
 
-	down(&ctx->wb_lock);
 	down(&ctx->lock);
 
 	if (!ctx->enabled) {
 		up(&ctx->lock);
-		up(&ctx->wb_lock);
 		pr_err("dpu is not initialized\n");
 		return;
 	}
 
 	if (ctx->flip_pending) {
 		up(&ctx->lock);
-		up(&ctx->wb_lock);
 		pr_warn("dpu flip is disabled\n");
 		return;
 	}
 
 	if (ctx->wb_pending) {
 		up(&ctx->lock);
-		up(&ctx->wb_lock);
 		pr_warn("display mode is going on changing\n");
 		return;
 	}
@@ -1108,7 +1106,6 @@ static void dpu_wb_work_func(struct work_struct *data)
 		dpu_wb_flip(ctx);
 
 	up(&ctx->lock);
-	up(&ctx->wb_lock);
 }
 
 static int dpu_write_back_config(struct dpu_context *ctx)
@@ -1159,6 +1156,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	ctx->max_vsync_count = 4;
 	ctx->wb_configed = true;
 	ctx->wb_idle_flag = true;
+	ctx->need_wb_work = true;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
 

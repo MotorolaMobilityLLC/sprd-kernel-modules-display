@@ -356,6 +356,10 @@ void sprd_dpu_run(struct sprd_dpu *dpu)
 	struct dpu_context *ctx = &dpu->ctx;
 
 	down(&ctx->lock);
+	if (ctx->wb_configed) {
+		ctx->need_wb_work = true;
+	}
+
 	if (!ctx->enabled) {
 		DRM_ERROR("dpu is not initialized\n");
 		up(&ctx->lock);
@@ -379,8 +383,12 @@ void sprd_dpu_stop(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 
-	down(&ctx->wb_lock);
 	down(&ctx->lock);
+
+	if (ctx->wb_configed) {
+		ctx->need_wb_work = false;
+		cancel_work_sync(&ctx->wb_work);
+	}
 
 	if (!ctx->enabled) {
 		DRM_ERROR("dpu is not initialized\n");
@@ -453,7 +461,6 @@ void sprd_dpu_disable(struct sprd_dpu *dpu)
 	if (!ctx->enabled) {
 		up(&ctx->lock);
 		up(&ctx->cabc_lock);
-		up(&ctx->wb_lock);
 		return;
 	}
 
@@ -471,7 +478,6 @@ void sprd_dpu_disable(struct sprd_dpu *dpu)
 	ctx->enabled = false;
 	up(&ctx->cabc_lock);
 	up(&ctx->lock);
-	up(&ctx->wb_lock);
 }
 
 static irqreturn_t sprd_dpu_isr(int irq, void *data)
@@ -683,7 +689,6 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 
 	sema_init(&ctx->lock, 1);
 	sema_init(&ctx->cabc_lock, 1);
-	sema_init(&ctx->wb_lock, 1);
 	init_waitqueue_head(&ctx->wait_queue);
 	mutex_init(&ctx->vrr_lock);
 
