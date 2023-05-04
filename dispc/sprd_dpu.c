@@ -383,12 +383,12 @@ void sprd_dpu_stop(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 
-	down(&ctx->lock);
-
 	if (ctx->wb_configed) {
 		ctx->need_wb_work = false;
 		cancel_work_sync(&ctx->wb_work);
 	}
+
+	down(&ctx->lock);
 
 	if (!ctx->enabled) {
 		DRM_ERROR("dpu is not initialized\n");
