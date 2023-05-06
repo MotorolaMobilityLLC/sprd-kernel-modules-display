@@ -70,6 +70,7 @@ static ssize_t refresh_store(struct device *dev,
 	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	struct sprd_crtc *crtc = dpu->crtc;
 	struct dpu_context *ctx = &dpu->ctx;
+	bool crtc_active_state;
 
 	down(&ctx->lock);
 
@@ -77,6 +78,13 @@ static ssize_t refresh_store(struct device *dev,
 
 	if ((!ctx->enabled) || (!panel->enabled)) {
 		pr_err("dpu or panel is powered off\n");
+		up(&ctx->lock);
+		return -1;
+	}
+
+	crtc_active_state = sprd_check_crtc_active_state(crtc->base.dev, 0);
+	if (!crtc_active_state) {
+		pr_err("display system has powered off, skip refresh operation\n");
 		up(&ctx->lock);
 		return -1;
 	}
@@ -106,8 +114,10 @@ static ssize_t bg_color_store(struct device *dev,
 			const char *buf, size_t count)
 {
 	struct sprd_dpu *dpu = dev_get_drvdata(dev);
+	struct sprd_crtc *crtc = dpu->crtc;
 	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	struct dpu_context *ctx = &dpu->ctx;
+	bool crtc_active_state;
 	int ret;
 
 	if (!dpu->core->bg_color)
@@ -127,6 +137,13 @@ static ssize_t bg_color_store(struct device *dev,
 		pr_err("dpu or panel is not initialized\n");
 		up(&ctx->lock);
 		return -EINVAL;
+	}
+
+	crtc_active_state = sprd_check_crtc_active_state(crtc->base.dev, 0);
+	if (!crtc_active_state) {
+		pr_err("display system has powered off, skip refresh operation\n");
+		up(&ctx->lock);
+		return -1;
 	}
 
 	ctx->flip_pending = true;

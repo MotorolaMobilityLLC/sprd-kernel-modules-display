@@ -30,6 +30,29 @@ struct drm_crtc *sprd_find_crtc_from_index(struct drm_device *dev, int idx)
 	return NULL;
 }
 
+bool sprd_check_crtc_active_state(struct drm_device *drm_dev, int crtc_index)
+{
+	struct sprd_drm *sprd;
+	struct drm_crtc *crtc;
+
+	if (!drm_dev ||
+	    !drm_dev->registered) {
+		DRM_INFO("crtc can not be obtained when drm is not inited\n");
+		return false;
+	}
+
+	sprd = drm_dev->dev_private;
+	mutex_lock(&sprd->state_lock);
+	crtc = sprd_find_crtc_from_index(drm_dev, crtc_index);
+	if (crtc && crtc->state && crtc->state->active) {
+		mutex_unlock(&sprd->state_lock);
+		return true;
+	}
+	mutex_unlock(&sprd->state_lock);
+
+	return false;
+}
+
 int sprd_crtc_iommu_map(struct device *dev,
 				struct sprd_gem_obj *sprd_gem)
 {

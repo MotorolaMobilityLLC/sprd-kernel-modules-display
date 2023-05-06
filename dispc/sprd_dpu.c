@@ -535,6 +535,7 @@ void sprd_dpu_enable(struct sprd_dpu *dpu)
 	int_cnt_timer_init(ctx);
 
 	ctx->enabled = true;
+	ctx->flip_pending = false;
 
 	up(&ctx->lock);
 }

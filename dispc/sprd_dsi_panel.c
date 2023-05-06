@@ -400,42 +400,17 @@ static const struct drm_panel_funcs sprd_panel_funcs = {
 	.unprepare = sprd_panel_unprepare,
 };
 
-static bool sprd_check_crtc_active_state(struct sprd_panel *panel, int crtc_index)
-{
-	struct mipi_dsi_host *host = panel->slave->host;
-	struct sprd_dsi *dsi = host_to_dsi(host);
-	struct drm_connector *connector = &dsi->connector;
-	struct sprd_drm *sprd;
-	struct drm_crtc *crtc;
-
-	if (!connector->dev ||
-	    !connector->dev->registered) {
-		DRM_INFO("crtc can not be obtained when drm is not inited\n");
-		return false;
-	}
-
-	sprd = connector->dev->dev_private;
-	mutex_lock(&sprd->state_lock);
-	crtc = sprd_find_crtc_from_index(connector->dev, 0);
-	if (crtc && crtc->state && crtc->state->active) {
-		mutex_unlock(&sprd->state_lock);
-		return true;
-	}
-	mutex_unlock(&sprd->state_lock);
-
-	return false;
-}
-
 static int sprd_panel_esd_check(struct sprd_panel *panel)
 {
 	struct mipi_dsi_host *host = panel->slave->host;
 	struct sprd_dsi *dsi = host_to_dsi(host);
+	struct drm_connector *connector = &dsi->connector;
 	struct panel_info *info = &panel->info;
 	struct sprd_dpu *dpu;
 	bool crtc_active_state;
 	u8 read_val = 0;
 
-	crtc_active_state = sprd_check_crtc_active_state(panel, 0);
+	crtc_active_state = sprd_check_crtc_active_state(connector->dev, 0);
 	if (!crtc_active_state) {
 		DRM_INFO("skip esd during panel suspend\n");
 		return 0;
@@ -491,12 +466,13 @@ static int sprd_panel_te_check(struct sprd_panel *panel)
 {
 	struct mipi_dsi_host *host = panel->slave->host;
 	struct sprd_dsi *dsi = host_to_dsi(host);
+	struct drm_connector *connector = &dsi->connector;
 	struct sprd_dpu *dpu;
 	int ret;
 	bool crtc_active_state;
 	bool irq_occur = false;
 
-	crtc_active_state = sprd_check_crtc_active_state(panel, 0);
+	crtc_active_state = sprd_check_crtc_active_state(connector->dev, 0);
 	if (!crtc_active_state) {
 		DRM_INFO("skip esd during panel suspend\n");
 		return 0;
@@ -599,7 +575,7 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		return;
 	}
 
-	if(!sprd_check_crtc_active_state(panel, 0)) {
+	if(!sprd_check_crtc_active_state(connector->dev, 0)) {
 		DRM_ERROR("crtc is inactive, skip esd work\n");
 		schedule_delayed_work(&panel->esd_work,
 			msecs_to_jiffies(info->esd_check_period));
@@ -621,7 +597,7 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		encoder_funcs = encoder->helper_private;
 		panel->esd_work_pending = false;
 
-		if (!sprd_check_crtc_active_state(panel, 0)) {
+		if (!sprd_check_crtc_active_state(connector->dev, 0)) {
 			DRM_INFO("skip esd recovery during panel suspend\n");
 			return;
 		}
