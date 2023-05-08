@@ -1486,7 +1486,9 @@ static int dpu_init(struct dpu_context *ctx)
 
 	if(ctx->vrr_enabled){
 		dvfs_freq = 614400000;
+#if IS_ENABLED(CONFIG_DVFS_APSYS_SPRD)
 		dpu_dvfs_notifier_call_chain(&dvfs_freq);
+#endif
 	}
 
 	if (ctx->fastcall_en) {

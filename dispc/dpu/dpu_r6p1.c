@@ -1461,7 +1461,10 @@ static void dpu_dvfs_task_func(unsigned long data)
 	if (ctx->vrr_enabled)
 		dvfs_freq = 614400000;
 
+#if IS_ENABLED(CONFIG_DVFS_APSYS_SPRD)
 	dpu_dvfs_notifier_call_chain(&dvfs_freq);
+#endif
+
 }
 
 static void dpu_dvfs_task_init(struct dpu_context *ctx)
@@ -1557,7 +1560,9 @@ static int dpu_init(struct dpu_context *ctx)
 
 	if (ctx->vrr_enabled) {
 		dvfs_freq = 614400000;
-		dpu_dvfs_notifier_call_chain(&dvfs_freq);
+#if IS_ENABLED(CONFIG_DVFS_APSYS_SPRD)
+	dpu_dvfs_notifier_call_chain(&dvfs_freq);
+#endif
 	}
 
 	return 0;
