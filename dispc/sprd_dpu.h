@@ -207,6 +207,7 @@ struct dpu_context {
 	bool evt_all_regs_update;
 	bool evt_pq_lut_update;
 	bool evt_stop;
+	bool evt_wb_done;
 	irqreturn_t (*dpu_isr)(int irq, void *data);
 	struct tasklet_struct dvfs_task;
 
@@ -230,7 +231,6 @@ struct dpu_context {
 	size_t wb_buf_size;
 	bool wb_configed;
 	bool wb_pending;
-	bool wb_idle_flag;
 	bool need_wb_work;
 
 	/* te check parameters */

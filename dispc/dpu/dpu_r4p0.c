@@ -847,7 +847,6 @@ static int dpu_init(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	u32 reg_val, size;
-	int ret;
 
 	DPU_REG_WR(ctx->base + REG_BG_COLOR, 0x00);
 
@@ -876,23 +875,13 @@ static int dpu_init(struct dpu_context *ctx)
 
 	enhance->frame_no = 0;
 
-	ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_SECURE, 0, 0);
-	if (ret)
-		pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
-
 	return 0;
 }
 
 static void dpu_fini(struct dpu_context *ctx)
 {
-	int ret;
-
 	DPU_REG_WR(ctx->base + REG_DPU_INT_EN, 0x00);
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xff);
-
-	ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_NON_SECURE, 0, 0);
-	if (ret)
-		pr_err("Trusty fastcall clear firewall failed, ret = %d\n", ret);
 
 	ctx->panel_ready = false;
 }
@@ -1135,60 +1124,90 @@ static void dpu_layer(struct dpu_context *ctx,
 		struct sprd_layer_state *hwlayer)
 {
 	const struct drm_format_info *info;
-	u32 size, offset, ctrl, reg_val, pitch;
+	struct layer_reg tmp = {};
+	u32 wd, pitch;
 	int i;
 
 	/* for secure displaying, just use layer 7 as secure layer */
-	if (hwlayer->secure_en || ctx->secure_debug)
+	if ((hwlayer->secure_en || ctx->secure_debug) && ctx->fastcall_en)
 		hwlayer->index = 7;
 
-	offset = (hwlayer->dst_x & 0xffff) | ((hwlayer->dst_y) << 16);
-
-	if (hwlayer->pallete_en) {
-		size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_POS,
-				hwlayer->index), offset);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_SIZE,
-				hwlayer->index), size);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_ALPHA,
-				hwlayer->index), hwlayer->alpha);
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PALLETE,
-				hwlayer->index), hwlayer->pallete_color);
-
-		/* pallete layer enable */
-		reg_val = BIT_DPU_LAY_EN |
-			  BIT_DPU_LAY_LAYER_ALPHA |
-			  BIT_DPU_LAY_PALLETE_EN;
-		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CTRL,
-				hwlayer->index), reg_val);
-
-		pr_debug("dst_x = %d, dst_y = %d, dst_w = %d, dst_h = %d, pallete:%d\n",
-			hwlayer->dst_x, hwlayer->dst_y,
-			hwlayer->dst_w, hwlayer->dst_h, hwlayer->pallete_color);
-		return;
-	}
+	tmp.pos = (hwlayer->dst_x & 0xffff) | ((hwlayer->dst_y) << 16);
 
 	if (hwlayer->src_w && hwlayer->src_h)
-		size = (hwlayer->src_w & 0xffff) | ((hwlayer->src_h) << 16);
+		tmp.size = (hwlayer->src_w & 0xffff) | ((hwlayer->src_h) << 16);
 	else
-		size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
+		tmp.size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
+
+	tmp.alpha = hwlayer->alpha;
+
+	if (hwlayer->pallete_en) {
+		tmp.size = (hwlayer->dst_w & 0xffff) | ((hwlayer->dst_h) << 16);
+		tmp.pallete = hwlayer->pallete_color;
+
+		/* pallete layer enable */
+		tmp.ctrl = BIT_DPU_LAY_EN |
+				BIT_DPU_LAY_LAYER_ALPHA |
+				BIT_DPU_LAY_PALLETE_EN;
+
+		pr_debug("pallete:0x%x\n", tmp.pallete);
+	} else {
+		for (i = 0; i < hwlayer->planes; i++) {
+			if (hwlayer->addr[i] % 16)
+				pr_err("layer addr[%d] is not 16 bytes align, it's 0x%08x\n",
+					i, hwlayer->addr[i]);
+			tmp.addr[i] = hwlayer->addr[i];
+		}
+		tmp.crop_start = (hwlayer->src_y << 16) | hwlayer->src_x;
+		info = drm_format_info(hwlayer->format);
+		wd = info->cpp[0];
+		if (wd == 0) {
+			pr_err("layer[%d] bytes per pixel is invalid\n",
+				hwlayer->index);
+			return;
+		}
+		if (hwlayer->planes == 3)
+			/* UV pitch is 1/2 of Y pitch*/
+			tmp.pitch = (hwlayer->pitch[0] / wd) |
+					(hwlayer->pitch[0] / wd << 15);
+		else
+			tmp.pitch = hwlayer->pitch[0] / wd;
+		tmp.ctrl = dpu_img_ctrl(hwlayer->format, hwlayer->blending,
+			hwlayer->xfbc, hwlayer->y2r_coef, hwlayer->rotation);
+	}
+
+	if (!ctx->fastcall_en) {
+		if (hwlayer->secure_en || ctx->secure_debug) {
+			/* transfer layer date to disp ta for setting secure register */
+			ctx->tos_msg->cmd = TA_REG_SET;
+			ctx->tos_msg->version = DPU_R4P0;
+			memcpy(ctx->tos_msg + 1, &tmp, sizeof(tmp));
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg) + sizeof(tmp));
+			disp_ca_wait_response();
+			return;
+		}
+	}
 
 	for (i = 0; i < hwlayer->planes; i++) {
 		if (hwlayer->addr[i] % 16)
 			pr_err("layer addr[%d] is not 16 bytes align, it's 0x%08x\n",
 				i, hwlayer->addr[i]);
 		DPU_REG_WR(ctx->base + DPU_LAY_PLANE_ADDR(REG_LAY_BASE_ADDR,
-				hwlayer->index, i), hwlayer->addr[i]);
+					hwlayer->index, i), tmp.addr[i]);
 	}
 
 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_POS,
-			hwlayer->index), offset);
+			hwlayer->index), tmp.pos);
 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_SIZE,
-			hwlayer->index), size);
+			hwlayer->index), tmp.size);
 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CROP_START,
-			hwlayer->index), hwlayer->src_y << 16 | hwlayer->src_x);
+			hwlayer->index), tmp.crop_start);
 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_ALPHA,
-			hwlayer->index), hwlayer->alpha);
+			hwlayer->index), tmp.alpha);
+	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CTRL,
+			hwlayer->index), tmp.ctrl);
+	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PALLETE,
+				hwlayer->index), tmp.pallete);
 
 	info = drm_format_info(hwlayer->format);
 	if (IS_ERR_OR_NULL(info))
@@ -1208,12 +1227,6 @@ static void dpu_layer(struct dpu_context *ctx,
 		DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PITCH,
 				hwlayer->index), pitch);
 	}
-
-	ctrl = dpu_img_ctrl(hwlayer->format, hwlayer->blending,
-		hwlayer->xfbc, hwlayer->y2r_coef, hwlayer->rotation);
-
-	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_CTRL,
-			hwlayer->index), ctrl);
 
 	pr_debug("dst_x = %d, dst_y = %d, dst_w = %d, dst_h = %d\n",
 				hwlayer->dst_x, hwlayer->dst_y,
@@ -1396,10 +1409,61 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	enhance->enhance_en |= BIT(3);
 }
 
+static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_state *state)
+{
+	int ret;
+
+	if (ctx->fastcall_en) {
+		if (state->layer.secure_en) {
+			ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY,
+							FW_ATTR_SECURE, 0, 0);
+			pr_debug("Trusty fastcall enter secure for dpu\n");
+		} else {
+			ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY,
+							FW_ATTR_NON_SECURE, 0, 0);
+			pr_debug("Trusty fastcall exit secure for dpu\n");
+		}
+		if (ret) {
+			pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
+			return -EBUSY;
+		}
+	} else {
+		if (state->layer.secure_en) {
+			static bool disp_connected;
+
+			if (!disp_connected) {
+				disp_ca_connect();
+				udelay(ctx->time);
+				disp_connected = true;
+			}
+
+			ctx->tos_msg->cmd = TA_FIREWALL_SET;
+			ctx->tos_msg->version = DPU_R4P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+			pr_debug("Trusty TA enter secure for dpu\n");
+		} else {
+			ctx->tos_msg->cmd = TA_REG_CLR;
+			ctx->tos_msg->version = DPU_R4P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+
+			ctx->tos_msg->cmd = TA_FIREWALL_CLR;
+			ctx->tos_msg->version = DPU_R4P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+			pr_debug("Trusty TA exit secure for dpu\n");
+		}
+	}
+
+	return 0;
+}
+
 static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 count)
 {
 	int i;
 	u32 reg_val, mmu_reg_val;
+	static bool last_secure_en;
 	struct sprd_plane_state *state;
 	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
@@ -1411,6 +1475,15 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 		ctx->wb_en = true;
 
 	ctx->wb_en = false;
+
+	state = to_sprd_plane_state(planes[0].base.state);
+	pr_debug("last_secure_en:%d secure_en:%d\n", last_secure_en, state->layer.secure_en);
+	if (last_secure_en != state->layer.secure_en) {
+		if (dpu_secure_state_change(ctx, state))
+			return;
+		last_secure_en = state->layer.secure_en;
+	}
+
 	/*
 	 * Make sure the dpu is in stop status. DPU_R4P0 has no shadow
 	 * registers in EDPI mode. So the config registers can only be
@@ -1610,6 +1683,14 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		} else {
 			pr_warn("dpu backlight node not found\n");
 		}
+	}
+
+	if (of_property_read_bool(np, "sprd,widevine-use-fastcall")) {
+		ctx->fastcall_en = true;
+		pr_info("read widevine-use-fastcall success, fastcall_en = true\n");
+	} else {
+		ctx->fastcall_en = false;
+		pr_info("read widevine-use-fastcall failed, fastcall_en = false\n");
 	}
 
 	ret = of_property_read_u32(np, "sprd,corner-radius",

@@ -759,7 +759,8 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	/* dpu write back done isr */
 	if (reg_val & BIT_DPU_INT_WB_DONE_EN) {
 		ctx->int_cnt.int_cnt_dpu_int_wb_done++;
-		ctx->wb_idle_flag = true;
+		ctx->evt_wb_done = true;
+		wake_up_interruptible_all(&ctx->wait_queue);
 		/*
 		 * The write back is a time-consuming operation. If there is a
 		 * flip occurs before write back done, the write back buffer is
@@ -951,37 +952,40 @@ static int dpu_wait_all_update_done(struct dpu_context *ctx)
 	return 0;
 }
 
-static void dpu_stop(struct dpu_context *ctx)
+static int dpu_wait_wb_done(struct dpu_context *ctx)
 {
-	int i;
+	int rc;
+	unsigned int cnt = 0;
 
-	if (!ctx->wb_idle_flag) {
-		for (i = 1; ; i++) {
-			if (ctx->wb_idle_flag) {
-				pr_info("dpu wb is idle, prepare to stop\n");
-				goto wb_is_idle;
-			}
+	if (ctx->evt_wb_done)
+		return 0;
+
+	pr_debug("wb is trigger, wait for wb done!\n");
+
+	rc = wait_event_interruptible_timeout(ctx->wait_queue, ctx->evt_wb_done,
+						msecs_to_jiffies(20));
+
+	if (!rc) {
+		pr_err("dpu wait for wb done time out!\n");
+
+		while (DPU_REG_RD(ctx->base + REG_DPU_STS_20) & BIT(26)) {
 			mdelay(1);
-			if (i > 16) {
-				pr_err("wait wb done over 16ms, change to wait wb err bit\n");
-				break;
+			if (100 == ++cnt) {
+				pr_err("Wait for wb err disappeared timeout! disable wb\n");
+				ctx->max_vsync_count = 0;
+				return -EBUSY;
 			}
 		}
-
-		for (i = 1; ; i++) {
-			if (DPU_REG_RD(ctx->base + REG_DPU_STS_20) & BIT(26))
-				mdelay(1);
-			else {
-				pr_info("dpu wb err disappeared, prepare to stop\n");
-				break;
-			}
-			if (!(i % 3000)) {
-				pr_err("wait for dpu wb err disappeared %d ms timeout\n", i);
-			}
-		}
+		return -ETIMEDOUT;
 	}
 
-wb_is_idle:
+	return 0;
+}
+
+static void dpu_stop(struct dpu_context *ctx)
+{
+	dpu_wait_wb_done(ctx);
+
 	if (ctx->if_type == SPRD_DPU_IF_DPI)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_STOP);
 
@@ -1089,7 +1093,7 @@ static void dpu_wb_trigger(struct dpu_context *ctx, u8 count, bool debug)
 	else
 		DPU_REG_SET(ctx->base + REG_WB_CTRL, BIT(0));
 
-	ctx->wb_idle_flag = false;
+	ctx->evt_wb_done = false;
 
 	pr_debug("write back trigger\n");
 }
@@ -1124,7 +1128,7 @@ static void dpu_wb_work_func(struct work_struct *data)
 
 	if (ctx->wb_pending) {
 		up(&ctx->lock);
-		pr_warn("display mode is going on changing\n");
+		pr_warn("wb is pending now\n");
 		return;
 	}
 
@@ -1142,11 +1146,6 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		(struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
 	struct drm_device *drm = dpu->crtc->base.dev;
 	int mode_width  = DPU_REG_RD(ctx->base + REG_BLEND_SIZE) & 0xFFFF;
-
-	if (ctx->fastcall_en) {
-		pr_info("widevine use fastcall, not support write back\n");
-		return 0;
-	}
 
 	if (ctx->wb_configed) {
 		DPU_REG_WR(ctx->base + REG_WB_BASE_ADDR, ctx->wb_addr_p);
@@ -1181,9 +1180,9 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
 	}
 
-	ctx->max_vsync_count = 0;
+	ctx->max_vsync_count = 4;
 	ctx->wb_configed = true;
-	ctx->wb_idle_flag = true;
+	ctx->evt_wb_done = true;
 	ctx->need_wb_work = true;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
@@ -1504,27 +1503,13 @@ static int dpu_init(struct dpu_context *ctx)
 #endif
 	}
 
-	if (ctx->fastcall_en) {
-		ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_SECURE, 0, 0);
-		if (ret)
-			pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
-	}
-
 	return 0;
 }
 
 static void dpu_fini(struct dpu_context *ctx)
 {
-	int ret;
-
 	DPU_REG_WR(ctx->base + REG_DPU_INT_EN, 0x00);
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xff);
-
-	if (ctx->fastcall_en) {
-		ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY, FW_ATTR_NON_SECURE, 0, 0);
-		if (ret)
-			pr_err("Trusty fastcall clear firewall failed, ret = %d\n", ret);
-	}
 
 	ctx->panel_ready = false;
 }
@@ -1777,7 +1762,7 @@ static void dpu_layer(struct dpu_context *ctx,
 {
 	const struct drm_format_info *info;
 	struct layer_reg tmp = {};
-	u32 dst_size, src_size, offset, wd, rot, secure_val;
+	u32 dst_size, src_size, offset, wd, rot;
 	int i;
 
 	/* for secure displaying, just use layer 7 as secure layer */
@@ -1857,29 +1842,14 @@ static void dpu_layer(struct dpu_context *ctx,
 	}
 
 	if (!ctx->fastcall_en) {
-		secure_val = DPU_REG_RD(ctx->base + REG_DPU_SECURE);
 		if (hwlayer->secure_en || ctx->secure_debug) {
-			if (!secure_val) {
-				disp_ca_connect();
-				mdelay(5);
-			}
-			ctx->tos_msg->cmd = TA_FIREWALL_SET;
-			ctx->tos_msg->version = DPU_R6P0;
-			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
-			disp_ca_wait_response();
-
-			memcpy(ctx->tos_msg + 1, &tmp, sizeof(tmp));
-
+			/* transfer layer date to disp ta for setting secure register */
 			ctx->tos_msg->cmd = TA_REG_SET;
 			ctx->tos_msg->version = DPU_R6P0;
+			memcpy(ctx->tos_msg + 1, &tmp, sizeof(tmp));
 			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg) + sizeof(tmp));
 			disp_ca_wait_response();
 			return;
-		} else if (secure_val) {
-			ctx->tos_msg->cmd = TA_REG_CLR;
-			ctx->tos_msg->version = DPU_R6P0;
-			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
-			disp_ca_wait_response();
 		}
 	}
 
@@ -2113,19 +2083,90 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 		DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
 }
 
+static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_state *state)
+{
+	int ret;
+
+	if (ctx->fastcall_en) {
+		if (state->layer.secure_en) {
+			ctx->wb_pending = true;
+			ret = dpu_wait_wb_done(ctx);
+			if (ret)
+				return ret;
+
+			ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY,
+							FW_ATTR_SECURE, 0, 0);
+			pr_debug("Trusty fastcall enter secure for dpu\n");
+		} else {
+			ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY,
+							FW_ATTR_NON_SECURE, 0, 0);
+			ctx->wb_pending = false;
+			pr_debug("Trusty fastcall exit secure for dpu\n");
+		}
+		if (ret) {
+			pr_err("Trusty fastcall set firewall failed, ret = %d\n", ret);
+			return -EBUSY;
+		}
+	} else {
+		if (state->layer.secure_en) {
+			static bool disp_connected;
+
+			ctx->wb_pending = true;
+			if (!disp_connected) {
+				disp_ca_connect();
+				udelay(ctx->time);
+				disp_connected = true;
+			}
+
+			ret = dpu_wait_wb_done(ctx);
+			if (ret)
+				return ret;
+
+			ctx->tos_msg->cmd = TA_FIREWALL_SET;
+			ctx->tos_msg->version = DPU_R6P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+			pr_debug("Trusty TA enter secure for dpu\n");
+		} else {
+			ctx->tos_msg->cmd = TA_REG_CLR;
+			ctx->tos_msg->version = DPU_R6P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+
+			ctx->tos_msg->cmd = TA_FIREWALL_CLR;
+			ctx->tos_msg->version = DPU_R6P0;
+			disp_ca_write(ctx->tos_msg, sizeof(*ctx->tos_msg));
+			disp_ca_wait_response();
+			ctx->wb_pending = false;
+			pr_debug("Trusty TA exit secure for dpu\n");
+		}
+	}
+
+	return 0;
+}
+
 static void dpu_flip(struct dpu_context *ctx,
 		     struct sprd_plane planes[], u8 count)
 {
 	int i;
-	u32 reg_val, secure_val;
+	u32 reg_val;
+	static bool last_secure_en;
 	struct sprd_plane_state *state;
-	struct sprd_layer_state *layer;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct dpu_enhance *enhance = ctx->enhance;
 
 	ctx->vsync_count = 0;
 	if (ctx->max_vsync_count > 0 && count > 1)
 		ctx->wb_en = true;
+
+	state = to_sprd_plane_state(planes[0].base.state);
+	pr_debug("last_secure_en:%d secure_en:%d\n", last_secure_en, state->layer.secure_en);
+	if (last_secure_en != state->layer.secure_en) {
+		if (dpu_secure_state_change(ctx, state))
+			return;
+		last_secure_en = state->layer.secure_en;
+	}
+
 	/*
 	 * Make sure the dpu is in stop status. DPU_r6p0 has no shadow
 	 * registers in EDPI mode. So the config registers can only be
@@ -2165,22 +2206,12 @@ static void dpu_flip(struct dpu_context *ctx,
 		ctx->stopped = false;
 	} else if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		if (!ctx->stopped) {
-			secure_val = DPU_REG_RD(ctx->base + REG_DPU_SECURE);
-			state = to_sprd_plane_state(planes[0].base.state);
-			layer = &state->layer;
 			if (enhance->first_frame == true) {
 				DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_ALL_UPDATE);
 				dpu_wait_all_update_done(ctx);
 				enhance->first_frame = false;
-			} else {
-				if ((!layer->secure_en) && secure_val && (!ctx->fastcall_en)) {
-					dpu_wait_update_done(ctx);
-					ctx->tos_msg->cmd = TA_FIREWALL_CLR;
-					disp_ca_write(&(ctx->tos_msg), sizeof(ctx->tos_msg));
-					disp_ca_wait_response();
-				} else
-					dpu_wait_update_done(ctx);
-			}
+			} else
+				dpu_wait_update_done(ctx);
 		}
 
 		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
