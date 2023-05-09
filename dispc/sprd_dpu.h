@@ -29,6 +29,14 @@
 #include "dsi/sprd_dsi_hal.h"
 #include "sprd_dsc.h"
 
+#define WAIT_TE_MAX_TIME_120	8600
+#define WAIT_TE_MAX_TIME_90		11500
+#define WAIT_TE_MAX_TIME_60		17100
+
+#define DPI_VREFRESH_120	120
+#define DPI_VREFRESH_90		90
+#define DPI_VREFRESH_60		60
+
 #define cabc_cfg0			268439552
 #define cabc_cfg1			268439552
 #define cabc_cfg2			16777215
@@ -106,6 +114,7 @@ struct dpu_clk_ops {
 	int (*enable)(struct dpu_context *ctx);
 	int (*disable)(struct dpu_context *ctx);
 	int (*update)(struct dpu_context *ctx, int clk_id, int val);
+	int (*vrr)(struct dpu_context *ctx, u32 dst_dpi_clk);
 };
 
 struct dpu_glb_ops {
@@ -165,7 +174,6 @@ struct dpu_context {
 	bool evt_stop;
 	irqreturn_t (*dpu_isr)(int irq, void *data);
 	struct tasklet_struct dvfs_task;
-	bool is_single_run;
 
 	/* pq enhance parameters */
 	void *enhance;
@@ -241,6 +249,18 @@ struct dpu_context {
 	/* blend size limit config parameters */
 	uint32_t vrr_max_layers;
 	bool vrr_enabled;
+
+	/* command panel vrr config parameters */
+	spinlock_t irq_lock;
+	uint32_t actual_dpi_clk;
+	uint32_t dpi_clk_60;
+	uint32_t dpi_clk_90;
+	uint32_t dpi_clk_120;
+	bool is_single_run;
+	uint64_t te_int_time;
+	int te_int_max_gap;
+	bool dpu_run_flag;
+	bool cmd_dpi_mode;
 };
 
 struct sprd_dpu_ops {
@@ -262,6 +282,8 @@ struct sprd_dpu {
 	struct sprd_dsi *dsi;
 };
 
+int dpu_wait_te_flush(struct dpu_context *ctx);
+void sprd_drm_mode_copy(struct drm_display_mode *dst, const struct drm_display_mode *src);
 void sprd_dpu_enable(struct sprd_dpu *dpu);
 void sprd_dpu_disable(struct sprd_dpu *dpu);
 void sprd_dpu_run(struct sprd_dpu *dpu);

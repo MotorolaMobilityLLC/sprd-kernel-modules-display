@@ -380,6 +380,16 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		ctx->vsync_count++;
 	}
 
+	if (reg_val & BIT_DPU_INT_TE) {
+		if (ctx->te_check_en) {
+			ctx->evt_te = true;
+			wake_up_interruptible_all(&ctx->te_wq);
+		}
+
+		if (ctx->if_type == SPRD_DPU_IF_EDPI)
+			drm_crtc_handle_vblank(&dpu->crtc->base);
+	}
+
 	/* dpu stop done isr */
 	if (reg_val & BIT_DPU_INT_DONE) {
 		ctx->evt_stop = true;

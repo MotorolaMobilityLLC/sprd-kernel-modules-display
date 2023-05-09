@@ -529,6 +529,16 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		ctx->vsync_count++;
 	}
 
+	if (reg_val & BIT_DPU_INT_TE) {
+		if (ctx->te_check_en) {
+			ctx->evt_te = true;
+			wake_up_interruptible_all(&ctx->te_wq);
+		}
+
+		if (ctx->if_type == SPRD_DPU_IF_EDPI)
+			drm_crtc_handle_vblank(&dpu->crtc->base);
+	}
+
 	/* dpu stop done isr */
 	if (reg_val & BIT_DPU_INT_DONE) {
 		ctx->evt_stop = true;
@@ -1457,8 +1467,7 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 static void dpu_dpi_init(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
-	struct sprd_dsi *dsi = dpu->dsi;
-	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
+	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	struct videomode vm;
 	u32 int_mask = 0;
 	u32 mmu_int_mask = 0;
@@ -1558,24 +1567,28 @@ static void disable_vsync(struct dpu_context *ctx)
 static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 {
 	struct dpu_enhance *enhance;
-	struct device_node *qos_np, *bl_np;
+	struct device_node *qos_np, *bl_np, *oled_bl_node, *lcd_node;
 	int ret;
 
 	enhance = kzalloc(sizeof(*enhance), GFP_KERNEL);
 	if (!enhance)
 		return -ENOMEM;
 
-	bl_np = of_parse_phandle(np, "sprd,backlight", 0);
-	if (bl_np) {
-		enhance->bl_dev = of_find_backlight_by_node(bl_np);
-		of_node_put(bl_np);
-		if (IS_ERR_OR_NULL(enhance->bl_dev)) {
-			DRM_WARN("backlight is not ready, dpu probe deferred\n");
-			kfree(enhance);
-			return -EPROBE_DEFER;
+	lcd_node = sprd_get_panel_node_by_name();
+	oled_bl_node = of_get_child_by_name(lcd_node, "oled-backlight");
+	if (!oled_bl_node) {
+		bl_np = of_parse_phandle(np, "sprd,backlight", 0);
+		if (bl_np) {
+			enhance->bl_dev = of_find_backlight_by_node(bl_np);
+			of_node_put(bl_np);
+			if (IS_ERR_OR_NULL(enhance->bl_dev)) {
+				DRM_WARN("backlight is not ready, dpu probe deferred\n");
+				kfree(enhance);
+				return -EPROBE_DEFER;
+			}
+		} else {
+			pr_warn("dpu backlight node not found\n");
 		}
-	} else {
-		pr_warn("dpu backlight node not found\n");
 	}
 
 	ret = of_property_read_u32(np, "sprd,corner-radius",
@@ -2267,8 +2280,7 @@ static int dpu_modeset(struct dpu_context *ctx,
 {
 	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	struct sprd_crtc_state *state = to_sprd_crtc_state(dpu->crtc->base.state);
 	u32 mode_vrefresh;
 

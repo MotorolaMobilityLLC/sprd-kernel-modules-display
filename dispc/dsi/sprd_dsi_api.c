@@ -6,6 +6,7 @@
 #include <linux/delay.h>
 
 #include "sprd_dsi_hal.h"
+
 #define BYTE_PER_PIXEL_RGB888 3
 
 static int dsi_wait_tx_payload_fifo_empty(struct sprd_dsi *dsi)
@@ -408,7 +409,6 @@ void sprd_dsi_edpi_video(struct sprd_dsi *dsi)
 	dsi_hal_power_en(dsi, 0);
 	dsi_hal_dpi_color_coding(dsi, coding);
 	dsi_hal_tear_effect_ack_en(dsi, ctx->te_ack_en);
-
 
 	if (max_fifo_len > hactive)
 		cur_pkt_len = hactive;

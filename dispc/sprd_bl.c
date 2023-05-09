@@ -194,6 +194,14 @@ static int sprd_backlight_probe(struct platform_device *pdev)
 	struct pwm_state state;
 	struct sprd_backlight *bl;
 	int div, ret;
+	struct device_node *oled_bl_node, *lcd_node;
+
+	lcd_node = sprd_get_panel_node_by_name();
+	oled_bl_node = of_get_child_by_name(lcd_node, "oled-backlight");
+	if (oled_bl_node) {
+		DRM_INFO("use panel cabc backlight, do not register pwm backlight\n");
+		return -ENODEV;
+	}
 
 	bl = devm_kzalloc(&pdev->dev,
 			sizeof(struct sprd_backlight), GFP_KERNEL);

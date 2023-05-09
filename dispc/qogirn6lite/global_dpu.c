@@ -1,7 +1,15 @@
 /*
-*SPDX-FileCopyrightText: 2020 Unisoc (Shanghai) Technologies Co.Ltd
-*SPDX-License-Identifier: GPL-2.0-only
-*/
+ * Copyright (C) 2018 Spreadtrum Communications Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
 
 #include <linux/clk.h>
 #include <linux/delay.h>
@@ -69,7 +77,7 @@ static const u32 dpi_clk_src[] = {
 static uint32_t clk_pixelpll_src[] = {
 	200000000,
 	400000000,
-	420000000,
+	500000000,
 };
 
 enum {
@@ -83,6 +91,8 @@ static struct reset_control *ctx_reset, *vau_reset;
 static struct clk *val_to_clk(struct dpu_clk_context *ctx, u32 val)
 {
 	switch (val) {
+	case 200000000:
+		return ctx->clk_src_200m;
 	case 256000000:
 		return ctx->clk_src_256m;
 	case 307200000:
@@ -305,7 +315,13 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	} else if (dpu->dsi->ctx.dpi_clk_div) {
 		pr_info("DPU_CORE_CLK = %u, DPI_CLK_DIV = %d\n",
 				dpu_core_val, dpu->dsi->ctx.dpi_clk_div);
-	} else {
+	} else if (ctx->cmd_dpi_mode) {
+		dpi_src_val = calc_dpi_clk_src(ctx->actual_dpi_clk);
+		pr_info("DPU_CORE_CLK = %u, DPI_CLK_SRC = %u\n",
+				dpu_core_val, dpi_src_val);
+		pr_info("dpi vm clock is %lu, dpi actual clock is %lu\n",
+				ctx->vm.pixelclock, ctx->actual_dpi_clk);
+	}else {
 		dpi_src_val = calc_dpi_clk_src(ctx->vm.pixelclock);
 		pr_info("DPU_CORE_CLK = %u, DPI_CLK_SRC = %u\n",
 				dpu_core_val, dpi_src_val);
@@ -342,7 +358,26 @@ static int dpu_clk_init(struct dpu_context *ctx)
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
 		if (ret)
 			pr_warn("set dpi clk source failed\n");
-	} else {
+	} else if (ctx->cmd_dpi_mode) {
+		clk_src = val_to_clk(clk_ctx, dpi_src_val);
+		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
+		if (ret)
+			pr_warn("set dpi clk source failed\n");
+		ret = clk_set_rate(clk_ctx->clk_dpu_dpi, ctx->actual_dpi_clk);
+		if (ret)
+			pr_err("dpu update dpi clk rate failed\n");
+		if (panel->info.dsc_en) {
+			ret = clk_set_parent(clk_ctx->clk_dpu_dsc, clk_src);
+			if (ret)
+				pr_warn("set dsc clk source failed\n");
+			ret = clk_set_rate(clk_ctx->clk_dpu_dsc,  ctx->actual_dpi_clk/dsc_core);
+			if (ret)
+				pr_err("dpu update dsc clk rate failed\n");
+
+			pr_info("clk_dpu_dsc_src = %u, clk_dpu_dsc = %u, dsc_core = %d\n",
+				dpi_src_val, ctx->actual_dpi_clk/dsc_core, dsc_core);
+		}
+	}else {
 		clk_src = val_to_clk(clk_ctx, dpi_src_val);
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
 		if (ret)
@@ -524,6 +559,48 @@ static int dpu_glb_parse_dt(struct dpu_context *ctx,
 	return 0;
 }
 
+static int dpu_dpi_vrr(struct dpu_context *ctx, u32 dst_dpi_clk)
+{
+	int ret;
+	int dsc_core;
+	u32 dpi_src_val;
+	struct clk *clk_src;
+	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+				struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+				(struct sprd_panel *)container_of(dpu->dsi->panel,
+				struct sprd_panel, base);
+
+	dsc_core = ctx->vm.hactive / panel->info.slice_width;
+
+	dpi_src_val = calc_dpi_clk_src(dst_dpi_clk);
+	pr_info("set dpi clock to %lu\n", dst_dpi_clk);
+
+	clk_src = val_to_clk(clk_ctx, dpi_src_val);
+	ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
+	if (ret)
+		pr_warn("set dpi clk source failed\n");
+
+	ret = clk_set_rate(clk_ctx->clk_dpu_dpi, dst_dpi_clk);
+	if (ret)
+		pr_err("dpu update dpi clk rate failed\n");
+
+	if (panel->info.dsc_en) {
+		ret = clk_set_parent(clk_ctx->clk_dpu_dsc, clk_src);
+		if (ret)
+			pr_warn("set dsc clk source failed\n");
+		ret = clk_set_rate(clk_ctx->clk_dpu_dsc,  dst_dpi_clk/dsc_core);
+		if (ret)
+			pr_err("dpu update dsc clk rate failed\n");
+
+		pr_info("clk_dpu_dsc_src = %u, clk_dpu_dsc = %u, dsc_core = %d\n",
+			dpi_src_val, dst_dpi_clk/dsc_core, dsc_core);
+	}
+
+	return ret;
+}
+
 static void dpu_glb_enable(struct dpu_context *ctx)
 {
 	int ret;
@@ -622,6 +699,7 @@ const struct dpu_clk_ops qogirn6lite_dpu_clk_ops = {
 	.init = dpu_clk_init,
 	.enable = dpu_clk_enable,
 	.disable = dpu_clk_disable,
+	.vrr = dpu_dpi_vrr,
 };
 
 const struct dpu_glb_ops qogirn6lite_dpu_glb_ops = {

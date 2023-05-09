@@ -22,11 +22,6 @@
 
 static uint32_t max_reg_length;
 
-static inline struct sprd_panel *to_sprd_panel(struct drm_panel *panel)
-{
-	return container_of(panel, struct sprd_panel, base);
-}
-
 struct dpu_sysfs {
 	u32 bg_color;
 };
@@ -143,6 +138,40 @@ static ssize_t bg_color_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(bg_color);
 
+static ssize_t te_int_gap_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sprd_dpu *dpu = dev_get_drvdata(dev);
+	struct dpu_context *ctx = &dpu->ctx;
+	int ret;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", ctx->te_int_max_gap);
+	pr_info("te int max gap is %d\n", ctx->te_int_max_gap);
+
+	return ret;
+}
+
+static ssize_t te_int_gap_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct sprd_dpu *dpu = dev_get_drvdata(dev);
+	struct dpu_context *ctx = &dpu->ctx;
+	int ret;
+
+	pr_info("[drm] %s()\n", __func__);
+
+	ret = kstrtou32(buf, 10, &ctx->te_int_max_gap);
+	if (ret) {
+		pr_err("Invalid input\n");
+		return -EINVAL;
+	}
+	pr_info("set te int max gap to %d\n", ctx->te_int_max_gap);
+
+	return count;
+}
+static DEVICE_ATTR_RW(te_int_gap);
+
 static ssize_t max_vsync_count_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -184,7 +213,7 @@ static ssize_t max_vsync_count_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	ctx->max_vsync_count = max_vsync_count;
+	ctx->max_vsync_count = 0;
 
 	return count;
 }
@@ -803,6 +832,7 @@ static struct attribute *dpu_attrs[] = {
 	&dev_attr_run.attr,
 	&dev_attr_refresh.attr,
 	&dev_attr_bg_color.attr,
+	&dev_attr_te_int_gap.attr,
 	&dev_attr_disable_flip.attr,
 #ifdef CONFIG_ARM64
 	&dev_attr_actual_fps.attr,

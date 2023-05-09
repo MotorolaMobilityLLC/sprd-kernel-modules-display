@@ -30,6 +30,27 @@
 #include "sprd_plane.h"
 #include "sysfs/sysfs_display.h"
 
+int dpu_wait_te_flush(struct dpu_context *ctx)
+{
+	int rc;
+
+	spin_lock_irq(&ctx->irq_lock);
+	ctx->evt_te = false;
+	spin_unlock_irq(&ctx->irq_lock);
+
+	/* wait for reg update done interrupt */
+	rc = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+		msecs_to_jiffies(20));
+
+	if (!rc) {
+		/* time out */
+		pr_err("dpu wait for te time out!\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static void sprd_dpu_prepare_fb(struct sprd_crtc *crtc,
 				struct drm_plane_state *new_state)
 {
@@ -140,7 +161,7 @@ static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
 	}
 }
 
-static void sprd_drm_mode_copy(struct drm_display_mode *dst, const struct drm_display_mode *src)
+void sprd_drm_mode_copy(struct drm_display_mode *dst, const struct drm_display_mode *src)
 {
 	struct list_head head = dst->head;
 
@@ -153,13 +174,12 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 	struct sprd_dpu *dpu = crtc->priv;
 	struct sprd_dsi *dsi = dpu->dsi;
 	struct drm_display_mode *mode = &crtc->base.state->adjusted_mode;
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	int i;
 
 	DRM_INFO("%s() mode: "DRM_MODE_FMT"\n", __func__, DRM_MODE_ARG(mode));
 
-	if (dpu->dsi->ctx.work_mode == DSI_MODE_VIDEO)
+	if ((dpu->dsi->ctx.work_mode == DSI_MODE_VIDEO) || dpu->ctx.cmd_dpi_mode)
 		dpu->ctx.if_type = SPRD_DPU_IF_DPI;
 	else
 		dpu->ctx.if_type = SPRD_DPU_IF_EDPI;
@@ -167,22 +187,43 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 	sprd_drm_mode_copy(&dpu->mode, mode);
 	sprd_drm_mode_copy(&dpu->actual_mode, mode);
 
-	if (mode->type & DRM_MODE_TYPE_USERDEF) {
-		drm_display_mode_to_videomode(&panel->info.mode, &dpu->ctx.vm);
-		drm_display_mode_to_videomode(&panel->info.mode, &dsi->ctx.vm);
-	} else {
-		if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.vdisplay)) {
-			for (i = 0; i < panel->info.display_mode_count; i++) {
-				if ((panel->info.buildin_modes[i].hdisplay == panel->info.mode.hdisplay) &&
-					(panel->info.buildin_modes[i].vdisplay == panel->info.mode.vdisplay) &&
-					(drm_mode_vrefresh(&panel->info.buildin_modes[i]) == drm_mode_vrefresh(mode))) {
-					sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
-					break;
-				}
+	/*
+	 * FIXME:
+	 * IF Device equiped with CMD panel and need VRR function we need to enable DSC function.
+	 * Because DSC HW can only handle DPI data input, so DPU must work as DPI mode.
+	 * DPU work as DPI mode needs porch config(one reason is to enable vbp + vsync > 32).
+	 * However, changed porch in vrr using environment is meaningless.
+	 * SO, we only set orginal porch to dpu & dsi video mode config.
+	 */
+	if (dpu->ctx.cmd_dpi_mode) {
+		for (i = 0; i < panel->info.display_mode_count; i++) {
+			if ((panel->info.buildin_modes[i].hdisplay == panel->info.mode.hdisplay) &&
+			    (panel->info.buildin_modes[i].vdisplay == panel->info.mode.vdisplay) &&
+			    (drm_mode_vrefresh(&panel->info.buildin_modes[i]) == DPI_VREFRESH_120)) {
+				sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
+				drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
+				drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);
+				break;
 			}
 		}
-		drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
-		drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);
+	} else {
+		if (mode->type & DRM_MODE_TYPE_USERDEF) {
+			drm_display_mode_to_videomode(&panel->info.mode, &dpu->ctx.vm);
+			drm_display_mode_to_videomode(&panel->info.mode, &dsi->ctx.vm);
+		} else {
+			if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.vdisplay)) {
+				for (i = 0; i < panel->info.display_mode_count; i++) {
+					if ((panel->info.buildin_modes[i].hdisplay == panel->info.mode.hdisplay) &&
+					    (panel->info.buildin_modes[i].vdisplay == panel->info.mode.vdisplay) &&
+					    (drm_mode_vrefresh(&panel->info.buildin_modes[i]) == drm_mode_vrefresh(mode))) {
+						sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
+						break;
+					}
+				}
+			}
+			drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
+			drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);
+		}
 	}
 
 	if (dpu->core->modeset && crtc->base.state->mode_changed)
@@ -275,7 +316,6 @@ static void sprd_dpu_atomic_begin(struct sprd_crtc *crtc)
 }
 
 static void sprd_dpu_atomic_flush(struct sprd_crtc *crtc)
-
 {
 	struct sprd_dpu *dpu = crtc->priv;
 	struct time_fifo *tf = &dpu->ctx.tf;
@@ -485,16 +525,8 @@ static irqreturn_t sprd_dpu_isr(int irq, void *data)
 	struct sprd_dpu *dpu = data;
 	struct dpu_context *ctx = &dpu->ctx;
 	u32 int_mask = 0;
-	int_mask = dpu->core->isr(ctx);
 
-	if (int_mask & BIT_DPU_INT_TE) {
-		if (ctx->te_check_en) {
-			ctx->evt_te = true;
-			wake_up_interruptible_all(&ctx->te_wq);
-		}
-		if (ctx->if_type == SPRD_DPU_IF_EDPI)
-			drm_crtc_handle_vblank(&dpu->crtc->base);
-	}
+	int_mask = dpu->core->isr(ctx);
 
 	if (int_mask & BIT_DPU_INT_ERR)
 		DRM_WARN("Warning: dpu underflow!\n");
@@ -506,6 +538,7 @@ static int sprd_dpu_irq_request(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 	int irq_num;
+	struct cpumask mask;
 	int ret;
 
 	irq_num = irq_of_parse_and_map(dpu->dev.of_node, 0);
@@ -513,15 +546,25 @@ static int sprd_dpu_irq_request(struct sprd_dpu *dpu)
 		DRM_ERROR("error: dpu parse irq num failed\n");
 		return -EINVAL;
 	}
+
 	DRM_INFO("dpu irq_num = %d\n", irq_num);
 
 	irq_set_status_flags(irq_num, IRQ_NOAUTOEN);
-	ret = devm_request_irq(&dpu->dev, irq_num, sprd_dpu_isr,
-					0, "DISPC", dpu);
+	ret = devm_request_irq(&dpu->dev, irq_num, sprd_dpu_isr, 0, "DISPC", dpu);
 	if (ret) {
 		DRM_ERROR("error: dpu request irq failed\n");
 		return -EINVAL;
 	}
+
+	if (ctx->cmd_dpi_mode) {
+		cpumask_set_cpu(5, &mask);
+		cpumask_set_cpu(6, &mask);
+		cpumask_set_cpu(7, &mask);
+		ret = irq_set_affinity(irq_num, &mask);
+		if (ret)
+			DRM_ERROR("irq_set_affinity() on CPU %d failed\n", irq_num);
+	}
+
 	ctx->irq = irq_num;
 	ctx->dpu_isr = sprd_dpu_isr;
 
@@ -691,6 +734,7 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	sema_init(&ctx->cabc_lock, 1);
 	init_waitqueue_head(&ctx->wait_queue);
 	mutex_init(&ctx->vrr_lock);
+	spin_lock_init(&ctx->irq_lock);
 
 	ctx->panel_ready = true;
 	ctx->time = 5000;
@@ -703,32 +747,13 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 
 static int sprd_parse_vrr_config(struct sprd_dpu *dpu)
 {
-	struct device_node *lcd_node, *cmdline_node;
-	const char *cmd_line, *lcd_name_p;
-	char lcd_path[60];
-	char lcd_name[50];
+	struct device_node *lcd_node;
 	u32 val;
 	int rc;
 
-	cmdline_node = of_find_node_by_path("/chosen");
-	rc = of_property_read_string(cmdline_node, "bootargs", &cmd_line);
-	if (!rc) {
-		lcd_name_p = strstr(cmd_line, "lcd_name=");
-		if (lcd_name_p) {
-			sscanf(lcd_name_p, "lcd_name=%s", lcd_name);
-			DRM_INFO("lcd name: %s\n", lcd_name);
-		}
-	} else {
-		DRM_ERROR("can't not parse bootargs property\n");
-		return rc;
-	}
-
-	sprintf(lcd_path, "/lcds/%s", lcd_name);
-	lcd_node = of_find_node_by_path(lcd_path);
-	if (!lcd_node) {
-		DRM_ERROR("could not find %s node\n", lcd_name);
+	lcd_node = sprd_get_panel_node_by_name();
+	if (!lcd_node)
 		return -ENODEV;
-	}
 
 	if (of_property_read_bool(lcd_node, "sprd,vrr-enabled")) {
 		DRM_INFO("vrr supported\n");
@@ -745,6 +770,23 @@ static int sprd_parse_vrr_config(struct sprd_dpu *dpu)
 	} else {
 		DRM_DEBUG("no blend limit config found\n");
 		dpu->ctx.vrr_max_layers = 0;
+	}
+
+	rc = of_property_read_u32(lcd_node, "sprd,dsi-work-mode", &val);
+	if (!rc) {
+		if (val == SPRD_DSI_MODE_CMD_DPI) {
+			DRM_INFO("cmd panel vrr supported\n");
+			dpu->ctx.cmd_dpi_mode = true;
+		}
+	}
+
+	rc = of_property_read_u32(lcd_node, "sprd,dpi-actual-pclk", &val);
+	if (!rc) {
+		DRM_INFO("set dpi actual clock to %u\n", val);
+		dpu->ctx.actual_dpi_clk = val;
+	} else {
+		DRM_DEBUG("no dpi actual clock config found\n");
+		dpu->ctx.actual_dpi_clk = 0;
 	}
 
 	return 0;

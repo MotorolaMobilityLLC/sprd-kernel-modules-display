@@ -24,9 +24,9 @@ enum {
 	CMD_OLED_REG_UNLOCK,
 	CMD_CODE_DOZE_IN,
 	CMD_CODE_DOZE_OUT,
-	CMD_CODE_RESERVED2,
-	CMD_CODE_RESERVED3,
-	CMD_CODE_RESERVED4,
+	CMD_CODE_VREFRESH,
+	CMD_CODE_VREFRESH_PREFIX,
+	CMD_CODE_BL_PREFIX,
 	CMD_CODE_RESERVED5,
 	CMD_CODE_MAX,
 };
@@ -36,6 +36,12 @@ enum {
 	SPRD_DSI_MODE_VIDEO_BURST,
 	SPRD_DSI_MODE_VIDEO_SYNC_PULSE,
 	SPRD_DSI_MODE_VIDEO_SYNC_EVENT,
+	SPRD_DSI_MODE_CMD_DPI,
+};
+
+enum {
+	SPRD_PANEL_TYPE_LCD = 0,
+	SPRD_PANEL_TYPE_AMOLED,
 };
 
 enum {
@@ -76,6 +82,14 @@ struct panel_info {
 	struct reset_sequence rst_off_seq;
 	const void *cmds[CMD_CODE_MAX];
 	int cmds_len[CMD_CODE_MAX];
+	int panel_type;
+
+	/* cmd mode vrr config */
+	bool cmd_dpi_mode;
+	u32 vrr_mode_count;
+	u32 *vrr_mode_vrefresh;
+	bool vrefresh_cmd_changed;
+	int current_cmd_index;
 
 	u32 slice_width;
 	u32 slice_height;
@@ -130,5 +144,10 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	struct sprd_panel *panel);
 void  sprd_panel_enter_doze(struct drm_panel *p);
 void  sprd_panel_exit_doze(struct drm_panel *p);
+int sprd_panel_send_vrefresh_cmd(struct sprd_panel *panel, int index);
+struct device_node *sprd_get_panel_node_by_name(void);
+
+#define to_sprd_panel(panel) \
+	container_of(panel, struct sprd_panel, base)
 
 #endif /* _SPRD_DSI_PANEL_H_ */

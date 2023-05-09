@@ -347,6 +347,16 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	if (reg_val & BIT_DPU_INT_VSYNC)
 		drm_crtc_handle_vblank(&dpu->crtc->base);
 
+	if (reg_val & BIT_DPU_INT_TE) {
+		if (ctx->te_check_en) {
+			ctx->evt_te = true;
+			wake_up_interruptible_all(&ctx->te_wq);
+		}
+
+		if (ctx->if_type == SPRD_DPU_IF_EDPI)
+			drm_crtc_handle_vblank(&dpu->crtc->base);
+	}
+
 	/* dpu update done isr */
 	if (reg_val & BIT_DPU_INT_UPDATE_DONE) {
 		ctx->evt_update = true;
