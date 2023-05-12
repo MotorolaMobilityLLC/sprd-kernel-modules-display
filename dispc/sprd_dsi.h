@@ -214,6 +214,11 @@ struct sprd_dsi {
 	struct mutex lock;
 	struct dsi_context ctx;
 	struct sprd_dpu *dpu;
+
+	/* edid releated information for repoting display device HW info to framework */
+	struct edid edid_info;
+	struct drm_property *edid_prop;
+	struct drm_property_blob *edid_blob;
 };
 
 #ifdef CONFIG_DRM_SPRD_DSI
