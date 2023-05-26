@@ -1168,7 +1168,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
 	}
 
-	ctx->max_vsync_count = 4;
+	ctx->max_vsync_count = 0;
 	ctx->wb_configed = true;
 	ctx->wb_idle_flag = true;
 	ctx->need_wb_work = true;
