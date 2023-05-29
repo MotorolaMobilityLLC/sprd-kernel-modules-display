@@ -215,7 +215,7 @@ struct sprd_dsi {
 	struct dsi_context ctx;
 	struct sprd_dpu *dpu;
 
-	/* edid releated information for repoting display device HW info to framework */
+	/* edid releated information for reporting display device HW info to framework */
 	struct edid edid_info;
 	struct drm_property *edid_prop;
 	struct drm_property_blob *edid_blob;
