@@ -681,7 +681,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		 */
 		if (ctx->cmd_dpi_mode) {
 			ktime_get_real_ts64(&ts);
-			time = ts.tv_sec * 1000000 + ts.tv_nsec * 1000 / 1000000;
+			time = ts.tv_sec * 1000000 + (time64_t)ts.tv_nsec * 1000 / 1000000;
 			if (!ctx->te_int_time) {
 				ctx->te_int_time = time;
 				gap = 0;
