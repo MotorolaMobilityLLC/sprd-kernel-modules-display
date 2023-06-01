@@ -428,13 +428,13 @@ static int sprd_dp_atomic_get_property(struct drm_connector *connector,
 					uint64_t *val)
 {
 	struct sprd_dp *dp = connector_to_dp(connector);
-	struct drm_mode_config *config = &connector->dev->mode_config;
 
 	DRM_DEBUG("%s()\n", __func__);
 
-	if (property == config->edid_property) {
-		memcmp(dp->edid_blob->data, &dp->edid_info, (sizeof(struct edid) + 1));
+	if (property == dp->edid_prop) {
+		memcmp(dp->edid_blob->data, &dp->edid_info, sizeof(struct edid));
 		*val = dp->edid_blob->base.id;
+		DRM_INFO("%s() val = %d\n", __func__, dp->edid_blob->base.id);
 	} else {
 		DRM_ERROR("property %s is invalid\n", property->name);
  		return -EINVAL;
@@ -457,6 +457,7 @@ static int sprd_dp_connector_init(struct drm_device *drm, struct sprd_dp *dp)
 {
 	struct drm_encoder *encoder = &dp->encoder;
 	struct drm_connector *connector = &dp->connector;
+	struct drm_property *prop;
 	int ret;
 
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
@@ -479,9 +480,16 @@ static int sprd_dp_connector_init(struct drm_device *drm, struct sprd_dp *dp)
 		return PTR_ERR(dp->edid_blob);
 	}
 
-	drm_object_attach_property(&connector->base,
-					drm->mode_config.edid_property,
-					dp->edid_blob->base.id);
+	prop = drm_property_create(drm, DRM_MODE_PROP_BLOB, "EDID INFO", 0);
+	if (!prop) {
+		DRM_ERROR("drm_property_create dpu version failed\n");
+		return -ENOMEM;
+	}
+
+	drm_object_attach_property(&connector->base, prop, dp->edid_blob->base.id);
+	dp->edid_prop = prop;
+
+	DRM_INFO("dp->edid_blob->base.id:%d\n", dp->edid_blob->base.id);
 
 	drm_connector_helper_add(connector,
 				 &sprd_dp_connector_helper_funcs);
