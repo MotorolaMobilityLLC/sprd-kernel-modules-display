@@ -46,7 +46,7 @@ struct device_node *sprd_get_panel_node_by_name(void)
 		return NULL;
 	}
 
-	sprintf(lcd_path, "/lcds/%s", lcd_name);
+	snprintf(lcd_path, sizeof(lcd_path), "/lcds/%s", lcd_name);
 	lcd_node = of_find_node_by_path(lcd_path);
 	if (!lcd_node) {
 		DRM_ERROR("could not find %s node\n", lcd_name);
