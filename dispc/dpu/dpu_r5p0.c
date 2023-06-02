@@ -1847,6 +1847,9 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	of_node_put(qos_np);
 
 	ctx->enhance = enhance;
+	enhance->cm_copy.coef00 = 1024;
+	enhance->cm_copy.coef11 = 1024;
+	enhance->cm_copy.coef22 = 1024;
 	enhance->cabc_state = CABC_DISABLED;
 	INIT_WORK(&ctx->cabc_work, dpu_cabc_work_func);
 	INIT_WORK(&ctx->cabc_bl_update, dpu_cabc_bl_update_func);

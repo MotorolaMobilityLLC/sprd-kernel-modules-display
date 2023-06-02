@@ -526,6 +526,9 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		return -ENOMEM;
 
 	ctx->enhance = enhance;
+	enhance->cm_copy.coef00 = 1024;
+	enhance->cm_copy.coef11 = 1024;
+	enhance->cm_copy.coef22 = 1024;
 
 	ctx->base_offset[0] = 0x0;
 	ctx->base_offset[1] = DPU_MAX_REG_OFFSET / 4;

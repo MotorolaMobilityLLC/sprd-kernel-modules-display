@@ -2454,6 +2454,9 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	}
 
 	ctx->enhance = enhance;
+	enhance->cm_copy.c00 = 1024;
+	enhance->cm_copy.c11 = 1024;
+	enhance->cm_copy.c22 = 1024;
 	enhance->cabc_state = CABC_DISABLED;
 	if(!ctx->is_oled_bl) {
 		INIT_WORK(&ctx->cabc_work, dpu_cabc_work_func);
