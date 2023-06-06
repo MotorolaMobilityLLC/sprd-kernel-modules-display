@@ -23,6 +23,11 @@
 #define DSI_INT_STS_NEED_SOFT_RESET	BIT(0)
 #define DSI_INT_STS_NEED_HARD_RESET	BIT(1)
 
+#define VIDEO_VACT_LP_EN	BIT(0)
+#define VIDEO_VFP_LP_EN	BIT(1)
+#define VIDEO_VBP_LP_EN	BIT(2)
+#define VIDEO_VSA_LP_EN	BIT(3)
+
 enum dsi_work_mode {
 	DSI_MODE_CMD = 0,
 	DSI_MODE_VIDEO
@@ -103,6 +108,20 @@ struct dsi_context {
 	/* supported dpms mode */
 	int dpms;
 	int last_dpms;
+	/*
+	 * Use 4 bits number for descripting video lp mode, and it can be combined used.
+	 * BIT(0): allow vactive enter lp;
+	 * BIT(1): allow vfp enter lp;
+	 * BIT(2): allow vbp enter lp;
+	 * BIT(3): allow vsa enter lp;
+	 * For example:
+	 * If we need vfp & vbp enter lp, we can calculate this value as a result of BIT(1) | BIT(2)
+	 * And we get the result of 3 and set this value to lcd dt property sprd,video-lp-en-mode.
+	 * If we need all stage can enter lp,
+	 * we can calculate this value as a result of BIT(0) | BIT(1) | BIT(2) | BIT(3).
+	 * And we get the result of 15 and set this value to lcd dt property sprd,video-lp-en-mode.
+	 */
+	u32 video_lp_config;
 
 	const char *lcd_name;
 };

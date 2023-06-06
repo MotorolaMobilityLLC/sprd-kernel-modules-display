@@ -468,6 +468,11 @@ static int sprd_dsi_host_attach(struct mipi_dsi_host *host,
 	else
 		dsi->phy->ctx.aod_mode = 0;
 
+	if (!of_property_read_u32(lcd_node, "sprd,video-lp-en-mode", &val))
+		ctx->video_lp_config = val;
+	else
+		ctx->video_lp_config = 15;
+
 	return 0;
 }
 

@@ -284,10 +284,17 @@ static void dsi_dpi_vporch_lp_en(struct dsi_context *ctx, int enable)
 
 	vid_mode_cfg.val = readl(&reg->VID_MODE_CFG);
 
-	vid_mode_cfg.bits.lp_vact_en = enable;
-	vid_mode_cfg.bits.lp_vfp_en = enable;
-	vid_mode_cfg.bits.lp_vbp_en = enable;
-	vid_mode_cfg.bits.lp_vsa_en = enable;
+	if (ctx->video_lp_config & VIDEO_VACT_LP_EN)
+		vid_mode_cfg.bits.lp_vact_en = enable;
+
+	if (ctx->video_lp_config & VIDEO_VFP_LP_EN)
+		vid_mode_cfg.bits.lp_vfp_en = enable;
+
+	if (ctx->video_lp_config & VIDEO_VBP_LP_EN)
+		vid_mode_cfg.bits.lp_vbp_en = enable;
+
+	if (ctx->video_lp_config & VIDEO_VSA_LP_EN)
+		vid_mode_cfg.bits.lp_vsa_en = enable;
 
 	writel(vid_mode_cfg.val, &reg->VID_MODE_CFG);
 }
