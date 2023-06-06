@@ -432,7 +432,7 @@ static int sprd_dp_atomic_get_property(struct drm_connector *connector,
 	DRM_DEBUG("%s()\n", __func__);
 
 	if (property == dp->edid_prop) {
-		memcmp(dp->edid_blob->data, &dp->edid_info, sizeof(struct edid));
+		memcpy(dp->edid_blob->data, &dp->edid_info, sizeof(struct edid));
 		*val = dp->edid_blob->base.id;
 		DRM_INFO("%s() val = %d\n", __func__, dp->edid_blob->base.id);
 	} else {

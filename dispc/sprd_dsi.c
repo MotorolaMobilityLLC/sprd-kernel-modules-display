@@ -600,7 +600,7 @@ static int sprd_dsi_atomic_get_property(struct drm_connector *connector,
 	DRM_DEBUG("%s()\n", __func__);
 
 	if (property == dsi->edid_prop) {
-		memcmp(dsi->edid_blob->data, &dsi->edid_info, sizeof(struct edid));
+		memcpy(dsi->edid_blob->data, &dsi->edid_info, sizeof(struct edid));
 		*val = dsi->edid_blob->base.id;
 		DRM_INFO("%s() val = %d\n", __func__, dsi->edid_blob->base.id);
 	} else {
