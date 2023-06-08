@@ -1885,6 +1885,12 @@ static void dpu_layer(struct dpu_context *ctx,
 		tmp.alpha = hwlayer->alpha;
 
 		info = drm_format_info(hwlayer->format);
+		if (IS_ERR_OR_NULL(info))
+		{
+			pr_warn("drm format info is invalid.\n");
+			return;
+		}
+
 		wd = info->cpp[0];
 		if (wd == 0) {
 			pr_err("layer[%d] bytes per pixel is invalid\n", hwlayer->index);
