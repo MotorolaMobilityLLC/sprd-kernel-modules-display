@@ -466,6 +466,8 @@ static u32 check_mmu_isr(struct dpu_context *ctx, u32 reg_val)
 	u32 val = reg_val & mmu_mask;
 
 	if (val) {
+		ctx->int_cnt.int_cnt_dpu_int_mmu++;
+
 		pr_err("--- iommu interrupt err: 0x%04x ---\n", val);
 
 		pr_err("iommu invalid read error, addr: 0x%08x\n",
@@ -505,6 +507,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu update done isr */
 	if (reg_val & BIT_DPU_INT_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_dpu_all_update_done++;
 		/* dpu dvfs feature */
 		tasklet_schedule(&ctx->dvfs_task);
 
@@ -514,6 +517,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
+		ctx->int_cnt.int_cnt_vsync++;
 		drm_crtc_handle_vblank(&dpu->crtc->base);
 
 		/* cabc update backlight */
@@ -524,6 +528,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	if (reg_val & BIT_DPU_INT_TE) {
+		ctx->int_cnt.int_cnt_te++;
 		if (ctx->te_check_en) {
 			ctx->evt_te = true;
 			wake_up_interruptible_all(&ctx->te_wq);
@@ -535,12 +540,14 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu stop done isr */
 	if (reg_val & BIT_DPU_INT_DONE) {
+		ctx->int_cnt.int_cnt_dpu_int_done++;
 		ctx->evt_stop = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	/* dpu write back done isr */
 	if (reg_val & BIT_DPU_INT_WB_DONE) {
+		ctx->int_cnt.int_cnt_dpu_int_wb_done++;
 		/*
 		 * The write back is a time-consuming operation. If there is a
 		 * flip occurs before write back done, the write back buffer is
@@ -557,6 +564,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu write back error isr */
 	if (reg_val & BIT_DPU_INT_WB_ERR) {
+		ctx->int_cnt.int_cnt_dpu_int_wb_err++;
 		pr_err("dpu write back fail\n");
 		/*give a new chance to write back*/
 		ctx->wb_en = true;
@@ -565,12 +573,14 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu afbc payload error isr */
 	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR) {
+		ctx->int_cnt.int_cnt_dpu_int_fbc_pld_err++;
 		int_mask |= BIT_DPU_INT_FBC_PLD_ERR;
 		pr_err("dpu afbc payload error\n");
 	}
 
 	/* dpu afbc header error isr */
 	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR) {
+		ctx->int_cnt.int_cnt_dpu_int_fbc_hdr_err++;
 		int_mask |= BIT_DPU_INT_FBC_HDR_ERR;
 		pr_err("dpu afbc header error\n");
 	}
@@ -2444,4 +2454,5 @@ const struct dpu_core_ops dpu_r4p0_core_ops = {
 	.modeset = dpu_modeset,
 	.check_raw_int = dpu_check_raw_int,
 	.get_gsp_base = dpu_get_gsp_base,
+	.reg_dump = dpu_dump,
 };

@@ -627,6 +627,8 @@ static u32 check_mmu_isr(struct dpu_context *ctx, u32 reg_val)
 	u32 val = reg_val & mmu_mask;
 
 	if (val) {
+		ctx->int_cnt.int_cnt_dpu_int_mmu++;
+
 		pr_err("--- iommu interrupt err: 0x%04x ---\n", val);
 
 		pr_err("iommu0 invalid read error, addr: 0x%08x\n",
@@ -665,6 +667,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	u32 mmu_reg_val, mmu_int_mask = 0;
 	u32 mmu1_reg_val, mmu1_int_mask = 0;
 
+	ctx->int_cnt.int_cnt_all++;
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_INT_STS);
 	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
 	mmu1_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU1_INT_STS);
@@ -686,6 +689,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
+		ctx->int_cnt.int_cnt_vsync++;
 		drm_crtc_handle_vblank(&dpu->crtc->base);
 
 		/* write back feature */
@@ -701,6 +705,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	if (reg_val & BIT_DPU_INT_TE) {
+		ctx->int_cnt.int_cnt_te++;
 		if (ctx->te_check_en) {
 			ctx->evt_te = true;
 			wake_up_interruptible_all(&ctx->te_wq);
@@ -712,16 +717,19 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu update done isr */
 	if (reg_val & BIT_DPU_INT_LAY_REG_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_lay_reg_update_done++;
 		ctx->evt_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	if (reg_val & BIT_DPU_INT_DPU_REG_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_dpu_reg_update_done++;
 		ctx->evt_all_regs_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	if (reg_val & BIT_DPU_INT_DPU_ALL_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_dpu_all_update_done++;
 		/* dpu dvfs feature */
 		tasklet_schedule(&ctx->dvfs_task);
 
@@ -730,23 +738,27 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	if (reg_val & BIT_DPU_INT_PQ_REG_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_pq_reg_update_done++;
 		ctx->evt_pq_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	if (reg_val & BIT_DPU_INT_PQ_LUT_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_pq_lut_update_done++;
 		ctx->evt_pq_lut_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	/* dpu stop done isr */
 	if (reg_val & BIT_DPU_INT_DONE) {
+		ctx->int_cnt.int_cnt_dpu_int_done++;
 		ctx->evt_stop = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	/* dpu write back done isr */
 	if (reg_val & BIT_DPU_INT_WB_DONE_EN) {
+		ctx->int_cnt.int_cnt_dpu_int_wb_done++;
 		ctx->wb_idle_flag = true;
 		/*
 		 * The write back is a time-consuming operation. If there is a
@@ -766,6 +778,7 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu write back error isr */
 	if (reg_val & BIT_DPU_INT_WB_ERR_EN) {
+		ctx->int_cnt.int_cnt_dpu_int_wb_err++;
 		pr_err("dpu write back fail\n");
 		/*give a new chance to write back*/
 		// if (ctx->max_vsync_count > 0) {
@@ -775,12 +788,16 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	/* dpu afbc payload error isr */
-	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR)
+	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR) {
+		ctx->int_cnt.int_cnt_dpu_int_fbc_pld_err++;
 		pr_err("dpu afbc payload error\n");
+	}
 
 	/* dpu afbc header error isr */
-	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR)
+	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR) {
+		ctx->int_cnt.int_cnt_dpu_int_fbc_hdr_err++;
 		pr_err("dpu afbc header error\n");
+	}
 
 	return reg_val;
 }
@@ -3524,4 +3541,5 @@ const struct dpu_core_ops dpu_r6p0_core_ops = {
 	.modeset = dpu_modeset,
 	.write_back = dpu_wb_trigger,
 	.dma_request = dpu_dma_request,
+	.reg_dump = dpu_dump,
 };

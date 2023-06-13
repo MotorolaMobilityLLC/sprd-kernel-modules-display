@@ -29,6 +29,8 @@
 #include "dsi/sprd_dsi_hal.h"
 #include "sprd_dsc.h"
 
+#define DPU_INT_MAX_CNT			300
+
 #define WAIT_TE_MAX_TIME_120	8600
 #define WAIT_TE_MAX_TIME_90		11500
 #define WAIT_TE_MAX_TIME_60		17100
@@ -118,6 +120,7 @@ struct dpu_core_ops {
 	int (*modeset)(struct dpu_context *ctx, struct drm_display_mode *mode);
 	void (*dma_request)(struct dpu_context *ctx);
 	void (*get_gsp_base)(struct dpu_context *ctx, struct device_node *np);
+	void (*reg_dump)(struct dpu_context *ctx);
 };
 
 struct dpu_clk_ops {
@@ -162,6 +165,24 @@ struct time_fifo {
 	struct timespec64 ts[33];
 	int head;
 	u32 sum_num;
+};
+
+struct dpu_int_cnt {
+	u16 int_cnt_all;
+	u16 int_cnt_vsync;
+	u16 int_cnt_te;
+	u16 int_cnt_lay_reg_update_done;
+	u16 int_cnt_dpu_reg_update_done;
+	u16 int_cnt_dpu_all_update_done;
+	u16 int_cnt_pq_reg_update_done;
+	u16 int_cnt_pq_lut_update_done;
+	u16 int_cnt_dpu_int_done;
+	u16 int_cnt_dpu_int_err;
+	u16 int_cnt_dpu_int_wb_done;
+	u16 int_cnt_dpu_int_wb_err;
+	u16 int_cnt_dpu_int_fbc_pld_err;
+	u16 int_cnt_dpu_int_fbc_hdr_err;
+	u16 int_cnt_dpu_int_mmu;
 };
 
 struct dpu_context {
@@ -251,6 +272,8 @@ struct dpu_context {
 	u32 prev_y2r_coef;
 	u64 frame_count;
 	struct time_fifo tf;
+	struct dpu_int_cnt int_cnt;
+	struct timer_list int_cnt_timer;
 
 	/* scaling config parameters */
 	struct scale_config_param scale_cfg;

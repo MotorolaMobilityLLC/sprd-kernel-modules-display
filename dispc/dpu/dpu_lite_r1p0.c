@@ -203,10 +203,13 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	if (reg_val & BIT_DPU_INT_ERR)
 		int_mask |= BIT_DPU_INT_ERR;
 
-	if (reg_val & BIT_DPU_INT_VSYNC)
+	if (reg_val & BIT_DPU_INT_VSYNC) {
+		ctx->int_cnt.int_cnt_vsync++;
 		drm_crtc_handle_vblank(&dpu->crtc->base);
+	}
 
 	if (reg_val & BIT_DPU_INT_TE) {
+		ctx->int_cnt.int_cnt_te++;
 		if (ctx->te_check_en) {
 			ctx->evt_te = true;
 			wake_up_interruptible_all(&ctx->te_wq);
@@ -218,12 +221,14 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu update done isr */
 	if (reg_val & BIT_DPU_INT_UPDATE_DONE) {
+		ctx->int_cnt.int_cnt_dpu_all_update_done++;
 		ctx->evt_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	/* dpu stop done isr */
 	if (reg_val & BIT_DPU_INT_DONE) {
+		ctx->int_cnt.int_cnt_dpu_int_done++;
 		ctx->evt_stop = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}

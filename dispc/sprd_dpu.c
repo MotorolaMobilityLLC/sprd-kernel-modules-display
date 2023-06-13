@@ -12,6 +12,7 @@
 #include <linux/of_irq.h>
 #include <linux/pm_runtime.h>
 #include <linux/sprd_iommu.h>
+#include <linux/timer.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
 
@@ -29,6 +30,52 @@
 #include "sprd_iommu.h"
 #include "sprd_plane.h"
 #include "sysfs/sysfs_display.h"
+
+static void int_cnt_timer_callback(struct timer_list *timer)
+{
+	struct dpu_context *ctx = container_of(timer, struct dpu_context, int_cnt_timer);
+	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
+	struct dpu_int_cnt *cnt = &ctx->int_cnt;
+
+	if (cnt->int_cnt_all > DPU_INT_MAX_CNT) {
+		DRM_INFO("dpu int cnt over threshold value!\n");
+		DRM_INFO("int_cnt_all------------------%d\n", cnt->int_cnt_all);
+		DRM_INFO("int_cnt_vsync----------------%d\n", cnt->int_cnt_vsync);
+		DRM_INFO("int_cnt_te-------------------%d\n", cnt->int_cnt_te);
+		DRM_INFO("int_cnt_lay_reg_update_done--%d\n", cnt->int_cnt_lay_reg_update_done);
+		DRM_INFO("int_cnt_dpu_reg_update_done--%d\n", cnt->int_cnt_dpu_reg_update_done);
+		DRM_INFO("int_cnt_dpu_all_update_done--%d\n", cnt->int_cnt_dpu_all_update_done);
+		DRM_INFO("int_cnt_pq_reg_update_done---%d\n", cnt->int_cnt_pq_reg_update_done);
+		DRM_INFO("int_cnt_pq_lut_update_done---%d\n", cnt->int_cnt_pq_lut_update_done);
+		DRM_INFO("int_cnt_dpu_int_done---------%d\n", cnt->int_cnt_dpu_int_done);
+		DRM_INFO("int_cnt_dpu_int_err----------%d\n", cnt->int_cnt_dpu_int_err);
+		DRM_INFO("int_cnt_dpu_int_wb_done------%d\n", cnt->int_cnt_dpu_int_wb_done);
+		DRM_INFO("int_cnt_dpu_int_wb_err-------%d\n", cnt->int_cnt_dpu_int_wb_err);
+		DRM_INFO("int_cnt_dpu_int_fbc_pld_err--%d\n", cnt->int_cnt_dpu_int_fbc_pld_err);
+		DRM_INFO("int_cnt_dpu_int_fbc_hdr_err--%d\n", cnt->int_cnt_dpu_int_fbc_hdr_err);
+		DRM_INFO("int_cnt_dpu_int_mmu----------%d\n", cnt->int_cnt_dpu_int_mmu);
+
+		if (dpu->core->reg_dump)
+			dpu->core->reg_dump(ctx);
+	}
+
+	memset(cnt, 0, sizeof(struct dpu_int_cnt));
+
+	mod_timer(&ctx->int_cnt_timer, jiffies + msecs_to_jiffies(1000));
+}
+
+static void int_cnt_timer_init(struct dpu_context *ctx)
+{
+	timer_setup(&ctx->int_cnt_timer, int_cnt_timer_callback, 0);
+	ctx->int_cnt_timer.expires = jiffies + msecs_to_jiffies(1000);
+	add_timer(&ctx->int_cnt_timer);
+}
+
+static void int_cnt_timer_exit(struct dpu_context *ctx)
+{
+	del_timer(&ctx->int_cnt_timer);
+	memset(&ctx->int_cnt, 0, sizeof(struct dpu_int_cnt));
+}
 
 int dpu_wait_te_flush(struct dpu_context *ctx)
 {
@@ -474,6 +521,8 @@ void sprd_dpu_enable(struct sprd_dpu *dpu)
 	if (dpu->core->ifconfig)
 		dpu->core->ifconfig(ctx);
 
+	int_cnt_timer_init(ctx);
+
 	ctx->enabled = true;
 
 	up(&ctx->lock);
@@ -499,6 +548,8 @@ void sprd_dpu_disable(struct sprd_dpu *dpu)
 		return;
 	}
 
+	int_cnt_timer_exit(ctx);
+
 	if (dpu->core->fini)
 		dpu->core->fini(ctx);
 	if (dpu->clk->disable)
@@ -523,8 +574,10 @@ static irqreturn_t sprd_dpu_isr(int irq, void *data)
 
 	int_mask = dpu->core->isr(ctx);
 
-	if (int_mask & BIT_DPU_INT_ERR)
+	if (int_mask & BIT_DPU_INT_ERR) {
+		ctx->int_cnt.int_cnt_dpu_int_err++;
 		DRM_WARN("Warning: dpu underflow!\n");
+	}
 
 	return IRQ_HANDLED;
 }

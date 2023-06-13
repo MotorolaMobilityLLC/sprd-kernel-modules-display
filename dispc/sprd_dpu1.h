@@ -21,6 +21,7 @@
 #include "disp_lib.h"
 #include "disp_trusty.h"
 
+#define DPU1_INT_MAX_CNT	300
 #define DRM_FORMAT_P010		fourcc_code('P', '0', '1', '0')
 
 enum {
@@ -50,6 +51,7 @@ struct dpu_core_ops {
 	void (*bg_color)(struct dpu_context *ctx, u32 color);
 	int (*context_init)(struct dpu_context *ctx, struct device_node *np);
 	int (*modeset)(struct dpu_context *ctx, struct drm_display_mode *mode);
+	void (*reg_dump)(struct dpu_context *ctx);
 };
 
 struct dpu_clk_ops {
@@ -76,6 +78,24 @@ struct dpu_qos_cfg {
 	u8 arqos_high;
 	u8 awqos_low;
 	u8 awqos_high;
+};
+
+struct dpu_int_cnt {
+	u16 int_cnt_all;
+	u16 int_cnt_vsync;
+	u16 int_cnt_te;
+	u16 int_cnt_lay_reg_update_done;
+	u16 int_cnt_dpu_reg_update_done;
+	u16 int_cnt_dpu_all_update_done;
+	u16 int_cnt_pq_reg_update_done;
+	u16 int_cnt_pq_lut_update_done;
+	u16 int_cnt_dpu_int_done;
+	u16 int_cnt_dpu_int_err;
+	u16 int_cnt_dpu_int_wb_done;
+	u16 int_cnt_dpu_int_wb_err;
+	u16 int_cnt_dpu_int_fbc_pld_err;
+	u16 int_cnt_dpu_int_fbc_hdr_err;
+	u16 int_cnt_dpu_int_mmu;
 };
 
 struct dpu_context {
@@ -126,6 +146,8 @@ struct dpu_context {
 	u32 prev_y2r_coef;
 	u64 frame_count;
 	int time;
+	struct dpu_int_cnt int_cnt;
+	struct timer_list dpu1_int_cnt_timer;
 
 	bool bypass_mode;
 	u32 hdr_static_metadata[9];
