@@ -2070,7 +2070,7 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
-	struct cm_cfg cm_final;
+	struct cm_cfg cm_final = {0};
 	struct cm_cfg cm_zero = {0};
 
 	if (cm_status == CM_PQ) {
@@ -2107,6 +2107,7 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	DPU_REG_WR(ctx->base + REG_CM_COEF21_20, (cm_final.c21 << 16) | cm_final.c20);
 	DPU_REG_WR(ctx->base + REG_CM_COEF23_22, (cm_final.c23 << 16) | cm_final.c22);
 	DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(2));
+	enhance->enhance_en |= BIT(2);
 
 	if (cm_status == CM_CTM)
 		DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
