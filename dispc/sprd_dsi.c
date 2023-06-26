@@ -9,6 +9,7 @@
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/of_graph.h>
+#include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <video/mipi_display.h>
 
@@ -49,6 +50,9 @@ static void sprd_dsi_enable(struct sprd_dsi *dsi)
 		sprd_dsi_dpi_video(dsi);
 	else
 		sprd_dsi_edpi_video(dsi);
+
+	if (dsi->dsi_slave)
+		sprd_dsi_enable(dsi->dsi_slave);
 }
 
 static void sprd_dsi_disable(struct sprd_dsi *dsi)
@@ -59,6 +63,9 @@ static void sprd_dsi_disable(struct sprd_dsi *dsi)
 		dsi->glb->disable(&dsi->ctx);
 	if (dsi->glb->power)
 		dsi->glb->power(&dsi->ctx, false);
+
+	if (dsi->dsi_slave)
+		sprd_dsi_disable(dsi->dsi_slave);
 }
 
 int dsi_panel_set_dpms_mode(struct sprd_dsi *dsi)
@@ -145,6 +152,8 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	sprd_dphy_enable(dsi->phy);
 
 	sprd_dsi_lp_cmd_enable(dsi, true);
+	if (dsi->dsi_slave)
+		sprd_dsi_lp_cmd_enable(dsi->dsi_slave, true);
 
 	if (dsi->panel) {
 		if ((dsi->ctx.last_dpms == DRM_MODE_DPMS_SUSPEND) &&
@@ -175,6 +184,17 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 		sprd_dsi_nc_clk_en(dsi, true);
 	else
 		sprd_dphy_hs_clk_en(dsi->phy, true);
+
+	if (dsi->dsi_slave) {
+		sprd_dsi_set_work_mode(dsi->dsi_slave,
+				dsi->dsi_slave->ctx.work_mode);
+		sprd_dsi_state_reset(dsi->dsi_slave);
+
+		if (dsi->dsi_slave->ctx.nc_clk_en)
+			sprd_dsi_nc_clk_en(dsi->dsi_slave, true);
+		else
+			sprd_dphy_hs_clk_en(dsi->phy->slave, true);
+	}
 
 	/* workaround:
 	 * dpu r6p0 need resume after dsi resume on div6 scences
@@ -238,6 +258,11 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 	}
 	sprd_dsi_set_work_mode(dsi, DSI_MODE_CMD);
 	sprd_dsi_lp_cmd_enable(dsi, true);
+
+	if (dsi->dsi_slave) {
+		sprd_dsi_set_work_mode(dsi->dsi_slave, DSI_MODE_CMD);
+		sprd_dsi_lp_cmd_enable(dsi->dsi_slave, true);
+	}
 
 	if (dsi->panel) {
 		if ((dsi->ctx.dpms == DRM_MODE_DPMS_SUSPEND) &&
@@ -403,6 +428,11 @@ static int sprd_dsi_phy_attach(struct sprd_dsi *dsi)
 	dsi->phy->ctx.lanes = dsi->ctx.lanes;
 	dsi->phy->ctx.freq = dsi->ctx.byte_clk * 8;
 
+	if (dsi->dsi_slave && dsi->phy->slave) {
+		dsi->phy->slave->ctx.lanes = dsi->ctx.lanes;
+		dsi->phy->slave->ctx.freq = dsi->phy->ctx.freq;
+	}
+
 	return 0;
 }
 
@@ -411,6 +441,7 @@ static int sprd_dsi_host_attach(struct mipi_dsi_host *host,
 {
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	struct dsi_context *ctx = &dsi->ctx;
+	struct dsi_context *ctx_slave;
 	struct device_node *lcd_node;
 	u32 val;
 	int ret;
@@ -473,6 +504,17 @@ static int sprd_dsi_host_attach(struct mipi_dsi_host *host,
 	else
 		ctx->video_lp_config = 15;
 
+	if (dsi->dsi_slave) {
+		ctx_slave = &dsi->dsi_slave->ctx;
+		ctx_slave->lanes = ctx->lanes;
+		ctx_slave->format = ctx->format;
+		ctx_slave->work_mode = ctx->work_mode;
+		ctx_slave->burst_mode = ctx->burst_mode;
+		ctx_slave->nc_clk_en = ctx->nc_clk_en;
+		ctx_slave->byte_clk = ctx->byte_clk;
+		ctx_slave->esc_clk = ctx->esc_clk;
+	}
+
 	return 0;
 }
 
@@ -489,6 +531,7 @@ static ssize_t sprd_dsi_host_transfer(struct mipi_dsi_host *host,
 {
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	const u8 *tx_buf = msg->tx_buf;
+	int ret = 0;
 
 	if (msg->rx_buf && msg->rx_len) {
 		u8 lsb = (msg->tx_len > 0) ? tx_buf[0] : 0;
@@ -498,9 +541,15 @@ static ssize_t sprd_dsi_host_transfer(struct mipi_dsi_host *host,
 				msb, lsb, msg->rx_buf, msg->rx_len);
 	}
 
-	if (msg->tx_buf && msg->tx_len)
-		return sprd_dsi_wr_pkt(dsi, msg->channel, msg->type,
+	if (msg->tx_buf && msg->tx_len) {
+		ret = sprd_dsi_wr_pkt(dsi, msg->channel, msg->type,
 					tx_buf, msg->tx_len);
+
+		if (dsi->dsi_slave)
+			ret = sprd_dsi_wr_pkt(dsi->dsi_slave, msg->channel, msg->type,
+					tx_buf, msg->tx_len);
+		return ret;
+	}
 
 	return 0;
 }
@@ -703,6 +752,13 @@ static int sprd_dsi_glb_init(struct sprd_dsi *dsi)
 	if (dsi->glb->enable)
 		dsi->glb->enable(&dsi->ctx);
 
+	if (dsi->dsi_slave) {
+		if (dsi->dsi_slave->glb && dsi->dsi_slave->glb->power)
+			dsi->dsi_slave->glb->power(&dsi->dsi_slave->ctx, true);
+		if (dsi->dsi_slave->glb && dsi->dsi_slave->glb->enable)
+			dsi->dsi_slave->glb->enable(&dsi->dsi_slave->ctx);
+	}
+
 	return 0;
 }
 
@@ -811,7 +867,7 @@ static int sprd_dsi_device_create(struct sprd_dsi *dsi,
 	dsi->dev.class = display_class;
 	dsi->dev.parent = parent;
 	dsi->dev.of_node = parent->of_node;
-	dev_set_name(&dsi->dev, "dsi");
+	dev_set_name(&dsi->dev, "dsi%d", dsi->ctx.id);
 	dev_set_drvdata(&dsi->dev, dsi);
 
 	ret = device_register(&dsi->dev);
@@ -859,6 +915,9 @@ static int sprd_dsi_context_init(struct sprd_dsi *dsi, struct device_node *np)
 		DRM_ERROR("dsi ctrl reg base ioremap failed\n");
 		return -ENODEV;
 	}
+
+	if (!of_property_read_u32(np, "dev-id", &tmp))
+		ctx->id = tmp;
 
 	if (!of_property_read_u32(np, "sprd,data-hs2lp", &tmp))
 		ctx->data_hs2lp = tmp;
@@ -937,6 +996,11 @@ static const struct sprd_dsi_ops qogirn6pro_dsi = {
 	.glb = &qogirn6pro_dsi_glb_ops
 };
 
+static const struct sprd_dsi_ops qogirn6pro_dsi1 = {
+	.core = &dsi_ctrl_r1p0_ops,
+	.glb = &qogirn6pro_dsi_s_glb_ops,
+};
+
 static const struct sprd_dsi_ops qogirn6lite_dsi = {
 	.core = &dsi_ctrl_r1p1_ops,
 	.glb = &qogirn6lite_dsi_glb_ops
@@ -957,10 +1021,52 @@ static const struct of_device_id dsi_match_table[] = {
 	  .data = &qogirl6_dsi },
 	{ .compatible = "sprd,qogirn6pro-dsi-host",
 	  .data = &qogirn6pro_dsi },
+	{ .compatible = "sprd,qogirn6pro-dsi1-host",
+	  .data = &qogirn6pro_dsi1 },
 	{ .compatible = "sprd,qogirn6lite-dsi-host",
 	  .data = &qogirn6lite_dsi },
 	{ /* sentinel */ },
 };
+
+int sprd_dual_dsi_parse_dt(struct sprd_dsi *dsi, struct device_node *np) {
+	struct device_node *lcd_node;
+	int rc;
+	u32 val;
+
+	lcd_node = sprd_get_panel_node_by_name();
+	if (!lcd_node)
+		return -ENODEV;
+
+	rc = of_property_read_u32(lcd_node, "sprd,dual-dsi-enable", &val);
+	if (!rc)
+		dsi->dual_dsi_en = val;
+	else
+		DRM_DEBUG("dual-dsi-enable is not found!\n");
+
+	return 0;
+}
+
+static int sprd_dsi_dual_channel_init(struct sprd_dsi *dsi)
+{
+	struct device_node *np;
+	struct platform_device *secondary;
+
+	np = of_parse_phandle(dsi->dev.of_node, "sprd,dual-channel", 0);
+	if (np) {
+		DRM_INFO("find sprd,dual-channel\n");
+		secondary = of_find_device_by_node(np);
+		dsi->dsi_slave = dev_get_drvdata(&secondary->dev);
+		of_node_put(np);
+
+		if (!dsi->dsi_slave)
+			return -EPROBE_DEFER;
+
+		dsi->dsi_slave->dsi_master = dsi;
+		dsi->dsi_slave->dual_dsi_en = 1;
+	}
+
+	return 0;
+}
 
 static int sprd_dsi_probe(struct platform_device *pdev)
 {
@@ -1008,6 +1114,23 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, dsi);
+
+	if (dsi->ctx.id) {
+		DRM_INFO("dsi slave skip other action\n");
+		return 0;
+	}
+
+	ret = sprd_dual_dsi_parse_dt(dsi, np);
+	if (ret) {
+		DRM_ERROR("parse dual dsi info failed\n");
+		return ret;
+	}
+
+	if (dsi->dual_dsi_en) {
+		ret = sprd_dsi_dual_channel_init(dsi);
+		if (ret)
+			return ret;
+	}
 
 	ret = sprd_dsi_host_init(&pdev->dev, dsi);
 	if (ret)

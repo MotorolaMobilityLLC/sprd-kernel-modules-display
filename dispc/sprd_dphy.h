@@ -87,6 +87,8 @@ struct sprd_dphy {
 	const struct dphy_ppi_ops *ppi;
 	const struct dphy_pll_ops *pll;
 	const struct dphy_glb_ops *glb;
+	struct sprd_dphy *master;
+	struct sprd_dphy *slave;
 };
 
 int sprd_dphy_enable(struct sprd_dphy *dphy);
@@ -104,4 +106,5 @@ extern const struct dphy_glb_ops sharkl5pro_dphy_glb_ops;
 extern const struct dphy_glb_ops qogirl6_dphy_glb_ops;
 extern const struct dphy_glb_ops qogirn6pro_dphy_glb_ops;
 extern const struct dphy_glb_ops qogirn6lite_dphy_glb_ops;
+extern const struct dphy_glb_ops qogirn6pro_dphy_s_glb_ops;
 #endif /* _SPRD_DPHY_H_ */

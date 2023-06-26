@@ -147,11 +147,16 @@ int sprd_dphy_ssc_en(struct sprd_dphy *dphy, bool en)
 	return 0;
 }
 
-void sprd_dphy_fini(struct sprd_dphy *dphy)
+int sprd_dphy_fini(struct sprd_dphy *dphy)
 {
+	if (!dphy)
+		return -ENODEV;
+
 	dphy_hal_rstz(dphy, 0);
 	dphy_hal_shutdownz(dphy, 0);
 	dphy_hal_rstz(dphy, 1);
+
+	return 0;
 }
 
 void sprd_dphy_data_ulps_enter(struct sprd_dphy *dphy)

@@ -114,6 +114,20 @@ int sprd_dphy_enable(struct sprd_dphy *dphy)
 		return -EINVAL;
 	}
 
+	if (dphy->slave) {
+		if (dphy->slave->glb && dphy->slave->glb->power)
+			dphy->slave->glb->power(&dphy->slave->ctx, true);
+		if (dphy->slave->glb && dphy->slave->glb->enable)
+			dphy->slave->glb->enable(&dphy->slave->ctx);
+
+		ret = sprd_dphy_init(dphy->slave);
+		if (ret) {
+			mutex_unlock(&dphy->ctx.lock);
+			DRM_ERROR("sprd dphy slave init failed\n");
+			return -EINVAL;
+		}
+	}
+
 	dphy->ctx.enabled = true;
 	mutex_unlock(&dphy->ctx.lock);
 
@@ -122,11 +136,25 @@ int sprd_dphy_enable(struct sprd_dphy *dphy)
 
 int sprd_dphy_disable(struct sprd_dphy *dphy)
 {
+	int ret;
+
 	mutex_lock(&dphy->ctx.lock);
 	if (dphy->glb->disable)
 		dphy->glb->disable(&dphy->ctx);
 	if (dphy->glb->power)
 		dphy->glb->power(&dphy->ctx, false);
+
+	if (dphy->slave) {
+		ret = sprd_dphy_fini(dphy->slave);
+		if (ret)
+			DRM_ERROR("sprd dphy slave fini failed\n");
+
+		if (dphy->slave->glb && dphy->slave->glb->disable)
+			dphy->slave->glb->disable(&dphy->slave->ctx);
+		if (dphy->slave->glb && dphy->slave->glb->power)
+			dphy->slave->glb->power(&dphy->slave->ctx, false);
+
+	}
 
 	dphy->ctx.enabled = false;
 	mutex_unlock(&dphy->ctx.lock);
@@ -142,7 +170,7 @@ static int sprd_dphy_device_create(struct sprd_dphy *dphy,
 	dphy->dev.class = display_class;
 	dphy->dev.parent = parent;
 	dphy->dev.of_node = parent->of_node;
-	dev_set_name(&dphy->dev, "dphy0");
+	dev_set_name(&dphy->dev, "dphy%d", dphy->ctx.id);
 	dev_set_drvdata(&dphy->dev, dphy);
 
 	ret = device_register(&dphy->dev);
@@ -156,6 +184,7 @@ static int sprd_dphy_context_init(struct sprd_dphy *dphy,
 				  struct device_node *np)
 {
 	struct resource r;
+	u32 tmp;
 
 	if (dphy->glb->parse_dt)
 		dphy->glb->parse_dt(&dphy->ctx, np);
@@ -182,12 +211,35 @@ static int sprd_dphy_context_init(struct sprd_dphy *dphy,
 		}
 	}
 
+	if (!of_property_read_u32(np, "dev-id", &tmp))
+		dphy->ctx.id = tmp;
+
 	mutex_init(&dphy->ctx.lock);
 	dphy->ctx.enabled = true;
 
 	return 0;
 }
 
+static int sprd_dphy_dual_channel_init(struct sprd_dphy *dphy)
+{
+	struct device_node *np;
+	struct platform_device *secondary;
+
+	np = of_parse_phandle(dphy->dev.of_node, "sprd,dual-channel", 0);
+	if (np) {
+		DRM_INFO("find sprd,dual-channel\n");
+		secondary = of_find_device_by_node(np);
+		dphy->slave = dev_get_drvdata(&secondary->dev);
+		of_node_put(np);
+
+		if (!dphy->slave)
+			return -EPROBE_DEFER;
+
+		dphy->slave->master = dphy;
+	}
+
+	return 0;
+}
 
 static const struct sprd_dphy_ops sharkle_dphy = {
 	.ppi = &dsi_ctrl_ppi_ops,
@@ -231,6 +283,12 @@ static const struct sprd_dphy_ops qogirn6pro_dphy = {
 	.glb = &qogirn6pro_dphy_glb_ops,
 };
 
+static const struct sprd_dphy_ops qogirn6pro_dphy1 = {
+	.ppi = &dsi_ctrl_ppi_ops,
+	.pll = &sharkl5_dphy_pll_ops,
+	.glb = &qogirn6pro_dphy_s_glb_ops,
+};
+
 static const struct sprd_dphy_ops qogirn6lite_dphy = {
 	.ppi = &dsi_ctrl_ppi1_ops,
 	.pll = &sharkl5_dphy_pll_ops,
@@ -254,6 +312,8 @@ static const struct of_device_id dphy_match_table[] = {
 	  .data = &qogirn6pro_dphy },
 	{ .compatible = "sprd,qogirn6lite-dsi-phy",
 	  .data = &qogirn6lite_dphy },
+	{ .compatible = "sprd,qogirn6pro-dsi1-phy",
+	.data = &qogirn6pro_dphy1 },
 	{ /* sentinel */ },
 };
 
@@ -262,6 +322,7 @@ static int sprd_dphy_probe(struct platform_device *pdev)
 	const struct sprd_dphy_ops *pdata;
 	struct sprd_dphy *dphy;
 	struct device *dsi_dev;
+	struct sprd_dsi *dsi;
 	int ret;
 
 	dphy = devm_kzalloc(&pdev->dev, sizeof(*dphy), GFP_KERNEL);
@@ -286,6 +347,8 @@ static int sprd_dphy_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	DRM_INFO("dphy driver probe (dphy->ctx.id=%d)\n", dphy->ctx.id);
+
 	ret = sprd_dphy_device_create(dphy, &pdev->dev);
 	if (ret)
 		return ret;
@@ -299,6 +362,15 @@ static int sprd_dphy_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, dphy);
+
+	dsi = dev_get_drvdata(dsi_dev);
+	if (dsi->dual_dsi_en) {
+		ret = sprd_dphy_dual_channel_init(dphy);
+		if (ret)
+			return ret;
+	}
+
+	DRM_INFO("dphy driver probe success\n");
 
 	return 0;
 }

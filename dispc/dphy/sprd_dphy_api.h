@@ -9,7 +9,7 @@
 #include "sprd_dphy.h"
 
 int sprd_dphy_init(struct sprd_dphy *dphy);
-void sprd_dphy_fini(struct sprd_dphy *dphy);
+int sprd_dphy_fini(struct sprd_dphy *dphy);
 void sprd_dphy_reset(struct sprd_dphy *dphy);
 void sprd_dphy_shutdown(struct sprd_dphy *dphy);
 int sprd_dphy_hop_config(struct sprd_dphy *dphy, int delta, int period);

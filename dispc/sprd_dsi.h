@@ -60,6 +60,7 @@ struct dsi_context {
 	unsigned long base;
 	struct videomode vm;
 	bool enabled;
+	u8 id;
 	u8 channel;
 	u8 lanes;
 	u32 format;
@@ -238,6 +239,9 @@ struct sprd_dsi {
 	struct edid edid_info;
 	struct drm_property *edid_prop;
 	struct drm_property_blob *edid_blob;
+	struct sprd_dsi *dsi_master;
+	struct sprd_dsi *dsi_slave;
+	u32 dual_dsi_en;
 };
 
 #ifdef CONFIG_DRM_SPRD_DSI
@@ -258,4 +262,5 @@ extern const struct dsi_glb_ops sharkl5pro_dsi_glb_ops;
 extern const struct dsi_glb_ops qogirl6_dsi_glb_ops;
 extern const struct dsi_glb_ops qogirn6pro_dsi_glb_ops;
 extern const struct dsi_glb_ops qogirn6lite_dsi_glb_ops;
+extern const struct dsi_glb_ops qogirn6pro_dsi_s_glb_ops;
 #endif /* _SPRD_DSI_H_ */
