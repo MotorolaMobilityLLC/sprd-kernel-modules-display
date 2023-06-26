@@ -97,7 +97,7 @@ static int dp_glb_parse_dt(struct dp_context *ctx,
 	if (!gpio_is_valid(ctx->gpio_en1))
 		ctx->gpio_en1 = -EINVAL;
 	else {
-		ret = gpio_request_one(ctx->gpio_en1, GPIOF_OUT_INIT_HIGH, "GPIO_EN1");
+		ret = gpio_request_one(ctx->gpio_en1, GPIOF_OUT_INIT_LOW, "GPIO_EN1");
 		if (ret < 0 && ret != -EBUSY)
 			pr_err("gpio_request_one GPIO_EN1 failed!\n");
 	}
@@ -106,7 +106,7 @@ static int dp_glb_parse_dt(struct dp_context *ctx,
 	if (!gpio_is_valid(ctx->gpio_en2))
 		ctx->gpio_en2 = -EINVAL;
 	else {
-		ret = gpio_request_one(ctx->gpio_en2, GPIOF_OUT_INIT_HIGH, "GPIO_EN2");
+		ret = gpio_request_one(ctx->gpio_en2, GPIOF_OUT_INIT_LOW, "GPIO_EN2");
 		if (ret < 0 && ret != -EBUSY)
 			pr_err("gpio_request_one GPIO_EN2 failed!\n");
 	}
