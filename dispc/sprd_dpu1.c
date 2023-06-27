@@ -75,7 +75,7 @@ static void int_cnt_timer_init(struct dpu_context *ctx)
 
 static void int_cnt_timer_exit(struct dpu_context *ctx)
 {
-	del_timer(&ctx->dpu1_int_cnt_timer);
+	del_timer_sync(&ctx->dpu1_int_cnt_timer);
 	memset(&ctx->int_cnt, 0, sizeof(struct dpu_int_cnt));
 }
 
