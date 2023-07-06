@@ -651,7 +651,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 
 	ctx->max_vsync_count = 0;
 
-	ctx->wb_configed = false;
+	ctx->wb_configed = true;
 
 	INIT_WORK(&ctx->wb_work, dpu_wb_work_func);
 
