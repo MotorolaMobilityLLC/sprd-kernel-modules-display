@@ -1072,8 +1072,11 @@ static void dpu_cabc_work_func(struct work_struct *data)
 			spin_unlock_irq(&ctx->irq_lock);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
-			if (!ret)
+			if (!ret) {
 				pr_err("cabc set wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("cabc set waiting process is interrupted by signal!\n");
+			}
 		} else {
 			DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
 			dpu_wait_pq_update_done(ctx);
@@ -1812,8 +1815,11 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 			spin_unlock_irq(&ctx->irq_lock);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
-			if (!ret)
+			if (!ret) {
 				pr_err("bgcolor set wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("bgcolor set waiting process is interrupted by signal!\n");
+			}
 		} else {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
@@ -2285,8 +2291,11 @@ static void dpu_flip(struct dpu_context *ctx,
 			spin_unlock_irq(&ctx->irq_lock);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
-			if (!ret)
+			if (!ret) {
 				pr_err("dpu flip wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("dpu flip waiting process is interrupted by signal!\n");
+			}
 		} else {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
@@ -3073,8 +3082,11 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		spin_unlock_irq(&ctx->irq_lock);
 		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 							msecs_to_jiffies(20));
-		if (!ret)
+		if (!ret) {
 			pr_err("enhance set wait for te time out!\n");
+		} else if (ret == -ERESTARTSYS) {
+			pr_err("enhance set waiting preocess is interrupted by signal!\n");
+		}
 	} else	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
 		if (id == ENHANCE_CFG_ID_SCL) {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(3));

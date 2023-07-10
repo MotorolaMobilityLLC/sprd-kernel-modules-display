@@ -93,6 +93,8 @@ int dpu_wait_te_flush(struct dpu_context *ctx)
 		/* time out */
 		pr_err("dpu wait for te time out!\n");
 		return -1;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu waiting process is interrupted by signal!\n");
 	}
 
 	return 0;
