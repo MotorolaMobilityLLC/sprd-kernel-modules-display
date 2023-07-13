@@ -3661,7 +3661,9 @@ static int dpu_modeset(struct dpu_context *ctx,
 		ctx->wb_pending = true;
 
 		dpu->crtc->sr_mode_changed = state->resolution_change;
-	} else if (state->frame_rate_change) {
+	}
+
+	if (state->frame_rate_change) {
 		dpu->crtc->fps_mode_changed = state->frame_rate_change;
 	}
 
