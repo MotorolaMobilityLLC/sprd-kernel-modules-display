@@ -8,14 +8,26 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_print.h>
+#include <linux/kthread.h>
 
 #define GSP_MAX_NUM 2
 
+struct sprd_commit_list {
+	struct list_head head;
+	struct drm_atomic_state *state;
+};
+
 struct sprd_drm {
 	struct drm_device *drm;
+	struct sprd_commit_list *commit;
 	struct device *gsp_dev[GSP_MAX_NUM];
 	struct drm_atomic_state *state;
 	struct mutex state_lock;
+	struct list_head post_list;
+	struct mutex post_lock;
+	struct kthread_worker post_worker;
+	struct task_struct *post_thread;
+	struct kthread_work post_work;
 };
 
 #ifdef CONFIG_DRM_SPRD_DUMMY

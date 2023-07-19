@@ -20,6 +20,7 @@
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
+#include <uapi/linux/sched/types.h>
 
 #include "sprd_drm.h"
 #include "sprd_drm_gsp.h"
@@ -209,12 +210,22 @@ static void sprd_commit_tail(struct drm_atomic_state *old_state)
 	drm_atomic_state_put(old_state);
 }
 
-static void sprd_commit_work(struct work_struct *work)
+static void sprd_commit_work(struct kthread_work *work)
 {
-	struct drm_atomic_state *state = container_of(work,
-						      struct drm_atomic_state,
-						      commit_work);
-	sprd_commit_tail(state);
+	struct sprd_drm *drm =
+                        container_of(work, struct sprd_drm, post_work);
+	struct list_head saved_list;
+	struct sprd_commit_list *old_commits, *next;
+
+	mutex_lock(&drm->post_lock);
+	memcpy(&saved_list, &drm->post_list, sizeof(saved_list));
+	list_replace_init(&drm->post_list, &saved_list);
+	mutex_unlock(&drm->post_lock);
+
+	list_for_each_entry_safe(old_commits, next, &saved_list, head) {
+		sprd_commit_tail(old_commits->state);
+		kfree(old_commits);
+	}
 }
 
 int sprd_atomic_helper_commit(struct drm_device *dev,
@@ -222,11 +233,10 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 {
 	int ret;
 	struct sprd_drm *sprd;
+
 	ret = drm_atomic_helper_setup_commit(state, false);
 	if (ret)
 		return ret;
-
-	INIT_WORK(&state->commit_work, sprd_commit_work);
 
 	ret = drm_atomic_helper_prepare_planes(dev, state);
 	if (ret)
@@ -254,10 +264,24 @@ int sprd_atomic_helper_commit(struct drm_device *dev,
 		goto err;
 
 	drm_atomic_state_get(state);
-	if (nonblock)
-		queue_work(system_unbound_wq, &state->commit_work);
-	else
+	if (nonblock) {
+		mutex_lock(&sprd->post_lock);
+		sprd->commit = kzalloc(sizeof(struct sprd_commit_list), GFP_KERNEL);
+		if (!sprd->commit) {
+			ret = -ENOMEM;
+			DRM_ERROR("there is no memory for commit\n");
+			mutex_unlock(&sprd->post_lock);
+			goto err;
+		}
+		sprd->commit->state = state;
+		INIT_LIST_HEAD(&sprd->commit->head);
+		list_add_tail(&sprd->commit->head, &sprd->post_list);
+		mutex_unlock(&sprd->post_lock);
+		kthread_queue_work(&sprd->post_worker, &sprd->post_work);
+	}
+	else {
 		sprd_commit_tail(state);
+	}
 
 	return 0;
 
@@ -329,6 +353,7 @@ static int sprd_drm_bind(struct device *dev)
 {
 	struct drm_device *drm;
 	struct sprd_drm *sprd;
+	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 	int err;
 
 	DRM_INFO("%s()\n", __func__);
@@ -346,6 +371,7 @@ static int sprd_drm_bind(struct device *dev)
 	}
 
 	drm->dev_private = sprd;
+	sprd->drm = drm;
 
 	/* get the optional framebuffer memory resource */
 	err = of_reserved_mem_device_init_by_idx(drm->dev,
@@ -382,6 +408,14 @@ static int sprd_drm_bind(struct device *dev)
 	err = drm_dev_register(drm, 0);
 	if (err < 0)
 		goto err_kms_helper_poll_fini;
+
+	INIT_LIST_HEAD(&sprd->post_list);
+	mutex_init(&sprd->post_lock);
+	kthread_init_worker(&sprd->post_worker);
+	sprd->post_thread = kthread_run(kthread_worker_fn,
+			&sprd->post_worker, "sprd-drm");
+	sched_setscheduler(sprd->post_thread, SCHED_FIFO, &param);
+	kthread_init_work(&sprd->post_work, sprd_commit_work);
 
 	return 0;
 
