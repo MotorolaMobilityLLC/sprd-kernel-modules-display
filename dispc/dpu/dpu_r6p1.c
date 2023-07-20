@@ -22,7 +22,7 @@
 #include "sprd_crtc.h"
 #include "sprd_plane.h"
 #include "sprd_dsi_panel.h"
-#include "dpu_r6p1_scale_param.h"
+#include "dpu_r6px_scale_param.h"
 #include <../drivers/trusty/trusty.h>
 
 #define XFBC8888_HEADER_SIZE(w, h) (ALIGN((ALIGN((w), 16)) * \
@@ -1501,11 +1501,11 @@ static void dpu_scl_coef_cfg(struct dpu_context *ctx)
 
 	for (i = 0, j = 0; i < 64; i += 2) {
 
-		DPU_REG_WR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, r6p1_scl_coef[i] +
-			(r6p1_scl_coef[i+1] << 16));
+		DPU_REG_WR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, r6px_scl_coef[i] +
+			(r6px_scl_coef[i+1] << 16));
 
-		DPU_REG_WR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, r6p1_scl_coef[i] +
-			(r6p1_scl_coef[i+1] << 16));
+		DPU_REG_WR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, r6px_scl_coef[i] +
+			(r6px_scl_coef[i+1] << 16));
 		j++;
 	}
 }
