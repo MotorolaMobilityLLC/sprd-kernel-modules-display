@@ -2843,6 +2843,20 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 		dpu_wait_pq_lut_reg_update_done(ctx);
 }
 
+static void enhance_config_mode(u32 *p32, struct dpu_enhance *enhance)
+{
+	if (*p32 & ENHANCE_MODE_UI)
+		enhance->cabc_para.video_mode = 0;
+	else if (*p32 & ENHANCE_MODE_FULL_FRAME)
+		enhance->cabc_para.video_mode = 1;
+	else if (*p32 & ENHANCE_MODE_VIDEO)
+		enhance->cabc_para.video_mode = 1;
+	else if (*p32 & ENHANCE_MODE_CAMERA)
+		enhance->flash_finished = 1;
+	else
+		pr_info("enhance config other mode\n");
+}
+
 static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
@@ -3024,14 +3038,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		break;
 	case ENHANCE_CFG_ID_MODE:
 		p32 = param;
-		if (*p32 & ENHANCE_MODE_UI)
-			enhance->cabc_para.video_mode = 0;
-		else if (*p32 & ENHANCE_MODE_FULL_FRAME)
-			enhance->cabc_para.video_mode = 1;
-		else if (*p32 & ENHANCE_MODE_VIDEO)
-			enhance->cabc_para.video_mode = 1;
-		else if (*p32 & ENHANCE_MODE_CAMERA)
-			enhance->flash_finished = 1;
+		enhance_config_mode(p32, enhance);
 		pr_info("enhance mode = 0x%x\n", *p32);
 		return;
 	case ENHANCE_CFG_ID_CABC_PARAM:
