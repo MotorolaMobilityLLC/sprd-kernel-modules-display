@@ -897,7 +897,7 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 		DPU_REG_WR(ctx->base + REG_WB_CFG, ((ctx->wb_layer.fbc_hsize_r << 16) | BIT(0)));
 	}
 
-	ctx->max_vsync_count = 4;
+	ctx->max_vsync_count = 0;
 	ctx->wb_configed = true;
 	ctx->evt_wb_done = true;
 	ctx->need_wb_work = true;
@@ -1911,7 +1911,7 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	ctx->base_offset[0] = 0x0;
 	ctx->base_offset[1] = DPU_MAX_REG_OFFSET / 4;
 
-	ctx->wb_configed = false;
+	ctx->wb_configed = true;
 
 	/* Allocate memory for trusty */
 	ctx->tos_msg = kmalloc(sizeof(struct disp_message) + sizeof(struct layer_reg), GFP_KERNEL);
