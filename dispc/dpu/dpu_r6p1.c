@@ -662,14 +662,11 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	u32 reg_val, int_mask = 0;
 	u32 mmu_reg_val, mmu_int_mask = 0;
 	u32 mmu1_reg_val, mmu1_int_mask = 0;
-	struct timespec64 ts;
-	uint64_t time;
-	uint64_t gap;
+	ktime_t time;
+	ktime_t gap;
 
-	ctx->int_cnt.int_cnt_all++;
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_INT_STS);
 	if (reg_val & BIT_DPU_INT_TE) {
-		ctx->int_cnt.int_cnt_te++;
 		/*
 		 * FIXME:
 		 * In CMD mode, mipi host send data to panel should sync with TE signal.
@@ -680,26 +677,30 @@ static u32 dpu_isr(struct dpu_context *ctx)
 		 * In order to keep display normally, we drop frame when TE occurs too late.
 		 */
 		if (ctx->cmd_dpi_mode) {
-			ktime_get_real_ts64(&ts);
-			time = ts.tv_sec * 1000000 + (time64_t)ts.tv_nsec * 1000 / 1000000;
-			if (!ctx->te_int_time) {
-				ctx->te_int_time = time;
-				gap = 0;
-			} else {
-				gap = time - ctx->te_int_time;
-				ctx->te_int_time = time;
-			}
 			spin_lock(&ctx->irq_lock);
+			time = ktime_get();
+			gap = time - ctx->te_int_time;
+			ctx->te_int_time = time;
+
 			if (ctx->dpu_run_flag) {
-				if (gap > ctx->te_int_max_gap) {
-					pr_warn("dpu te int occur too late, skip this frame, gap is :%ld, max gap is %ld\n", gap, ctx->te_int_max_gap);
+				if (gap < ctx->te_int_min_gap) {
+					pr_warn("dpu te int occur inappropriate, skip this frame, gap is :%ld, min gap is %ld\n", gap, ctx->te_int_min_gap);
 					ctx->dpu_run_flag = false;
+				} else if (gap > ctx->te_int_max_gap) {
+					pr_warn("dpu te int occur too late, skip this frame, gap is :%ld, max gap is %ld,\n", gap, ctx->te_int_max_gap);
+					ctx->dpu_run_flag = false;
+					ctx->evt_te_update = true;
+					wake_up_interruptible_all(&ctx->te_update_wq);
 				} else {
 					DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2) | BIT(0));
 					ctx->stopped = false;
 					ctx->dpu_run_flag = false;
+					ctx->evt_te_update = true;
+					wake_up_interruptible_all(&ctx->te_update_wq);
+					ctx->te_int_time = ktime_get();
 				}
 			}
+
 			ctx->evt_te = true;
 			spin_unlock(&ctx->irq_lock);
 			wake_up_interruptible_all(&ctx->te_wq);
@@ -735,7 +736,6 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
-		ctx->int_cnt.int_cnt_vsync++;
 		if (!ctx->cmd_dpi_mode) {
 			drm_crtc_handle_vblank(&dpu->crtc->base);
 
@@ -753,7 +753,6 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu update done isr */
 	if (reg_val & BIT_DPU_INT_LAY_REG_UPDATE_DONE) {
-		ctx->int_cnt.int_cnt_lay_reg_update_done++;
 		/* dpu dvfs feature */
 		tasklet_schedule(&ctx->dvfs_task);
 
@@ -762,32 +761,27 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	if (reg_val & BIT_DPU_INT_DPU_REG_UPDATE_DONE) {
-		ctx->int_cnt.int_cnt_dpu_reg_update_done++;
 		ctx->evt_all_regs_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	if (reg_val & BIT_DPU_INT_DPU_ALL_UPDATE_DONE) {
-		ctx->int_cnt.int_cnt_dpu_all_update_done++;
 		ctx->evt_all_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	if (reg_val & BIT_DPU_INT_PQ_REG_UPDATE_DONE) {
-		ctx->int_cnt.int_cnt_pq_reg_update_done++;
 		ctx->evt_pq_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	if (reg_val & BIT_DPU_INT_PQ_LUT_UPDATE_DONE) {
-		ctx->int_cnt.int_cnt_pq_lut_update_done++;
 		ctx->evt_pq_lut_update = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
 	}
 
 	/* dpu stop done isr */
 	if (reg_val & BIT_DPU_INT_DONE) {
-		ctx->int_cnt.int_cnt_dpu_int_done++;
 		ctx->evt_stop = true;
 		ctx->stopped = true;
 		wake_up_interruptible_all(&ctx->wait_queue);
@@ -795,9 +789,6 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu write back done isr */
 	if (reg_val & BIT_DPU_INT_WB_DONE_EN) {
-		ctx->int_cnt.int_cnt_dpu_int_wb_done++;
-		ctx->evt_wb_done = true;
-		wake_up_interruptible_all(&ctx->wait_queue);
 		/*
 		 * The write back is a time-consuming operation. If there is a
 		 * flip occurs before write back done, the write back buffer is
@@ -815,7 +806,6 @@ static u32 dpu_isr(struct dpu_context *ctx)
 
 	/* dpu write back error isr */
 	if (reg_val & BIT_DPU_INT_WB_ERR_EN) {
-		ctx->int_cnt.int_cnt_dpu_int_wb_err++;
 		pr_err("dpu write back fail\n");
 		/*give a new chance to write back*/
 		// if (ctx->max_vsync_count > 0) {
@@ -825,16 +815,12 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	}
 
 	/* dpu afbc payload error isr */
-	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR) {
-		ctx->int_cnt.int_cnt_dpu_int_fbc_pld_err++;
+	if (reg_val & BIT_DPU_INT_FBC_PLD_ERR)
 		pr_err("dpu afbc payload error\n");
-	}
 
 	/* dpu afbc header error isr */
-	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR) {
-		ctx->int_cnt.int_cnt_dpu_int_fbc_hdr_err++;
+	if (reg_val & BIT_DPU_INT_FBC_HDR_ERR)
 		pr_err("dpu afbc header error\n");
-	}
 
 	return reg_val;
 }
@@ -2287,14 +2273,16 @@ static void dpu_flip(struct dpu_context *ctx,
 		if (ctx->cmd_dpi_mode) {
 			spin_lock_irq(&ctx->irq_lock);
 			ctx->dpu_run_flag = true;
-			ctx->evt_te = false;
+			ctx->evt_te_update = false;
 			spin_unlock_irq(&ctx->irq_lock);
-			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+			ret = wait_event_interruptible_timeout(ctx->te_update_wq, ctx->evt_te_update,
 								msecs_to_jiffies(20));
 			if (!ret) {
+				spin_lock_irq(&ctx->irq_lock);
+				ctx->dpu_run_flag = false;
+				ctx->evt_te_update = false;
+				spin_unlock_irq(&ctx->irq_lock);
 				pr_err("dpu flip wait for te time out!\n");
-			} else if (ret == -ERESTARTSYS) {
-				pr_err("dpu flip waiting process is interrupted by signal!\n");
 			}
 		} else {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
@@ -3676,10 +3664,13 @@ static int dpu_modeset(struct dpu_context *ctx,
 
 	if (mode_vrefresh == 120) {
 		ctx->te_int_max_gap = WAIT_TE_MAX_TIME_120;
+		ctx->te_int_min_gap = WAIT_TE_MIN_TIME_120;
 	} else if (mode_vrefresh == 90) {
 		ctx->te_int_max_gap = WAIT_TE_MAX_TIME_90;
+		ctx->te_int_min_gap = WAIT_TE_MIN_TIME_90;
 	} else {
 		ctx->te_int_max_gap = WAIT_TE_MAX_TIME_60;
+		ctx->te_int_min_gap = WAIT_TE_MIN_TIME_60;
 	}
 
 	ctx->wb_size_changed = true;

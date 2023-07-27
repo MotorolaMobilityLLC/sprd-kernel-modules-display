@@ -791,6 +791,7 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	ctx->secure_debug = false;
 
 	init_waitqueue_head(&dpu->ctx.te_wq);
+	init_waitqueue_head(&dpu->ctx.te_update_wq);
 
 	return 0;
 }

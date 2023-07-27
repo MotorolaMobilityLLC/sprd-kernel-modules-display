@@ -31,9 +31,13 @@
 
 #define DPU_INT_MAX_CNT			300
 
-#define WAIT_TE_MAX_TIME_120	8600
-#define WAIT_TE_MAX_TIME_90		11500
-#define WAIT_TE_MAX_TIME_60		17100
+#define WAIT_TE_MAX_TIME_120		8600000
+#define WAIT_TE_MAX_TIME_90		11500000
+#define WAIT_TE_MAX_TIME_60		17100000
+
+#define WAIT_TE_MIN_TIME_120		7500000
+#define WAIT_TE_MIN_TIME_90		9000000
+#define WAIT_TE_MIN_TIME_60		14000000
 
 #define DPI_VREFRESH_120	120
 #define DPI_VREFRESH_90		90
@@ -235,7 +239,9 @@ struct dpu_context {
 
 	/* te check parameters */
 	wait_queue_head_t te_wq;
+	wait_queue_head_t te_update_wq;
 	bool te_check_en;
+	bool evt_te_update;
 	bool evt_te;
 
 	/* corner config parameters */
@@ -294,8 +300,9 @@ struct dpu_context {
 	uint32_t dpi_clk_90;
 	uint32_t dpi_clk_120;
 	bool is_single_run;
-	uint64_t te_int_time;
+	ktime_t te_int_time;
 	int te_int_max_gap;
+	int te_int_min_gap;
 	bool dpu_run_flag;
 	bool cmd_dpi_mode;
 };
