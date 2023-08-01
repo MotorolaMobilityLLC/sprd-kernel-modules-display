@@ -1937,8 +1937,8 @@ static void dpu_layer(struct dpu_context *ctx,
 			hwlayer->index), tmp.ctrl);
 	DPU_REG_SET(ctx->base + REG_LAYER_ENABLE,
 			(1 << hwlayer->index));
-	// DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PALLETE,
-				// hwlayer->index), tmp.pallete);
+	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PALLETE,
+			hwlayer->index), tmp.pallete);
 
 	pr_debug("dst_x = %d, dst_y = %d, dst_w = %d, dst_h = %d\n",
 				hwlayer->dst_x, hwlayer->dst_y,
