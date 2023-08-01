@@ -842,9 +842,12 @@ static int dpu_wait_stop_done(struct dpu_context *ctx)
 
 	ctx->stopped = true;
 
-	if (!rc)
+	if (!rc) {
 		/* time out */
 		pr_err("dpu wait for stop done time out!\n");
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for stop done process is interrupted by signal!\n");
+	}
 
 	for (i = 1; i <= 3000; i++) {
 		dpu_sts_21 = DPU_REG_RD(ctx->base + REG_DPU_STS_21);
@@ -885,6 +888,8 @@ static int dpu_wait_update_done(struct dpu_context *ctx)
 		/* time out */
 		pr_err("dpu wait for reg update done time out!\n");
 		return -1;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for reg update done process is interrupted by signal!\n");
 	}
 
 	return 0;
@@ -905,6 +910,8 @@ static int dpu_wait_all_regs_update_done(struct dpu_context *ctx)
 		/* time out */
 		pr_err("dpu wait for all regs update done time out!\n");
 		return -1;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for all regs update done process is interrupted by signal!\n");
 	}
 
 	return 0;
@@ -926,6 +933,8 @@ static int dpu_wait_pq_lut_reg_update_done(struct dpu_context *ctx)
 		/* time out */
 		pr_err("dpu wait for all luts update done time out!\n");
 		return -1;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for all luts update process is interrupted by signal!\n");
 	}
 
 	return 0;
@@ -946,6 +955,8 @@ static int dpu_wait_pq_update_done(struct dpu_context *ctx)
 		/* time out */
 		pr_err("dpu wait for pq reg update done time out!\n");
 		return -1;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for pq reg update done process is interrupted by signal!\n");
 	}
 
 	return 0;
@@ -967,6 +978,8 @@ static int dpu_wait_all_update_done(struct dpu_context *ctx)
 		/* time out */
 		pr_err("dpu wait for reg update done time out!\n");
 		return -1;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for reg update done process is interrupted by signal!\n");
 	}
 
 	return 0;
@@ -997,6 +1010,8 @@ static int dpu_wait_wb_done(struct dpu_context *ctx)
 			}
 		}
 		return -ETIMEDOUT;
+	} else if (rc == -ERESTARTSYS) {
+		pr_err("dpu wait for wb done process is interrupted by signal!\n");
 	}
 
 	return 0;
@@ -2285,6 +2300,8 @@ static void dpu_flip(struct dpu_context *ctx,
 				ctx->evt_te_update = false;
 				spin_unlock_irq(&ctx->irq_lock);
 				pr_err("dpu flip wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("dpu flip wait for te process is interrupted by signal!\n");
 			}
 		} else {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
