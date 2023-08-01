@@ -23,7 +23,6 @@
 #include "sprd_dsi_panel.h"
 #include <../drivers/trusty/trusty.h>
 #include "../sprd_dsc.h"
-#include "dpu_r6px_scale_param.h"
 
 #define XFBC8888_HEADER_SIZE(w, h) (ALIGN((ALIGN((w), 16)) * \
 				(ALIGN((h), 16)) / 16, 128))
@@ -107,10 +106,6 @@
 #define REG_DPI_CTRL					0x260
 #define REG_DPI_H_TIMING				0x264
 #define REG_DPI_V_TIMING				0x268
-
-/* SCL coef registers */
-#define REG_SCL_COEF_HOR_CFG				0x300
-#define REG_SCL_COEF_VER_CFG				0x380
 
 /* DPU STS */
 #define REG_DPU_STS_20					0x750
@@ -1444,21 +1439,6 @@ static void dpu_dvfs_task_init(struct dpu_context *ctx)
 			(unsigned long)ctx);
 }
 
-static void dpu_scl_coef_cfg(struct dpu_context *ctx)
-{
-	int i, j;
-
-	for (i = 0, j = 0; i < 64; i += 2) {
-
-		DPU_REG_WR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, r6px_scl_coef[i] +
-			(r6px_scl_coef[i+1] << 16));
-
-		DPU_REG_WR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, r6px_scl_coef[i] +
-			(r6px_scl_coef[i+1] << 16));
-		j++;
-	}
-}
-
 static int dpu_init(struct dpu_context *ctx)
 {
 	u32 reg_val, size;
@@ -1498,8 +1478,6 @@ static int dpu_init(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_DPU_CFG1, reg_val);;
 	if (ctx->stopped)
 		dpu_clean_all(ctx);
-
-	dpu_scl_coef_cfg(ctx);
 
 	DPU_REG_WR(ctx->base + REG_DPU_INT_CLR, 0xffff);
 
