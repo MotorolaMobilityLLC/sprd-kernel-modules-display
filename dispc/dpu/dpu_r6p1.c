@@ -2538,6 +2538,8 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	ctx->base_offset[1] = DPU_MAX_REG_OFFSET / 4;
 
 	ctx->wb_configed = true;
+	if (ctx->wb_configed)
+                ctx->evt_wb_done = true;
 
 	/* Allocate memory for trusty */
 	ctx->tos_msg = kmalloc(sizeof(struct disp_message) + sizeof(struct layer_reg), GFP_KERNEL);
