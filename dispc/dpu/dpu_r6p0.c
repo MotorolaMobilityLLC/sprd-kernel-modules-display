@@ -666,9 +666,60 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	u32 reg_val, int_mask = 0;
 	u32 mmu_reg_val, mmu_int_mask = 0;
 	u32 mmu1_reg_val, mmu1_int_mask = 0;
+	ktime_t time;
+	ktime_t gap;
 
-	ctx->int_cnt.int_cnt_all++;
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_INT_STS);
+	if (reg_val & BIT_DPU_INT_TE) {
+		/*
+		 * FIXME:
+		 * In CMD mode, mipi host send data to panel should sync with TE signal.
+		 * Accord to our asic design, panel TE signal notifies DPU by interruption.
+		 * So, software should run dpu and send mipi data out once receive TE int.
+		 * However, isr handler called by CPU need time cost,
+		 * and the magnitude is determined by CPU current performance.
+		 * In order to keep display normally, we drop frame when TE occurs too late.
+		 */
+		if (ctx->cmd_dpi_mode) {
+			spin_lock(&ctx->irq_lock);
+			time = ktime_get();
+			gap = time - ctx->te_int_time;
+			ctx->te_int_time = time;
+
+			if (ctx->dpu_run_flag) {
+				if (gap < ctx->te_int_min_gap) {
+					pr_warn("dpu te int occur inappropriate, skip this frame, gap is :%ld, min gap is %ld\n", gap, ctx->te_int_min_gap);
+					ctx->dpu_run_flag = false;
+				} else if (gap > ctx->te_int_max_gap) {
+					pr_warn("dpu te int occur too late, skip this frame, gap is :%ld, max gap is %ld,\n", gap, ctx->te_int_max_gap);
+					ctx->dpu_run_flag = false;
+					ctx->evt_te_update = true;
+					wake_up_interruptible_all(&ctx->te_update_wq);
+				} else {
+					DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2) | BIT(0));
+					ctx->stopped = false;
+					ctx->dpu_run_flag = false;
+					ctx->evt_te_update = true;
+					wake_up_interruptible_all(&ctx->te_update_wq);
+					ctx->te_int_time = ktime_get();
+				}
+			}
+
+			ctx->evt_te = true;
+			spin_unlock(&ctx->irq_lock);
+			wake_up_interruptible_all(&ctx->te_wq);
+			drm_crtc_handle_vblank(&dpu->crtc->base);
+		} else {
+			if (ctx->te_check_en) {
+				ctx->evt_te = true;
+				wake_up_interruptible_all(&ctx->te_wq);
+			}
+
+			if (ctx->if_type == SPRD_DPU_IF_EDPI)
+				drm_crtc_handle_vblank(&dpu->crtc->base);
+		}
+	}
+
 	mmu_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU_INT_STS);
 	mmu1_reg_val = DPU_REG_RD(ctx->base + REG_DPU_MMU1_INT_STS);
 
@@ -688,31 +739,23 @@ static u32 dpu_isr(struct dpu_context *ctx)
 	DPU_REG_CLR(ctx->base + REG_DPU_MMU_INT_EN, mmu1_int_mask);
 
 	/* dpu vsync isr */
+	/* dpu vsync isr */
 	if (reg_val & BIT_DPU_INT_VSYNC) {
-		ctx->int_cnt.int_cnt_vsync++;
-		drm_crtc_handle_vblank(&dpu->crtc->base);
-
-		/* write back feature */
-		if ((ctx->vsync_count == ctx->max_vsync_count)
-			&& ctx->wb_en && ctx->need_wb_work)
-			schedule_work(&ctx->wb_work);
-
-		/* cabc update backlight */
-		if (enhance->cabc_bl_set)
-			schedule_work(&ctx->cabc_bl_update);
-
-		ctx->vsync_count++;
-	}
-
-	if (reg_val & BIT_DPU_INT_TE) {
-		ctx->int_cnt.int_cnt_te++;
-		if (ctx->te_check_en) {
-			ctx->evt_te = true;
-			wake_up_interruptible_all(&ctx->te_wq);
-		}
-
-		if (ctx->if_type == SPRD_DPU_IF_EDPI)
+		if (!ctx->cmd_dpi_mode) {
+			ctx->int_cnt.int_cnt_vsync++;
 			drm_crtc_handle_vblank(&dpu->crtc->base);
+
+			/* write back feature */
+			if ((ctx->vsync_count == ctx->max_vsync_count)
+				&& ctx->wb_en && ctx->need_wb_work)
+				schedule_work(&ctx->wb_work);
+
+			/* cabc update backlight */
+			if (enhance->cabc_bl_set)
+				schedule_work(&ctx->cabc_bl_update);
+
+			ctx->vsync_count++;
+		}
 	}
 
 	/* dpu update done isr */
@@ -996,12 +1039,17 @@ static void dpu_stop(struct dpu_context *ctx)
 
 static void dpu_run(struct dpu_context *ctx)
 {
-	DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4) | BIT(0));
+	if (ctx->cmd_dpi_mode){
+		dpu_wait_te_flush(ctx);
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2) | BIT(0));
+	} else if (ctx->if_type == SPRD_DPU_IF_DPI) {
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4) | BIT(0));
+	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2) | BIT(0));
+	}
 	ctx->stopped = false;
 
-	pr_info("dpu run\n");
-
-	if (ctx->if_type == SPRD_DPU_IF_EDPI) {
+	if ((ctx->if_type == SPRD_DPU_IF_EDPI) || ctx->cmd_dpi_mode)  {
 		/*
 		 * If the panel read GRAM speed faster than
 		 * DSI write GRAM speed, it will display some
@@ -1019,14 +1067,29 @@ static void dpu_run(struct dpu_context *ctx)
 
 static void dpu_cabc_work_func(struct work_struct *data)
 {
+	int ret;
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, cabc_work);
 
 	down(&ctx->cabc_lock);
 	if (ctx->enabled) {
 		dpu_cabc_trigger(ctx);
-		DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
-		//dpu_wait_pq_update_done(ctx);
+		if (ctx->cmd_dpi_mode) {
+			spin_lock_irq(&ctx->irq_lock);
+			ctx->dpu_run_flag = true;
+			ctx->evt_te = false;
+			spin_unlock_irq(&ctx->irq_lock);
+			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+								msecs_to_jiffies(20));
+			if (!ret) {
+				pr_err("cabc set wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("cabc set waiting process is interrupted by signal!\n");
+			}
+		} else {
+			DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
+			dpu_wait_pq_update_done(ctx);
+		}
 	}
 	up(&ctx->cabc_lock);
 }
@@ -1036,9 +1099,9 @@ static void dpu_cabc_bl_update_func(struct work_struct *data)
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, cabc_bl_update);
 	struct dpu_enhance *enhance = ctx->enhance;
-	struct sprd_backlight *bl = bl_get_data(enhance->bl_dev);
 
 	if (enhance->bl_dev) {
+		struct sprd_backlight *bl = bl_get_data(enhance->bl_dev);
 		if (enhance->cabc_state == CABC_WORKING) {
 			sprd_backlight_normalize_map(enhance->bl_dev, &enhance->cabc_para.cur_bl);
 			bl->cabc_en = true;
@@ -1445,8 +1508,7 @@ static int dpu_init(struct dpu_context *ctx)
 	u32 dvfs_freq;
 	int ret;
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
-	struct sprd_panel *panel =
-		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	struct dpu_enhance *enhance = ctx->enhance;
 
 	if (panel->info.dual_dsi_en)
@@ -1466,7 +1528,7 @@ static int dpu_init(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_BLEND_SIZE, size);
 
 	DPU_REG_WR(ctx->base + REG_DPU_CFG0, 0x00);
-	if ((dpu->dsi->ctx.work_mode == DSI_MODE_CMD) && panel->info.dsc_en) {
+	if (ctx->cmd_dpi_mode) {
 		DPU_REG_SET(ctx->base + REG_DPU_CFG0, BIT(1));
 		ctx->is_single_run = true;
 	}
@@ -1735,6 +1797,7 @@ static void dpu_clean_all(struct dpu_context *ctx)
 
 static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 {
+	int ret;
 
 	if (ctx->if_type == SPRD_DPU_IF_EDPI)
 		dpu_wait_stop_done(ctx);
@@ -1744,8 +1807,22 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 	dpu_clean_all(ctx);
 
 	if (ctx->is_single_run) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		if (ctx->cmd_dpi_mode) {
+			spin_lock_irq(&ctx->irq_lock);
+			ctx->dpu_run_flag = true;
+			ctx->evt_te = false;
+			spin_unlock_irq(&ctx->irq_lock);
+			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+								msecs_to_jiffies(20));
+			if (!ret) {
+				pr_err("bgcolor set wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("bgcolor set waiting process is interrupted by signal!\n");
+			}
+		} else {
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		}
 	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
 		ctx->stopped = false;
@@ -1886,7 +1963,33 @@ static void dpu_layer(struct dpu_context *ctx,
 				hwlayer->src_w, hwlayer->src_h);
 }
 
-static int dpu_vrr(struct dpu_context *ctx)
+static int dpu_vrr_cmd(struct dpu_context *ctx)
+{
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+			struct sprd_dpu, ctx);
+	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
+	struct sprd_crtc *crtc = dpu->crtc;
+	struct drm_display_mode *mode = &crtc->base.state->adjusted_mode;
+	struct panel_info *info = &panel->info;
+	int i;
+
+	for (i = 0; i < info->vrr_mode_count; i++) {
+		if (drm_mode_vrefresh(mode) ==  drm_mode_vrefresh(&info->buildin_modes[i])) {
+			info->current_cmd_index = i;
+			info->vrefresh_cmd_changed = false;
+			break;
+		}
+	}
+
+	dpu_wait_te_flush(ctx);
+	sprd_panel_send_vrefresh_cmd(panel, info->current_cmd_index);
+
+	dpu_wait_te_flush(ctx);
+
+	return 0;
+}
+
+static int dpu_vrr_video(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 			struct sprd_dpu, ctx);
@@ -2150,12 +2253,13 @@ static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_st
 static void dpu_flip(struct dpu_context *ctx,
 		     struct sprd_plane planes[], u8 count)
 {
-	int i;
+	int i, ret;
 	u32 reg_val;
 	static bool last_secure_en;
 	struct sprd_plane_state *state;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct dpu_enhance *enhance = ctx->enhance;
+	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 
 	ctx->vsync_count = 0;
 	if (ctx->max_vsync_count > 0 && count > 1)
@@ -2177,12 +2281,18 @@ static void dpu_flip(struct dpu_context *ctx,
 	if (ctx->if_type == SPRD_DPU_IF_EDPI)
 		dpu_wait_stop_done(ctx);
 
+	 /* to check if dpu need change the frame rate */
+	if ((dpu->crtc->fps_mode_changed && ctx->cmd_dpi_mode) ||
+	    (panel->info.vrefresh_cmd_changed && ctx->cmd_dpi_mode)) {
+		dpu->crtc->fps_mode_changed = true;
+		dpu_vrr_cmd(ctx);
+		dpu->crtc->fps_mode_changed = false;
+	} else if (dpu->crtc->fps_mode_changed) {
+		dpu_vrr_video(ctx);
+	}
+
 	/* reset the bgcolor to black */
 	DPU_REG_WR(ctx->base + REG_BG_COLOR, 0x00);
-
-	 /* to check if dpu need change the frame rate */
-	if (dpu->crtc->fps_mode_changed)
-		dpu_vrr(ctx);
 
 	/* disable all the layers */
 	dpu_clean_all(ctx);
@@ -2201,8 +2311,24 @@ static void dpu_flip(struct dpu_context *ctx,
 
 	/* update trigger and wait */
 	if (ctx->is_single_run) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		if (ctx->cmd_dpi_mode) {
+			spin_lock_irq(&ctx->irq_lock);
+			ctx->dpu_run_flag = true;
+			ctx->evt_te_update = false;
+			spin_unlock_irq(&ctx->irq_lock);
+			ret = wait_event_interruptible_timeout(ctx->te_update_wq, ctx->evt_te_update,
+								msecs_to_jiffies(20));
+			if (!ret) {
+				spin_lock_irq(&ctx->irq_lock);
+				ctx->dpu_run_flag = false;
+				ctx->evt_te_update = false;
+				spin_unlock_irq(&ctx->irq_lock);
+				pr_err("dpu flip wait for te time out!\n");
+			}
+		} else {
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		}
 	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
 		ctx->stopped = false;
@@ -2242,16 +2368,30 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
 	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
+	struct panel_info *info = &panel->info;
 	struct videomode vm;
 	u32 int_mask = 0;
 	u32 reg_val;
+	int i;
 
-	if (dpu->crtc->fps_mode_changed && (dpu->mode.type == DRM_MODE_TYPE_DRIVER)) {
-		drm_display_mode_to_videomode(&panel->info.mode, &vm);
-	} else if (dpu->mode.type & DRM_MODE_TYPE_USERDEF) {
-		drm_display_mode_to_videomode(&panel->info.mode, &vm);
-	} else{
-		drm_display_mode_to_videomode(&dpu->actual_mode, &vm);
+	if (ctx->cmd_dpi_mode) {
+		for (i = 0; i < panel->info.display_mode_count; i++) {
+			if ((panel->info.buildin_modes[i].hdisplay == panel->info.mode.hdisplay) &&
+					(panel->info.buildin_modes[i].vdisplay == panel->info.mode.vdisplay) &&
+					(drm_mode_vrefresh(&panel->info.buildin_modes[i]) == DPI_VREFRESH_120)) {
+				sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
+				drm_display_mode_to_videomode(&dpu->actual_mode, &vm);
+				break;
+			}
+		}
+	} else {
+		if (dpu->crtc->fps_mode_changed && (dpu->mode.type == DRM_MODE_TYPE_DRIVER)) {
+			drm_display_mode_to_videomode(&info->mode, &vm);
+		} else if (dpu->mode.type & DRM_MODE_TYPE_USERDEF) {
+			drm_display_mode_to_videomode(&info->mode, &vm);
+		} else{
+			drm_display_mode_to_videomode(&dpu->actual_mode, &vm);
+		}
 	}
 
 	if (ctx->if_type == SPRD_DPU_IF_DPI) {
@@ -2290,7 +2430,8 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		/* enable dpu dpi vsync */
 		int_mask |= BIT_DPU_INT_VSYNC;
 		/* enable dpu TE INT */
-		int_mask |= BIT_DPU_INT_TE;
+		if ((panel->info.esd_check_mode == ESD_MODE_TE_CHECK) || ctx->cmd_dpi_mode)
+			int_mask |= BIT_DPU_INT_TE;
 		/* enable underflow err INT */
 		int_mask |= BIT_DPU_INT_ERR;
 		/* enable write back done INT */
@@ -2350,6 +2491,7 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	lcd_node = sprd_get_panel_node_by_name();
 	oled_bl_node = of_get_child_by_name(lcd_node, "oled-backlight");
 	if (!oled_bl_node) {
+		ctx->is_oled_bl = 0;
 		bl_np = of_parse_phandle(np, "sprd,backlight", 0);
 		if (bl_np) {
 			enhance->bl_dev = of_find_backlight_by_node(bl_np);
@@ -2362,6 +2504,8 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 		} else {
 			pr_warn("dpu backlight node not found\n");
 		}
+	} else {
+		ctx->is_oled_bl = 1;
 	}
 
 	ret = of_property_read_u32(np, "sprd,corner-radius",
@@ -2415,8 +2559,10 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 	enhance->cm_copy.c11 = 1024;
 	enhance->cm_copy.c22 = 1024;
 	enhance->cabc_state = CABC_DISABLED;
-	INIT_WORK(&ctx->cabc_work, dpu_cabc_work_func);
-	INIT_WORK(&ctx->cabc_bl_update, dpu_cabc_bl_update_func);
+	if(!ctx->is_oled_bl) {
+		INIT_WORK(&ctx->cabc_work, dpu_cabc_work_func);
+		INIT_WORK(&ctx->cabc_bl_update, dpu_cabc_bl_update_func);
+	}
 
 	ctx->base_offset[0] = 0x0;
 	ctx->base_offset[1] = DPU_MAX_REG_OFFSET / 4;
@@ -2732,7 +2878,7 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 		pr_err("The type %d is unavaiable\n", type);
 		break;
 	}
-	if (!no_update)
+	if (!no_update && !ctx->cmd_dpi_mode)
 		dpu_wait_pq_lut_reg_update_done(ctx);
 }
 
@@ -2749,7 +2895,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 	struct cabc_para cabc_param;
 	static u32 lut3d_table_index;
 	u32 *p32, *tmp32;
-	int i, j;
+	int i, j, ret;
 	bool no_update = false;
 	bool get_param_flag = false;
 
@@ -2923,22 +3069,26 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		pr_info("enhance mode = 0x%x\n", *p32);
 		return;
 	case ENHANCE_CFG_ID_CABC_PARAM:
-		memcpy(&cabc_param, param, sizeof(cabc_param));
-		enhance->cabc_para.bl_fix = cabc_param.bl_fix;
-		enhance->cabc_para.cfg0 = cabc_param.cfg0;
-		enhance->cabc_para.cfg1 = cabc_param.cfg1;
-		enhance->cabc_para.cfg2 = cabc_param.cfg2;
-		enhance->cabc_para.cfg3 = cabc_param.cfg3;
-		enhance->cabc_para.cfg4 = cabc_param.cfg4;
+		if (!ctx->is_oled_bl) {
+			memcpy(&cabc_param, param, sizeof(cabc_param));
+			enhance->cabc_para.bl_fix = cabc_param.bl_fix;
+			enhance->cabc_para.cfg0 = cabc_param.cfg0;
+			enhance->cabc_para.cfg1 = cabc_param.cfg1;
+			enhance->cabc_para.cfg2 = cabc_param.cfg2;
+			enhance->cabc_para.cfg3 = cabc_param.cfg3;
+			enhance->cabc_para.cfg4 = cabc_param.cfg4;
+		}
 		return;
 	case ENHANCE_CFG_ID_CABC_RUN:
-		if (enhance->cabc_state != CABC_DISABLED)
+		if (enhance->cabc_state != CABC_DISABLED && !ctx->is_oled_bl)
 			schedule_work(&ctx->cabc_work);
 		return;
 	case ENHANCE_CFG_ID_CABC_STATE:
-		p32 = param;
-		enhance->cabc_state = *p32;
-		enhance->frame_no = 0;
+		if (!ctx->is_oled_bl) {
+			p32 = param;
+			enhance->cabc_state = *p32;
+			enhance->frame_no = 0;
+		}
 		return;
 	case ENHANCE_CFG_ID_UD:
 		memcpy(&enhance->ud_copy, param, sizeof(enhance->ud_copy));
@@ -2959,7 +3109,19 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		break;
 	}
 
-	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
+	if (ctx->cmd_dpi_mode) {
+		spin_lock_irq(&ctx->irq_lock);
+		ctx->dpu_run_flag = true;
+		ctx->evt_te = false;
+		spin_unlock_irq(&ctx->irq_lock);
+		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+							msecs_to_jiffies(20));
+		if (!ret) {
+			pr_err("enhance set wait for te time out!\n");
+		} else if (ret == -ERESTARTSYS) {
+			pr_err("enhance set waiting preocess is interrupted by signal!\n");
+		}
+	} else	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
 		if (id == ENHANCE_CFG_ID_SCL) {
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(3));
 			dpu_wait_all_regs_update_done(ctx);
@@ -3533,6 +3695,17 @@ static int dpu_modeset(struct dpu_context *ctx,
 
 	if (state->frame_rate_change) {
 		dpu->crtc->fps_mode_changed = state->frame_rate_change;
+	}
+
+	if (mode_vrefresh == 120) {
+		ctx->te_int_max_gap = WAIT_TE_MAX_TIME_120;
+		ctx->te_int_min_gap = WAIT_TE_MIN_TIME_120;
+	} else if (mode_vrefresh == 90) {
+		ctx->te_int_max_gap = WAIT_TE_MAX_TIME_90;
+		ctx->te_int_min_gap = WAIT_TE_MIN_TIME_90;
+	} else {
+		ctx->te_int_max_gap = WAIT_TE_MAX_TIME_60;
+		ctx->te_int_min_gap = WAIT_TE_MIN_TIME_60;
 	}
 
 	ctx->wb_size_changed = true;

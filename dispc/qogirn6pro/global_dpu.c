@@ -201,6 +201,12 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	if (dpu->dsi->ctx.dpi_clk_div) {
 		pr_info("DPU_CORE_CLK = %u, DPI_CLK_DIV = %d\n",
 				dpu_core_val, dpu->dsi->ctx.dpi_clk_div);
+	}  else if (ctx->cmd_dpi_mode) {
+		dpi_src_val = calc_dpi_clk_src(ctx->actual_dpi_clk);
+		pr_info("DPU_CORE_CLK = %u, DPI_CLK_SRC = %u\n",
+				dpu_core_val, dpi_src_val);
+		pr_info("dpi vm clock is %lu, dpi actual clock is %lu\n",
+				ctx->vm.pixelclock, ctx->actual_dpi_clk);
 	} else {
 		dpi_src_val = calc_dpi_clk_src(ctx->vm.pixelclock);
 		pr_info("DPU_CORE_CLK = %u, DPI_CLK_SRC = %u\n",
@@ -218,6 +224,14 @@ static int dpu_clk_init(struct dpu_context *ctx)
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
 		if (ret)
 			pr_warn("set dpi clk source failed\n");
+	} else if (ctx->cmd_dpi_mode) {
+		clk_src = val_to_clk(clk_ctx, dpi_src_val);
+		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
+		if (ret)
+			pr_warn("set dpi clk source failed\n");
+		ret = clk_set_rate(clk_ctx->clk_dpu_dpi, ctx->actual_dpi_clk);
+		if (ret)
+			pr_err("dpu update dpi clk rate failed\n");
 	} else {
 		clk_src = val_to_clk(clk_ctx, dpi_src_val);
 		ret = clk_set_parent(clk_ctx->clk_dpu_dpi, clk_src);
