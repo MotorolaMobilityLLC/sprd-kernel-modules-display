@@ -306,10 +306,6 @@ static int dpu_clk_init(struct dpu_context *ctx)
 	if (panel->info.dpi_clk_pixelpll) {
 		clk_pixelpll_div = calc_div_of_pixelpll(ctx->vm.pixelclock);
 
-		ret = clk_set_rate(clk_ctx->clk_dpi_pixelpll, clk_pixelpll_div * ctx->vm.pixelclock);
-		if (ret)
-			pr_warn("dpu update dpi clk rate failed\n");
-
 		pr_info("clk_pixelpll_div is %u, dpi clk is %u\n",
 				clk_pixelpll_div, ctx->vm.pixelclock);
 	} else if (dpu->dsi->ctx.dpi_clk_div) {
