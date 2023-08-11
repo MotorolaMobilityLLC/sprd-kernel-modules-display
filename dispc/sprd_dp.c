@@ -671,7 +671,9 @@ static int sprd_dp_probe(struct platform_device *pdev)
 	sprd_dp_device_create(dp, &pdev->dev);
 	platform_set_drvdata(pdev, dp);
 
-	sprd_dp_audio_codec_init(&pdev->dev);
+	ret = sprd_dp_audio_codec_init(&pdev->dev);
+	if (ret)
+		return ret;
 
 	return component_add(&pdev->dev, &dp_component_ops);
 }
