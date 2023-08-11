@@ -944,13 +944,13 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = sprd_dpu_sysfs_init(&dpu->dev);
-	if (ret)
-	 	return ret;
-
 	ret = sprd_parse_vrr_config(dpu);
 	if (ret)
-	 	return ret;
+		return ret;
+
+	ret = sprd_dpu_sysfs_init(&dpu->dev);
+	if (ret)
+                return ret;
 
 	platform_set_drvdata(pdev, dpu);
 
@@ -963,6 +963,11 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 
 static int sprd_dpu_remove(struct platform_device *pdev)
 {
+	struct sprd_dpu *dpu = platform_get_drvdata(pdev);
+
+	if (dpu)
+		sprd_dpu_sysfs_deinit(&dpu->dev);
+
 	component_del(&pdev->dev, &dpu_component_ops);
 	return 0;
 }

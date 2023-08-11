@@ -1491,18 +1491,43 @@ int sprd_dpu_sysfs_init(struct device *dev)
 		return -ENOMEM;
 	}
 	rc = sysfs_create_group(&(dev->kobj), &dpu_group);
-	if (rc)
+	if (rc) {
 		pr_err("create dpu attr node failed, rc=%d\n", rc);
+		goto free_sysfs;
+	}
 
 	if (!strcmp(dev->kobj.name, "dispc0")) {
 		rc = sysfs_create_group(&(dev->kobj), &pq_group);
-		if (rc)
+		if (rc) {
 			pr_err("create dpu PQ node failed, rc=%d\n", rc);
+			goto remove_dpu_group;
+		}
 	}
+
+	return rc;
+
+remove_dpu_group:
+	sysfs_remove_group(&(dev->kobj), &dpu_group);
+
+free_sysfs:
+	kfree(sysfs);
+	sysfs = NULL;
 
 	return rc;
 }
 EXPORT_SYMBOL(sprd_dpu_sysfs_init);
+
+void sprd_dpu_sysfs_deinit(struct device *dev)
+{
+	if (!strncmp(dev->kobj.name, "dispc0", strlen("dispc0")))
+		sysfs_remove_group(&(dev->kobj), &pq_group);
+
+	sysfs_remove_group(&(dev->kobj), &dpu_group);
+
+	kfree(sysfs);
+	sysfs = NULL;
+}
+EXPORT_SYMBOL(sprd_dpu_sysfs_deinit);
 
 MODULE_AUTHOR("Leon He <leon.he@unisoc.com>");
 MODULE_DESCRIPTION("Add dpu attribute nodes for userspace");
