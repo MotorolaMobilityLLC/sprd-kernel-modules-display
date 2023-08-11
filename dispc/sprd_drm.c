@@ -441,9 +441,9 @@ static void sprd_drm_unbind(struct device *dev)
 
 	drm_kms_helper_poll_fini(drm);
 
-	drm_mode_config_cleanup(drm);
-
 	component_unbind_all(drm->dev, drm);
+
+	drm_mode_config_cleanup(drm);
 
 	of_reserved_mem_device_release(drm->dev);
 
