@@ -423,6 +423,7 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 	struct sprd_crtc_capability cap = {};
 	struct sprd_plane *planes;
 	struct dpu_context *ctx = &dpu->ctx;
+	int ret;
 
 	DRM_INFO("%s()\n", __func__);
 
@@ -439,7 +440,9 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 	if (IS_ERR(dpu->crtc))
 		return PTR_ERR(dpu->crtc);
 
-	sprd_dpu_irq_request(dpu);
+	ret = sprd_dpu_irq_request(dpu);
+	if (ret)
+		return -EINVAL;
 
 	pm_runtime_enable(dev);
 
