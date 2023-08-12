@@ -897,6 +897,8 @@ static void sprd_gsp_unbind(struct device *dev, struct device *master,
 	gsp = platform_get_drvdata(pdev);
 
 	gsp_drm_dev_clear(drm_dev, gsp);
+
+	gsp_dev_deinit(gsp);
 }
 
 static const struct component_ops gsp_component_ops = {

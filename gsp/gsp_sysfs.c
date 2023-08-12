@@ -29,6 +29,8 @@ static int gsp_core_match_table_create(struct gsp_dev *gsp)
 	struct gsp_core **cores = NULL;
 	struct gsp_core *core = NULL;
 
+	memset(&table, 0, sizeof(table));
+
 	num = gsp->core_cnt;
 	if (num > 0)
 		table.core_cnt = num;
@@ -52,7 +54,10 @@ static int gsp_core_match_table_create(struct gsp_dev *gsp)
 
 static void gsp_core_match_table_destroy(void)
 {
-	kfree(table.cores_arr);
+	if (table.cores_arr) {
+		kfree(table.cores_arr);
+		table.cores_arr = NULL;
+	}
 
 	table.core_cnt = 0;
 }
@@ -201,7 +206,7 @@ int gsp_dev_sysfs_init(struct gsp_dev *gsp)
 		if (ret < 0) {
 			GSP_ERR("create gsp sysfs attribute %s failed: %d\n",
 				gsp_dev_attrs[i].attr.name, ret);
-			goto err;
+			goto remove_file;
 		}
 		GSP_INFO("create gsp sysfs attribute: %s success\n",
 			 gsp_dev_attrs[i].attr.name);
@@ -210,14 +215,15 @@ int gsp_dev_sysfs_init(struct gsp_dev *gsp)
 	ret = gsp_core_match_table_create(gsp);
 	if (ret) {
 		GSP_ERR("gsp core match table create failed\n");
-		goto err;
+		goto destroy_table;
 	}
 
 	return 0;
 
-err:
+destroy_table:
 	gsp_core_match_table_destroy();
 
+remove_file:
 	for (j = 0; j < i; j++)
 		device_remove_file(dev, &gsp_dev_attrs[j]);
 
@@ -228,6 +234,8 @@ void gsp_dev_sysfs_destroy(struct gsp_dev *gsp)
 {
 	size_t i;
 	struct device *dev = NULL;
+
+	gsp_core_match_table_destroy();
 
 	dev = gsp_dev_to_device(gsp);
 	for (i = 0; i < ARRAY_SIZE(gsp_dev_attrs); i++)
