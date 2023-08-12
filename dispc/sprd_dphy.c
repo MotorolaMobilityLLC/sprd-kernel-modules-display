@@ -353,10 +353,6 @@ static int sprd_dphy_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = sprd_dphy_sysfs_init(&dphy->dev);
-	if (ret)
-		return ret;
-
 	ret = sprd_dphy_regmap_init(dphy);
 	if (ret)
 		return ret;
@@ -370,13 +366,28 @@ static int sprd_dphy_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+        ret = sprd_dphy_sysfs_init(&dphy->dev);
+        if (ret)
+                return ret;
+
 	DRM_INFO("dphy driver probe success\n");
+
+	return 0;
+}
+
+static int sprd_dphy_remove(struct platform_device *pdev)
+{
+	struct sprd_dphy *dphy = platform_get_drvdata(pdev);
+
+	if (dphy)
+		sprd_dphy_sysfs_deinit(&dphy->dev);
 
 	return 0;
 }
 
 struct platform_driver sprd_dphy_driver = {
 	.probe	= sprd_dphy_probe,
+	.remove = sprd_dphy_remove,
 	.driver = {
 		.name  = "sprd-dphy-drv",
 		.of_match_table	= dphy_match_table,

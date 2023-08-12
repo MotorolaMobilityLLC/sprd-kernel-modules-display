@@ -428,13 +428,26 @@ int sprd_dphy_sysfs_init(struct device *dev)
 		pr_err("alloc dphy sysfs failed\n");
 		return -ENOMEM;
 	}
+
 	rc = sysfs_create_groups(&dev->kobj, dphy_groups);
-	if (rc)
+	if (rc) {
 		pr_err("create dphy attr node failed, rc=%d\n", rc);
+		kfree(sysfs);
+		sysfs = NULL;
+	}
 
 	return rc;
 }
 EXPORT_SYMBOL(sprd_dphy_sysfs_init);
+
+void sprd_dphy_sysfs_deinit(struct device *dev)
+{
+	sysfs_remove_groups(&dev->kobj, dphy_groups);
+
+	kfree(sysfs);
+	sysfs = NULL;
+}
+EXPORT_SYMBOL(sprd_dphy_sysfs_deinit);
 
 MODULE_AUTHOR("Leon He <leon.he@unisoc.com>");
 MODULE_DESCRIPTION("Add dphy attribute nodes for userspace");
