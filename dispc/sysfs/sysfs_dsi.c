@@ -756,12 +756,24 @@ int sprd_dsi_sysfs_init(struct device *dev)
 	}
 
 	rc = sysfs_create_groups(&dev->kobj, dsi_groups);
-	if (rc)
+	if (rc) {
 		pr_err("create dsi attr node failed, rc=%d\n", rc);
+		kfree(sysfs);
+		sysfs = NULL;
+	}
 
 	return rc;
 }
 EXPORT_SYMBOL(sprd_dsi_sysfs_init);
+
+void sprd_dsi_sysfs_deinit(struct device *dev)
+{
+	sysfs_remove_groups(&dev->kobj, dsi_groups);
+
+	kfree(sysfs);
+	sysfs = NULL;
+}
+EXPORT_SYMBOL(sprd_dsi_sysfs_deinit);
 
 MODULE_AUTHOR("Leon He <leon.he@unisoc.com>");
 MODULE_DESCRIPTION("Add dsi attribute nodes for userspace");

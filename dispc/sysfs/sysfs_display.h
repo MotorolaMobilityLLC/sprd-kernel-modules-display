@@ -26,6 +26,6 @@ int sprd_dphy_sysfs_init(struct device *dev);
 int sprd_panel_sysfs_init(struct device *dev);
 
 void sprd_dpu_sysfs_deinit(struct device *dev);
-
+void sprd_dsi_sysfs_deinit(struct device *dev);
 
 #endif

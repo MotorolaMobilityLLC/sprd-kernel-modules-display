@@ -1109,10 +1109,6 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = sprd_dsi_sysfs_init(&dsi->dev);
-	if (ret)
-		return ret;
-
 	platform_set_drvdata(pdev, dsi);
 
 	if (dsi->ctx.id) {
@@ -1136,6 +1132,10 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+        ret = sprd_dsi_sysfs_init(&dsi->dev);
+        if (ret)
+                return ret;
+
 	mutex_init(&dsi->lock);
 
 	pm_runtime_set_active(&pdev->dev);
@@ -1147,7 +1147,12 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 
 static int sprd_dsi_remove(struct platform_device *pdev)
 {
+	struct sprd_dsi *dsi = platform_get_drvdata(pdev);
+
 	component_del(&pdev->dev, &dsi_component_ops);
+
+	if (dsi)
+		sprd_dsi_sysfs_deinit(&dsi->dev);
 
 	return 0;
 }
