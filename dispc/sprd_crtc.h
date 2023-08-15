@@ -58,6 +58,7 @@ struct sprd_crtc {
 	void *priv;
 	bool fps_mode_changed;
 	bool sr_mode_changed;
+	bool mode_change_pending;
 	struct drm_property *resolution_property;
 	struct drm_property *frame_rate_property;
 	struct drm_property *blend_limit_property;

@@ -617,7 +617,19 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		return;
 	}
 
-	if (ret && sprd_check_crtc_active_state(panel, 0)) {
+	if(!sprd_check_crtc_active_state(panel, 0)) {
+		DRM_ERROR("crtc is inactive, skip esd work\n");
+		schedule_delayed_work(&panel->esd_work,
+			msecs_to_jiffies(info->esd_check_period));
+		return;
+	} else if (dsi->dpu->crtc->mode_change_pending) {
+		DRM_INFO("vrr is going, skip esd work\n");
+		schedule_delayed_work(&panel->esd_work,
+			msecs_to_jiffies(info->esd_check_period));
+		return;
+	}
+
+	if (ret) {
 		const struct drm_encoder_helper_funcs *encoder_funcs;
 		const struct drm_connector_helper_funcs *conn_funcs;
 		struct drm_encoder *encoder;

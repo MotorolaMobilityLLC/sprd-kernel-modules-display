@@ -1986,6 +1986,13 @@ static int dpu_vrr_cmd(struct dpu_context *ctx)
 
 	dpu_wait_te_flush(ctx);
 
+	if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+		schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+		dpu->crtc->mode_change_pending = false;
+		panel->esd_work_pending = true;
+		DRM_INFO("vrr finished, schedule esd work");
+	}
+
 	return 0;
 }
 
@@ -1993,12 +2000,19 @@ static int dpu_vrr_video(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 			struct sprd_dpu, ctx);
-
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
 	u32 reg_val;
 
 	if (ctx->stopped) {
 		pr_err("dpu is stoped\n");
  		dpu->crtc->fps_mode_changed = false;
+		if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+			schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+			dpu->crtc->mode_change_pending = false;
+			panel->esd_work_pending = true;
+			DRM_INFO("vrr exit, schedule esd work");
+		}
 		return 0;
 	}
 
@@ -2010,6 +2024,12 @@ static int dpu_vrr_video(struct dpu_context *ctx)
 	dpu->crtc->fps_mode_changed = false;
 
 	mutex_unlock(&ctx->vrr_lock);
+	if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+		schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+		dpu->crtc->mode_change_pending = false;
+		panel->esd_work_pending = true;
+		DRM_INFO("vrr finished, schedule esd work");
+	}
 
 	return 0;
 }

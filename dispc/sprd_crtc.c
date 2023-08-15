@@ -14,7 +14,9 @@
 #include "sprd_dpu.h"
 #include "sprd_gem.h"
 #include "sprd_crtc.h"
+#include "sprd_dsi.h"
 #include "sprd_plane.h"
+#include "sprd_dsi_panel.h"
 #include "sprd_iommu.h"
 
 struct drm_crtc *sprd_find_crtc_from_index(struct drm_device *dev, int idx)
@@ -286,6 +288,9 @@ static int sprd_crtc_atomic_set_property(struct drm_crtc *drm_crtc,
 {
 	struct sprd_crtc *crtc = to_sprd_crtc(drm_crtc);
 	struct sprd_crtc_state *state = to_sprd_crtc_state(crtc_state);
+	struct sprd_dpu *dpu = crtc->priv;
+	struct sprd_dsi *dsi = dpu->dsi;
+	struct sprd_panel *panel = container_of(dsi->panel, struct sprd_panel, base);
 
 	DRM_DEBUG("%s() name = %s, val = %llu\n",
 		  __func__, property->name, val);
@@ -294,6 +299,12 @@ static int sprd_crtc_atomic_set_property(struct drm_crtc *drm_crtc,
 		state->resolution_change = val;
 	} else if (property == crtc->frame_rate_property) {
 		state->frame_rate_change = val;
+		if (panel->info.esd_check_en && !crtc->mode_change_pending) {
+			cancel_delayed_work_sync(&panel->esd_work);
+			panel->esd_work_pending = false;
+			crtc->mode_change_pending = true;
+			DRM_INFO("vrr going, flush current esd work and cancel ongoing work");
+		}
 	} else if (property == crtc->blend_limit_property){
 		DRM_DEBUG("do not allow change blend limit property value.\n");
 	} else if (property == crtc->vrr_enabled_property) {
