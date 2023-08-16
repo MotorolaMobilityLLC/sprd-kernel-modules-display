@@ -678,6 +678,9 @@ static int dpu_wait_wb_done(struct dpu_context *ctx)
 
 static void dpu_stop(struct dpu_context *ctx)
 {
+	u32 reg_val;
+	int i;
+
 	dpu_wait_wb_done(ctx);
 
 	if (ctx->if_type == SPRD_DPU_IF_DPI)
@@ -685,7 +688,20 @@ static void dpu_stop(struct dpu_context *ctx)
 
 	dpu_wait_stop_done(ctx);
 
-	pr_info("dpu stop\n");
+	for (i = 1; ; i++) {
+		reg_val = DPU_REG_RD(ctx->base + REG_DPU_STS0);
+		if (reg_val & BIT(31)) {
+			pr_info("dpu stop success\n");
+			break;
+		} else {
+			mdelay(1);
+			pr_info("waiting dpu idle for stop\n");
+		}
+		if (i == 50) {
+			pr_err("wait for dpu idle for stop timeout\n");
+			break;
+		}
+	}
 }
 
 static void dpu_run(struct dpu_context *ctx)
