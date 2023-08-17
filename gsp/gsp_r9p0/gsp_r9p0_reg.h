@@ -75,6 +75,7 @@
 #define R9P0_GSP_DEBUG7(base)		(base + 0x224 + R9P0_GSP_BASE_OFFSET)
 #define R9P0_GSP_DEBUG8(base)		(base + 0x228 + R9P0_GSP_BASE_OFFSET)
 #define R9P0_GSP_DEBUG9(base)		(base + 0x22c + R9P0_GSP_BASE_OFFSET)
+#define R9P0_GSP_DEBUG10(base)		(base + 0x230 + R9P0_GSP_BASE_OFFSET)
 
 #define R9P0_SCALE_COEF_ADDR(base)	(base + 0x300 + R9P0_GSP_BASE_OFFSET)
 #define R9P0_SCALE_COEF_OFFSET		0x200
@@ -566,6 +567,16 @@ struct R9P0_GSP_DEBUG9_REG {
 	};
 };
 
+struct R9P0_GSP_DEBUG10_REG {
+	union {
+		struct {
+			uint32_t   AXIM_STS	:  28;
+			uint32_t   Reserved1		:  4;
+		};
+		uint32_t	value;
+	};
+};
+
 /* LAYERIMG */
 struct R9P0_LAYERIMG_CFG_REG {
 	union {
@@ -907,6 +918,7 @@ struct R9P0_GSP_CTL_REG_T {
 	struct R9P0_GSP_DEBUG7_REG debug7_cfg;
 	struct R9P0_GSP_DEBUG8_REG debug8_cfg;
 	struct R9P0_GSP_DEBUG9_REG debug9_cfg;
+	struct R9P0_GSP_DEBUG10_REG debug10_cfg;
 };
 
 #endif

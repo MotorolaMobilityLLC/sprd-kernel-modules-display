@@ -305,7 +305,8 @@ void gsp_r9p0_core_dump(struct gsp_core *c)
 		gsp_core_reg_read(R9P0_GSP_DEBUG8(c->base));
 	reg_struct.debug9_cfg.value =
 		gsp_core_reg_read(R9P0_GSP_DEBUG9(c->base));
-
+	reg_struct.debug10_cfg.value =
+		gsp_core_reg_read(R9P0_GSP_DEBUG10(c->base));
 
 	/* core's ctl reg parsed */
 	GSP_DUMP("GSP_BUSY[0x%x], ERR_CODE[0x%x]\n",
@@ -319,13 +320,14 @@ void gsp_r9p0_core_dump(struct gsp_core *c)
 
 	GSP_DUMP("GSP_DEBUG1[0x%x], GSP_DEBUG2[0x%x]\n",
 		reg_struct.debug1_cfg.value, reg_struct.debug2_cfg.value);
-	GSP_DUMP("GSP_DEBUG1[0x%x], GSP_DEBUG2[0x%x]\n",
+	GSP_DUMP("GSP_DEBUG3[0x%x], GSP_DEBUG4[0x%x]\n",
 		reg_struct.debug3_cfg.value, reg_struct.debug4_cfg.value);
-	GSP_DUMP("GSP_DEBUG1[0x%x], GSP_DEBUG2[0x%x]\n",
+	GSP_DUMP("GSP_DEBUG5[0x%x], GSP_DEBUG6[0x%x]\n",
 		reg_struct.debug5_cfg.value, reg_struct.debug6_cfg.value);
-	GSP_DUMP("GSP_DEBUG1[0x%x], GSP_DEBUG2[0x%x]\n",
+	GSP_DUMP("GSP_DEBUG7[0x%x], GSP_DEBUG8[0x%x]\n",
 		reg_struct.debug7_cfg.value, reg_struct.debug8_cfg.value);
-	GSP_DUMP("GSP_DEBUG9[0x%x]\n", reg_struct.debug9_cfg.value);
+	GSP_DUMP("GSP_DEBUG9[0x%x], GSP_DEBUG10[0x%x]\n",
+		reg_struct.debug9_cfg.value, reg_struct.debug10_cfg.value);
 
 		/* des layer cfg */
 	GSP_DUMP("bk_bld[%d], bk_en[%d], dither_en[%d]\n",
@@ -333,11 +335,12 @@ void gsp_r9p0_core_dump(struct gsp_core *c)
 		reg_struct.des_data_cfg.BK_EN,
 		reg_struct.des_data_cfg.DITHER_EN);
 
-	GSP_DUMP("rswap_mod[%d], rot_mod[%d], des_format[%d, %d]\n",
+	GSP_DUMP("rswap_mod[%d], rot_mod[%d], des_format/fbce[%d, %d]\n",
 		reg_struct.des_data_cfg.RSWAP_MOD,
 		reg_struct.des_data_cfg.ROT_MOD,
 		reg_struct.des_data_cfg.DES_IMG_FORMAT,
 		reg_struct.des_data_cfg.FBCE_MOD);
+
 	GSP_DUMP("pitch[%d, %d], work_area1[%d, %d, %d, %d]\n",
 		reg_struct.des_pitch.DES_PITCH,
 		reg_struct.des_pitch.DES_HEIGHT,
@@ -361,26 +364,31 @@ void gsp_r9p0_core_dump(struct gsp_core *c)
 
 	for (icnt = 0; icnt < R9P0_IMGL_NUM; icnt++) {
 		if (reg_struct.limg_cfg[icnt].Limg_en) {
-			GSP_DUMP("img_format[%d, %d], pitch[%d, %d]\n",
-			reg_struct.limg_cfg[icnt].IMG_FORMAT,
-			reg_struct.limg_cfg[icnt].FBCD_MOD,
-			reg_struct.limg_pitch[icnt].PITCH,
-			reg_struct.limg_pitch[icnt].HEIGHT);
+			GSP_DUMP("img_format/fbcd[%d, %d], pitch[%d, %d]\n",
+				reg_struct.limg_cfg[icnt].IMG_FORMAT,
+				reg_struct.limg_cfg[icnt].FBCD_MOD,
+				reg_struct.limg_pitch[icnt].PITCH,
+				reg_struct.limg_pitch[icnt].HEIGHT);
 
 			GSP_DUMP("IMG Y addr:[0x%x], u addr; 0x[%x]\n",
-			reg_struct.limg_y_addr[icnt].Y_BASE_ADDR,
-			reg_struct.limg_u_addr[icnt].U_BASE_ADDR);
+				reg_struct.limg_y_addr[icnt].Y_BASE_ADDR,
+				reg_struct.limg_u_addr[icnt].U_BASE_ADDR);
+
+			GSP_DUMP("ZNUM_L[%d], scaling_en[%d]\n",
+				reg_struct.limg_cfg[icnt].ZNUM_L,
+				reg_struct.limg_cfg[icnt].SCALE_EN);
 
 			GSP_DUMP("clip_rect[%d, %d, %d, %d]\n",
-			reg_struct.limg_clip_start[icnt].CLIP_START_X,
-			reg_struct.limg_clip_start[icnt].CLIP_START_Y,
-			reg_struct.limg_clip_size[icnt].CLIP_SIZE_X,
-			reg_struct.limg_clip_size[icnt].CLIP_SIZE_Y);
+				reg_struct.limg_clip_start[icnt].CLIP_START_X,
+				reg_struct.limg_clip_start[icnt].CLIP_START_Y,
+				reg_struct.limg_clip_size[icnt].CLIP_SIZE_X,
+				reg_struct.limg_clip_size[icnt].CLIP_SIZE_Y);
 
-			GSP_DUMP("ZNUM_L[%d], des_rect[%d, %d]\n",
-			reg_struct.limg_cfg[icnt].ZNUM_L,
-			reg_struct.limg_des_start[icnt].DES_START_X,
-			reg_struct.limg_des_start[icnt].DES_START_Y);
+			GSP_DUMP("des_rect[%d, %d, %d, %d]\n",
+				reg_struct.limg_des_start[icnt].DES_START_X,
+				reg_struct.limg_des_start[icnt].DES_START_Y,
+				reg_struct.limg_des_scl_size[icnt].DES_SCL_W,
+				reg_struct.limg_des_scl_size[icnt].DES_SCL_H);
 
 			GSP_DUMP("pmargb_mod[%d], pallet[%d, 0x%x]\n",
 				reg_struct.limg_cfg[icnt].PMARGB_MOD,
@@ -414,7 +422,7 @@ void gsp_r9p0_core_dump(struct gsp_core *c)
 
 	for (icnt = 0; icnt < R9P0_OSDL_NUM; icnt++) {
 		if (reg_struct.losd_cfg[icnt].Losd_en) {
-			GSP_DUMP("img_format[%d, %d], pitch[%d, %d]\n",
+			GSP_DUMP("osd_format/fbcd[%d, %d], pitch[%d, %d]\n",
 			reg_struct.losd_cfg[icnt].IMG_FORMAT,
 			reg_struct.losd_cfg[icnt].FBCD_MOD,
 			reg_struct.losd_pitch[icnt].PITCH,
