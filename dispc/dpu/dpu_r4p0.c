@@ -1428,12 +1428,12 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 	enhance->enhance_en |= BIT(3);
 }
 
-static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_state *state)
+static int dpu_secure_state_change(struct dpu_context *ctx, bool secure_en)
 {
 	int ret;
 
 	if (ctx->fastcall_en) {
-		if (state->layer.secure_en) {
+		if (secure_en) {
 			ret = trusty_fast_call32(NULL, SMC_FC_DPU_FW_SET_SECURITY,
 							FW_ATTR_SECURE, 0, 0);
 			pr_debug("Trusty fastcall enter secure for dpu\n");
@@ -1447,7 +1447,7 @@ static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_st
 			return -EBUSY;
 		}
 	} else {
-		if (state->layer.secure_en) {
+		if (secure_en) {
 			static bool disp_connected;
 
 			if (!disp_connected) {
@@ -1478,11 +1478,48 @@ static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_st
 	return 0;
 }
 
+static int dpu_secure_detect(struct dpu_context *ctx, bool enter, bool secure_en)
+{
+	static bool last_secure_en;
+
+	if (last_secure_en == secure_en)
+		return 0;
+
+	pr_debug("last_secure_en:%d secure_en:%d\n", last_secure_en, secure_en);
+
+	if (enter == true && secure_en == true) {
+		if (dpu_secure_state_change(ctx, true))
+			return -1;
+		last_secure_en = secure_en;
+	} else if (enter == false && secure_en == false) {
+		if (dpu_secure_state_change(ctx, false))
+			return -1;
+		last_secure_en = secure_en;
+	}
+
+	return 0;
+}
+
+static void dpu_update_and_wait(struct dpu_context *ctx)
+{
+	if (ctx->if_type == SPRD_DPU_IF_DPI) {
+		if (!ctx->stopped) {
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_REG_UPDATE);
+			dpu_wait_update_done(ctx);
+		}
+
+		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
+	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
+
+		ctx->stopped = false;
+	}
+}
+
 static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 count)
 {
 	int i;
 	u32 reg_val, mmu_reg_val;
-	static bool last_secure_en;
 	struct sprd_plane_state *state;
 	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
@@ -1496,11 +1533,9 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 	ctx->wb_en = false;
 
 	state = to_sprd_plane_state(planes[0].base.state);
-	pr_debug("last_secure_en:%d secure_en:%d\n", last_secure_en, state->layer.secure_en);
-	if (last_secure_en != state->layer.secure_en) {
-		if (dpu_secure_state_change(ctx, state))
-			return;
-		last_secure_en = state->layer.secure_en;
+	if (dpu_secure_detect(ctx, true, state->layer.secure_en)) {
+		pr_err("dpu switch secure failed!\n");
+		return;
 	}
 
 	/*
@@ -1545,18 +1580,10 @@ static void dpu_flip(struct dpu_context *ctx, struct sprd_plane planes[], u8 cou
 	dpu_cm_set(ctx, CM_CTM);
 
 	/* update trigger and wait */
-	if (ctx->if_type == SPRD_DPU_IF_DPI) {
-		if (!ctx->stopped) {
-			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_REG_UPDATE);
-			dpu_wait_update_done(ctx);
-		}
+	dpu_update_and_wait(ctx);
 
-		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
-	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
-
-		ctx->stopped = false;
-	}
+	if (dpu_secure_detect(ctx, false, state->layer.secure_en))
+		pr_err("dpu switch non secure failed!\n");
 
 	/*
 	 * If the following interrupt was disabled in isr,

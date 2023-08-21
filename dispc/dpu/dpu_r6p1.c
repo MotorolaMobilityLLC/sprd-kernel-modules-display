@@ -2196,12 +2196,12 @@ static void dpu_cm_set(struct dpu_context *ctx, bool cm_status)
 		DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
 }
 
-static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_state *state)
+static int dpu_secure_state_change(struct dpu_context *ctx, bool secure_en)
 {
 	int ret;
 
 	if (ctx->fastcall_en) {
-		if (state->layer.secure_en) {
+		if (secure_en) {
 			ctx->wb_pending = true;
 			ret = dpu_wait_wb_done(ctx);
 			if (ret)
@@ -2221,7 +2221,7 @@ static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_st
 			return -EBUSY;
 		}
 	} else {
-		if (state->layer.secure_en) {
+		if (secure_en) {
 			static bool disp_connected;
 
 			ctx->wb_pending = true;
@@ -2258,15 +2258,77 @@ static int dpu_secure_state_change(struct dpu_context *ctx, struct sprd_plane_st
 	return 0;
 }
 
+static int dpu_secure_detect(struct dpu_context *ctx, bool enter, bool secure_en)
+{
+	static bool last_secure_en;
+
+	if (last_secure_en == secure_en)
+		return 0;
+
+	pr_debug("last_secure_en:%d secure_en:%d\n", last_secure_en, secure_en);
+
+	if (enter == true && secure_en == true) {
+		if (dpu_secure_state_change(ctx, true))
+			return -1;
+		last_secure_en = secure_en;
+	} else if (enter == false && secure_en == false) {
+		if (dpu_secure_state_change(ctx, false))
+			return -1;
+		last_secure_en = secure_en;
+	}
+
+	return 0;
+}
+
+static void dpu_update_and_wait(struct dpu_context *ctx)
+{
+	struct dpu_enhance *enhance = ctx->enhance;
+	int ret;
+
+	if (ctx->is_single_run) {
+		if (ctx->cmd_dpi_mode) {
+			spin_lock_irq(&ctx->irq_lock);
+			ctx->dpu_run_flag = true;
+			ctx->evt_te_update = false;
+			spin_unlock_irq(&ctx->irq_lock);
+			ret = wait_event_interruptible_timeout(ctx->te_update_wq, ctx->evt_te_update,
+								msecs_to_jiffies(20));
+			if (!ret) {
+				spin_lock_irq(&ctx->irq_lock);
+				ctx->dpu_run_flag = false;
+				ctx->evt_te_update = false;
+				spin_unlock_irq(&ctx->irq_lock);
+				pr_err("dpu flip wait for te time out!\n");
+			} else if (ret == -ERESTARTSYS) {
+				pr_err("dpu flip wait for te process is interrupted by signal!\n");
+			}
+		} else {
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
+			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		}
+	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
+		ctx->stopped = false;
+	} else if (ctx->if_type == SPRD_DPU_IF_DPI) {
+		if (!ctx->stopped) {
+			if (enhance->first_frame == true) {
+				dpu_wait_all_update_done(ctx);
+				enhance->first_frame = false;
+			} else
+				dpu_wait_update_done(ctx);
+		}
+
+		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
+	}
+}
+
 static void dpu_flip(struct dpu_context *ctx,
 		     struct sprd_plane planes[], u8 count)
 {
-	int i, ret;
+	int i;
 	u32 reg_val;
-	static bool last_secure_en;
 	struct sprd_plane_state *state;
 	struct sprd_dpu *dpu = container_of(ctx, struct sprd_dpu, ctx);
-	struct dpu_enhance *enhance = ctx->enhance;
 	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 
 	ctx->vsync_count = 0;
@@ -2274,11 +2336,9 @@ static void dpu_flip(struct dpu_context *ctx,
 		ctx->wb_en = true;
 
 	state = to_sprd_plane_state(planes[0].base.state);
-	pr_debug("last_secure_en:%d secure_en:%d\n", last_secure_en, state->layer.secure_en);
-	if (last_secure_en != state->layer.secure_en) {
-		if (dpu_secure_state_change(ctx, state))
-			return;
-		last_secure_en = state->layer.secure_en;
+	if (dpu_secure_detect(ctx, true, state->layer.secure_en)) {
+		pr_err("dpu switch secure failed!\n");
+		return;
 	}
 
 	/*
@@ -2318,41 +2378,10 @@ static void dpu_flip(struct dpu_context *ctx,
 	dpu_cm_set(ctx, CM_CTM);
 
 	/* update trigger and wait */
-	if (ctx->is_single_run) {
-		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
-			ctx->dpu_run_flag = true;
-			ctx->evt_te_update = false;
-			spin_unlock_irq(&ctx->irq_lock);
-			ret = wait_event_interruptible_timeout(ctx->te_update_wq, ctx->evt_te_update,
-								msecs_to_jiffies(20));
-			if (!ret) {
-				spin_lock_irq(&ctx->irq_lock);
-				ctx->dpu_run_flag = false;
-				ctx->evt_te_update = false;
-				spin_unlock_irq(&ctx->irq_lock);
-				pr_err("dpu flip wait for te time out!\n");
-			} else if (ret == -ERESTARTSYS) {
-				pr_err("dpu flip wait for te process is interrupted by signal!\n");
-			}
-		} else {
-			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(4));
-			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
-		}
-	} else if (ctx->if_type == SPRD_DPU_IF_EDPI) {
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_RUN);
-		ctx->stopped = false;
-	} else if (ctx->if_type == SPRD_DPU_IF_DPI) {
-		if (!ctx->stopped) {
-			if (enhance->first_frame == true) {
-				dpu_wait_all_update_done(ctx);
-				enhance->first_frame = false;
-			} else
-				dpu_wait_update_done(ctx);
-		}
+	dpu_update_and_wait(ctx);
 
-		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
-	}
+	if (dpu_secure_detect(ctx, false, state->layer.secure_en))
+		pr_err("dpu switch non secure failed!\n");
 
 	/*
 	 * If the following interrupt was disabled in isr,
