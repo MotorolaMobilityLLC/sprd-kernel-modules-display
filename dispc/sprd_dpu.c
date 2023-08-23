@@ -100,25 +100,30 @@ int dpu_wait_te_flush(struct dpu_context *ctx)
 	return 0;
 }
 
-static void sprd_dpu_prepare_fb(struct sprd_crtc *crtc,
+static int sprd_dpu_prepare_fb(struct sprd_crtc *crtc,
 				struct drm_plane_state *new_state)
 {
 	struct drm_gem_object *obj;
 	struct sprd_gem_obj *sprd_gem;
 	struct sprd_dpu *dpu = crtc->priv;
-	int i;
+	int i, ret = 0;
 
 	if (!dpu->ctx.enabled) {
 		DRM_WARN("dpu has already powered off\n");
-		return;
+		return 0;
 	}
 
 	for (i = 0; i < new_state->fb->format->num_planes; i++) {
 		obj = drm_gem_fb_get_obj(new_state->fb, i);
 		sprd_gem = to_sprd_gem_obj(obj);
-		if (sprd_gem->need_iommu)
-			sprd_crtc_iommu_map(&dpu->dev, sprd_gem);
+		if (sprd_gem->need_iommu) {
+			ret = sprd_crtc_iommu_map(&dpu->dev, sprd_gem);
+			if (ret)
+				break;
+		}
 	}
+
+	return ret;
 }
 
 static unsigned long sprd_free_reserved_area(void *start, void *end, int poison, const char *s)

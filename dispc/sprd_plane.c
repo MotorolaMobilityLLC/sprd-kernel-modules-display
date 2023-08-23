@@ -29,7 +29,7 @@ static int sprd_plane_prepare_fb(struct drm_plane *plane,
 		return 0;
 
 	if (crtc->ops->prepare_fb)
-		crtc->ops->prepare_fb(crtc, new_state);
+		return crtc->ops->prepare_fb(crtc, new_state);
 
 	return 0;
 }

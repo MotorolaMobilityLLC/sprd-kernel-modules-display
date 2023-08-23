@@ -79,24 +79,28 @@ static void int_cnt_timer_exit(struct dpu_context *ctx)
 	memset(&ctx->int_cnt, 0, sizeof(struct dpu_int_cnt));
 }
 
-static void sprd_dpu_prepare_fb(struct sprd_crtc *crtc,
+static int sprd_dpu_prepare_fb(struct sprd_crtc *crtc,
 				struct drm_plane_state *new_state)
 {
 	struct drm_gem_object *obj;
 	struct sprd_gem_obj *sprd_gem;
 	struct sprd_dpu *dpu = crtc->priv;
-	int i;
+	int i, ret = 0;
 
 	if (!dpu->ctx.enabled) {
 		DRM_WARN("dpu has already powered off\n");
-		return;
+		return 0;
 	}
 
 	for (i = 0; i < new_state->fb->format->num_planes; i++) {
 		obj = drm_gem_fb_get_obj(new_state->fb, i);
 		sprd_gem = to_sprd_gem_obj(obj);
-		sprd_crtc_iommu_map(&dpu->dev, sprd_gem);
+		ret = sprd_crtc_iommu_map(&dpu->dev, sprd_gem);
+		if (ret)
+			break;
 	}
+
+	return ret;
 }
 
 static void sprd_dpu_cleanup_fb(struct sprd_crtc *crtc,
