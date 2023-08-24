@@ -797,6 +797,10 @@ static int of_parse_oled_cmds(struct sprd_oled *oled,
 	 */
 	len = (cmds->wc_h << 8) | cmds->wc_l;
 	total =  size / (len + 4);
+	if (total > (sizeof(oled->cmds) / sizeof(oled->cmds[0]))) {
+		DRM_ERROR("oled backlight cmds length over range\n");
+		total = sizeof(oled->cmds) / sizeof(oled->cmds[0]);
+	}
 
 	p = (struct dsi_cmd_desc *)kzalloc(size, GFP_KERNEL);
 	if (!p)
