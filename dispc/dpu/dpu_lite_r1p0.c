@@ -562,6 +562,12 @@ static void dpu_layer(struct dpu_context *ctx,
 		   hwlayer->index), hwlayer->alpha);
 
 	info = drm_format_info(hwlayer->format);
+	if (IS_ERR_OR_NULL(info))
+	{
+		pr_warn("drm format info is invalid.\n");
+		return;
+	}
+
 	pitch = hwlayer->pitch[0] / info->cpp[0];
 	DPU_REG_WR(ctx->base + DPU_LAY_REG(REG_LAY_PITCH,
 		   hwlayer->index), pitch);

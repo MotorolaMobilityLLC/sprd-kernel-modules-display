@@ -862,6 +862,12 @@ static void dpu_layer(struct dpu_context *ctx,
 			hwlayer->index), hwlayer->alpha);
 
 	info = drm_format_info(hwlayer->format);
+	if (IS_ERR_OR_NULL(info))
+	{
+		pr_warn("drm format info is invalid.\n");
+		return;
+	}
+
 	if (hwlayer->planes == 3) {
 		/* UV pitch is 1/2 of Y pitch*/
 		pitch = (hwlayer->pitch[0] / info->cpp[0]) |
