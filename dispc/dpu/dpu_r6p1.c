@@ -901,6 +901,10 @@ static int dpu_wait_all_regs_update_done(struct dpu_context *ctx)
 
 	/* clear the event flag before wait */
 	ctx->evt_all_regs_update = false;
+	if (!ctx->stopped)
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(3));
+	else
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0) | BIT(3));
 
 	/* wait for reg update done interrupt */
 	rc = wait_event_interruptible_timeout(ctx->wait_queue,
@@ -969,6 +973,10 @@ static int dpu_wait_all_update_done(struct dpu_context *ctx)
 
 	/* clear the event flag before wait */
 	ctx->evt_all_update = false;
+	if (!ctx->stopped)
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2));
+	else
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0) | BIT(2));
 
 	/* wait for reg update done interrupt */
 	rc = wait_event_interruptible_timeout(ctx->wait_queue, ctx->evt_all_update,
@@ -2333,7 +2341,6 @@ static void dpu_flip(struct dpu_context *ctx,
 	} else if (ctx->if_type == SPRD_DPU_IF_DPI) {
 		if (!ctx->stopped) {
 			if (enhance->first_frame == true) {
-				DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_ALL_UPDATE);
 				dpu_wait_all_update_done(ctx);
 				enhance->first_frame = false;
 			} else
@@ -3125,7 +3132,6 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		}
 	} else	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
 		if (id == ENHANCE_CFG_ID_SCL) {
-			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(3));
 			dpu_wait_all_regs_update_done(ctx);
 		} else if (!no_update) {
 			DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
