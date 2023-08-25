@@ -1027,7 +1027,11 @@ static int dpu_wait_wb_done(struct dpu_context *ctx)
 
 static void dpu_stop(struct dpu_context *ctx)
 {
-	dpu_wait_wb_done(ctx);
+	int ret;
+
+	ret = dpu_wait_wb_done(ctx);
+	if (ret)
+		pr_warn("dpu wait wb timeout\n");
 
 	if (ctx->if_type == SPRD_DPU_IF_DPI)
 		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT_DPU_STOP);
