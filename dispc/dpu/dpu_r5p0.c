@@ -27,6 +27,7 @@
 #include "sprd_dpu.h"
 #include "sprd_bl.h"
 #include <../drivers/trusty/trusty.h>
+#include "../umb9230s/umb9230s.h"
 
 #define XFBC8888_HEADER_SIZE(w, h) (ALIGN((ALIGN((w), 16)) * \
 				(ALIGN((h), 16)) / 16, 128))
@@ -1449,6 +1450,10 @@ static int dpu_vrr(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
 
 	sprd_dsi_vrr_timing(dpu->dsi);
+
+	if (dpu->dsi->umb9230s)
+		umb9230s_vrr_timing(dpu->dsi->umb9230s);
+
 	reg_val = DPU_REG_RD(ctx->base + REG_DPU_CTRL);
 	dpu_run(ctx);
 	dpu->crtc->fps_mode_changed = false;

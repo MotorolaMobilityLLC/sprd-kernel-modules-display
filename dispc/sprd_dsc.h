@@ -128,5 +128,8 @@ struct dsc_cfg {
 };
 
 int calc_dsc_params(struct dsc_init_param *dsc_init);
+int calc_dsc_r4p0_params(struct dsc_init_param *dsc_init, struct dsc_cfg *dsc_cfg,
+				u32 output_bpc, u32 slice_width, u32 slice_height,
+				u32 hactive, u32 vactive);
 
 #endif /* _SPRD_DSC_H_ */

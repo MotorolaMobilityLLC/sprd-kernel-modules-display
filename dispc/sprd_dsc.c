@@ -406,6 +406,95 @@ int calc_dsc_params(struct dsc_init_param *dsc_init)
 	return 0;
 }
 
+int calc_dsc_r4p0_params(struct dsc_init_param *dsc_init, struct dsc_cfg *dsc_cfg,
+				u32 output_bpc, u32 slice_width, u32 slice_height,
+				u32 hactive, u32 vactive)
+{
+	int slicew, sliceh;
+	int target_bpp_x16;
+	int prev_min_qp, prev_max_qp, prev_thresh, prev_offset;
+	unsigned char pps[PPS_SIZE];
+	int pixelsPerGroup = 3, numSsps = 3;
+	int i;
+
+	set_defaults(dsc_init, output_bpc);
+
+	memset(dsc_cfg, 0, sizeof(struct dsc_cfg));
+
+	dsc_init->init_pic_width = hactive;
+	dsc_init->init_pic_height = vactive;
+	dsc_init->init_slice_width = slice_width;
+	dsc_init->init_slice_height = slice_height;
+	memset(pps, 0, PPS_SIZE);
+
+	dsc_cfg->dsc_version_minor = dsc_init->init_dsc_version_minor;
+
+	dsc_cfg->pic_width = dsc_init->init_pic_width;
+	dsc_cfg->pic_height = dsc_init->init_pic_height;
+	dsc_cfg->bits_per_component = dsc_init->bit_per_component;
+	dsc_cfg->linebuf_depth = dsc_init->line_buffer_bpc;
+
+	if (dsc_init->init_mux_word_size == 0) {
+		if (dsc_cfg->bits_per_component <= 10)
+			dsc_init->init_mux_word_size = 48;
+		else
+			dsc_init->init_mux_word_size = 64;
+	}
+	dsc_cfg->mux_word_size = dsc_init->init_mux_word_size;
+	dsc_cfg->convert_rgb = !dsc_init->use_yuv_input;
+	dsc_cfg->rc_tgt_offset_hi = dsc_init->tgt_offset_hi;
+
+	dsc_cfg->rc_tgt_offset_lo = dsc_init->tgt_offset_lo;
+	target_bpp_x16 = (int)(dsc_init->bit_per_pixel * 16 + 5/10);
+	dsc_cfg->bits_per_pixel = target_bpp_x16;
+
+	dsc_cfg->rc_edge_factor = dsc_init->rc_edge_factor;
+	dsc_cfg->rc_quant_incr_limit1 = dsc_init->init_quant_incr_limit1;
+	dsc_cfg->rc_quant_incr_limit0 = dsc_init->init_quant_incr_limit0;
+	prev_min_qp = dsc_init->rc_minqp[0];
+	prev_max_qp = dsc_init->rc_maxqp[0];
+	prev_thresh = dsc_init->rc_buf_thresh[0];
+	prev_offset = dsc_init->rc_offset[0];
+	for (i = 0; i < NUM_BUF_RANGES; ++i) {
+		dsc_cfg->rc_range_params[i].range_bpg_offset = dsc_init->rc_offset[i];
+		dsc_cfg->rc_range_params[i].range_max_qp = dsc_init->rc_maxqp[i];
+		dsc_cfg->rc_range_params[i].range_min_qp = dsc_init->rc_minqp[i];
+		if (i < NUM_BUF_RANGES-1) {
+			dsc_cfg->rc_buf_thresh[i] = dsc_init->rc_buf_thresh[i];
+			prev_thresh = dsc_init->rc_buf_thresh[i];
+		}
+	}
+	dsc_cfg->rc_model_size = dsc_init->rc_model_size;
+	dsc_cfg->initial_xmit_delay = dsc_init->initial_delay;
+	dsc_cfg->block_pred_enable = dsc_init->bp_enable;
+	dsc_cfg->initial_offset = dsc_init->initial_fullness_ofs;
+
+	dsc_cfg->flatness_min_qp = dsc_init->flatness_minqp;
+	dsc_cfg->flatness_max_qp = dsc_init->flatness_maxqp;
+	dsc_cfg->flatness_det_thresh = dsc_init->init_flatness_det_thresh;
+	dsc_cfg->initial_scale_value = 8 * dsc_cfg->rc_model_size
+					/ (dsc_cfg->rc_model_size
+					- dsc_cfg->initial_offset);
+	dsc_cfg->vbr_enable = dsc_init->enable_vbr;
+
+	slicew = (dsc_init->init_slice_width ? dsc_init->init_slice_width
+			: dsc_cfg->pic_width);
+	sliceh = (dsc_init->init_slice_height ? dsc_init->init_slice_height
+			: dsc_cfg->pic_height);
+
+	dsc_cfg->slice_width = slicew;
+	dsc_cfg->slice_height = sliceh;
+
+	if (calc_rc_params(dsc_init, dsc_cfg, pixelsPerGroup, numSsps))
+		DRM_ERROR("One or more PPS parameters exceeded their allowed bit depth.");
+
+	write_pps(pps, dsc_cfg);
+
+	write_reg(dsc_cfg, pps);
+
+	return 0;
+}
+
 MODULE_AUTHOR("Zhen Gao <zhen.gao@unisoc.com>");
 MODULE_DESCRIPTION("Display DSC Parameters Calculate");
 MODULE_LICENSE("GPL v2");

@@ -8,6 +8,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include "kernel_gpio_fun.h"
+#include "umb9230s.h"
 
 #define INTR_IRQ_NAME                     "umb_intr"
 
@@ -94,6 +95,8 @@ void umb9230s_set_gpio_power(int flag)
    */
 static irqreturn_t irq_handler_func(int irq, void *data)
 {
+	umb9230s_isr(data);
+
 	return IRQ_HANDLED;
 }
 

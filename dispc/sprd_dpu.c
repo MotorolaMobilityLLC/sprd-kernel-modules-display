@@ -30,6 +30,7 @@
 #include "sprd_iommu.h"
 #include "sprd_plane.h"
 #include "sysfs/sysfs_display.h"
+#include "umb9230s/umb9230s.h"
 
 static void int_cnt_timer_callback(struct timer_list *timer)
 {
@@ -257,6 +258,7 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 				sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
 				drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
 				drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);
+				umb9230s_videomode_copy(dsi->umb9230s, &dsi->ctx.vm);
 				break;
 			}
 		}
@@ -264,6 +266,7 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 		if (mode->type & DRM_MODE_TYPE_USERDEF) {
 			drm_display_mode_to_videomode(&panel->info.mode, &dpu->ctx.vm);
 			drm_display_mode_to_videomode(&panel->info.mode, &dsi->ctx.vm);
+			umb9230s_videomode_copy(dsi->umb9230s, &dsi->ctx.vm);
 		} else {
 			if ((mode->hdisplay != panel->info.mode.hdisplay) || (mode->vdisplay != panel->info.mode.vdisplay)) {
 				for (i = 0; i < panel->info.display_mode_count; i++) {
@@ -277,6 +280,7 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 			}
 			drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
 			drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);
+			umb9230s_videomode_copy(dsi->umb9230s, &dsi->ctx.vm);
 		}
 	}
 

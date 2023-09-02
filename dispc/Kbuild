@@ -55,6 +55,7 @@ CONFIG_DRM_SPRD_DSI := y
 CONFIG_DRM_SPRD_DUMMY := n
 CONFIG_DRM_SPRD_WB_DEBUG := n
 CONFIG_UNISOC_GSP := m
+CONFIG_DRM_SPRD_UMB9230S := y
 endif
 
 ifeq ($(BSP_MODULE_DISP_VERSION),ums9610)
@@ -161,6 +162,11 @@ ifeq ($(CONFIG_DRM_SPRD_DSI),y)
 		$(src)/dphy/Kbuild \
 		$(src)/dsi/Kbuild
     ccflags-y += -DCONFIG_DRM_SPRD_DSI=$(CONFIG_DRM_SPRD_DSI)
+endif
+
+ifeq ($(CONFIG_DRM_SPRD_UMB9230S),y)
+    INCLUDE_SUBDIR += $(src)/umb9230s/Kbuild
+    ccflags-y += -DCONFIG_DRM_SPRD_UMB9230S=$(CONFIG_DRM_SPRD_UMB9230S)
 endif
 
 ifeq ($(CONFIG_DRM_SPRD_DUMMY),y)

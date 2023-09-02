@@ -27,6 +27,7 @@
 #include "dsi/sprd_dsi_api.h"
 #include "dphy/sprd_dphy_api.h"
 #include "sysfs/sysfs_display.h"
+#include "umb9230s/umb9230s.h"
 
 #define encoder_to_dsi(encoder) \
 	container_of(encoder, struct sprd_dsi, encoder)
@@ -155,6 +156,8 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	if (dsi->dsi_slave)
 		sprd_dsi_lp_cmd_enable(dsi->dsi_slave, true);
 
+	umb9230s_enable(dsi->umb9230s);
+
 	if (dsi->panel) {
 		if ((dsi->ctx.last_dpms == DRM_MODE_DPMS_SUSPEND) &&
 		    (dsi->ctx.dpms == DRM_MODE_DPMS_ON)) {
@@ -195,6 +198,8 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 		else
 			sprd_dphy_hs_clk_en(dsi->phy->slave, true);
 	}
+
+	umb9230s_dsi_tx_configure(dsi->umb9230s);
 
 	/* workaround:
 	 * dpu r6p0 need resume after dsi resume on div6 scences
@@ -264,6 +269,9 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 		sprd_dsi_lp_cmd_enable(dsi->dsi_slave, true);
 	}
 
+	umb9230s_dsi_tx_set_work_mode(dsi->umb9230s, DSI_MODE_CMD);
+	umb9230s_dsi_tx_lp_cmd_enable(dsi->umb9230s, true);
+
 	if (dsi->panel) {
 		if ((dsi->ctx.dpms == DRM_MODE_DPMS_SUSPEND) &&
 		    ((dsi->ctx.last_dpms == DRM_MODE_DPMS_STANDBY)
@@ -274,9 +282,14 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 			drm_panel_disable(dsi->panel);
 			if (dsi->phy->ctx.ulps_enable)
 				sprd_dphy_ulps_enter(dsi->phy);
+
+			umb9230s_phy_tx_ulps_enter(dsi->umb9230s);
+
 			drm_panel_unprepare(dsi->panel);
 		}
 	}
+
+	umb9230s_disable(dsi->umb9230s);
 
 	sprd_dphy_disable(dsi->phy);
 	sprd_dsi_disable(dsi);
@@ -436,6 +449,40 @@ static int sprd_dsi_phy_attach(struct sprd_dsi *dsi)
 	return 0;
 }
 
+static int sprd_dsi_umb9230s_attach(struct sprd_dsi *dsi)
+{
+	struct device *dev;
+	struct device_node *lcd_node;
+
+	if (!dsi->ctx.umb9230s_en)
+		return 0;
+
+	DRM_INFO("dsi attach umb9230s\n");
+
+	dev = sprd_disp_pipe_get_by_port(dsi->phy->dev.parent, 2);
+	if (!dev)
+		return -ENODEV;
+
+	dsi->umb9230s = dev_get_drvdata(dev);
+	if (!dsi->umb9230s) {
+		DRM_ERROR("get drvdata failed\n");
+		return -EINVAL;
+	}
+
+	dsi->umb9230s->dsi_ctx.lanes = dsi->ctx.lanes;
+	dsi->umb9230s->dsi_ctx.esc_clk = dsi->ctx.esc_clk;
+	dsi->umb9230s->dsi_ctx.video_lp_cmd_en = dsi->ctx.video_lp_cmd_en;
+	dsi->umb9230s->dsi_ctx.hporch_lp_disable = dsi->ctx.hporch_lp_disable;
+
+	lcd_node = dsi->panel->dev->of_node;
+	umb9230s_parse_lcd_info(dsi->umb9230s, lcd_node);
+
+	dsi->umb9230s->phy_ctx.lanes = dsi->ctx.lanes;
+	dsi->umb9230s->phy_ctx.freq = dsi->ctx.byte_clk * 8;
+
+	return 0;
+}
+
 static int sprd_dsi_host_attach(struct mipi_dsi_host *host,
 			   struct mipi_dsi_device *slave)
 {
@@ -476,6 +523,10 @@ static int sprd_dsi_host_attach(struct mipi_dsi_host *host,
 	ret = sprd_dsi_find_panel(dsi);
 	if (ret)
 		return ret;
+
+	ret = sprd_dsi_umb9230s_attach(dsi);
+	if (ret)
+		DRM_ERROR("dsi attach umb9230s failed\n");
 
 	lcd_node = dsi->panel->dev->of_node;
 
@@ -537,13 +588,24 @@ static ssize_t sprd_dsi_host_transfer(struct mipi_dsi_host *host,
 		u8 lsb = (msg->tx_len > 0) ? tx_buf[0] : 0;
 		u8 msb = (msg->tx_len > 1) ? tx_buf[1] : 0;
 
-		return sprd_dsi_rd_pkt(dsi, msg->channel, msg->type,
+		if (dsi->umb9230s)
+			return umb9230s_dsi_tx_rd_pkt(dsi->umb9230s, msg->channel, msg->type,
+				msb, lsb, msg->rx_buf, msg->rx_len);
+		else
+			return sprd_dsi_rd_pkt(dsi, msg->channel, msg->type,
 				msb, lsb, msg->rx_buf, msg->rx_len);
 	}
 
 	if (msg->tx_buf && msg->tx_len) {
-		ret = sprd_dsi_wr_pkt(dsi, msg->channel, msg->type,
-					tx_buf, msg->tx_len);
+		if (dsi->umb9230s)
+			ret = umb9230s_dsi_tx_wr_pkt(dsi->umb9230s, msg->channel, msg->type,
+						tx_buf, msg->tx_len);
+		else
+			ret = sprd_dsi_wr_pkt(dsi, msg->channel, msg->type,
+						tx_buf, msg->tx_len);
+
+		if (ret)
+			return ret;
 
 		if (dsi->dsi_slave)
 			ret = sprd_dsi_wr_pkt(dsi->dsi_slave, msg->channel, msg->type,
@@ -953,6 +1015,9 @@ static int sprd_dsi_context_init(struct sprd_dsi *dsi, struct device_node *np)
 		ctx->int1_mask = tmp;
 	else
 		ctx->int1_mask = 0xffffffff;
+
+	if (of_property_read_bool(np, "sprd,umb9230s-en"))
+		ctx->umb9230s_en = 1;
 
 	sprd_edid_set_default_prop(&dsi->edid_info);
 

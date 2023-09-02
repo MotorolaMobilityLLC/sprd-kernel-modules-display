@@ -125,6 +125,8 @@ struct dsi_context {
 	u32 video_lp_config;
 
 	const char *lcd_name;
+
+	int umb9230s_en;
 };
 
 struct dsi_core_ops {
@@ -242,6 +244,8 @@ struct sprd_dsi {
 	struct sprd_dsi *dsi_master;
 	struct sprd_dsi *dsi_slave;
 	u32 dual_dsi_en;
+
+	struct umb9230s_device *umb9230s;
 };
 
 #ifdef CONFIG_DRM_SPRD_DSI

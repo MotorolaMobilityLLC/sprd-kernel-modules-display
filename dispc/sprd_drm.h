@@ -58,4 +58,9 @@ extern struct platform_driver sprd_dp_driver;
 long sprd_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 #endif
 
+#ifdef CONFIG_DRM_SPRD_UMB9230S
+extern struct platform_driver umb9230s_i2c_driver;
+extern struct platform_driver sprd_umb9230s_driver;
+#endif
+
 #endif /* _SPRD_DRM_H_ */

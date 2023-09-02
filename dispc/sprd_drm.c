@@ -703,6 +703,10 @@ static struct platform_driver *sprd_drm_drivers[]  = {
 #ifdef CONFIG_DRM_SPRD_DP
 	&sprd_dp_driver,
 #endif
+#ifdef CONFIG_DRM_SPRD_UMB9230S
+	&umb9230s_i2c_driver,
+	&sprd_umb9230s_driver,
+#endif
 	&sprd_drm_driver,
 };
 
