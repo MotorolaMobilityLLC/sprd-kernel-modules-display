@@ -15,6 +15,8 @@
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
 
+#define VREFRESH_CNT_MAX	20
+
 enum {
 	CMD_CODE_INIT = 0,
 	CMD_CODE_SLEEP_IN,
@@ -24,9 +26,9 @@ enum {
 	CMD_OLED_REG_UNLOCK,
 	CMD_CODE_DOZE_IN,
 	CMD_CODE_DOZE_OUT,
-	CMD_CODE_VREFRESH,
-	CMD_CODE_VREFRESH_PREFIX,
 	CMD_CODE_BL_PREFIX,
+	CMD_CODE_RESERVED3,
+	CMD_CODE_RESERVED4,
 	CMD_CODE_RESERVED5,
 	CMD_CODE_MAX,
 };
@@ -82,6 +84,8 @@ struct panel_info {
 	struct reset_sequence rst_off_seq;
 	const void *cmds[CMD_CODE_MAX];
 	int cmds_len[CMD_CODE_MAX];
+	const void *vrefresh_cmds[VREFRESH_CNT_MAX];
+	int vrefresh_cmds_len[VREFRESH_CNT_MAX];
 	int panel_type;
 
 	/* cmd mode vrr config */
@@ -90,6 +94,7 @@ struct panel_info {
 	u32 *vrr_mode_vrefresh;
 	bool vrefresh_cmd_changed;
 	int current_cmd_index;
+	int max_vrefresh;
 
 	u32 slice_width;
 	u32 slice_height;

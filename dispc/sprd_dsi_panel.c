@@ -87,29 +87,11 @@ static int sprd_panel_send_cmds(struct mipi_dsi_device *dsi,
 
 int sprd_panel_send_vrefresh_cmd(struct sprd_panel *panel, int index)
 {
-	const struct dsi_cmd_desc *cmds = NULL;
-	struct panel_info *info = &panel->info;
-	u16 len = 0;
-	int i = 0;
-
 	DRM_INFO("%s(), index is :%d\n", __func__, index);
 
-	if (panel->info.cmds[CMD_CODE_VREFRESH_PREFIX] &&
-		panel->info.cmds_len[CMD_CODE_VREFRESH_PREFIX]) {
-		sprd_panel_send_cmds(panel->slave,
-				panel->info.cmds[CMD_CODE_VREFRESH_PREFIX],
-				panel->info.cmds_len[CMD_CODE_VREFRESH_PREFIX]);
-	}
-
-	cmds = (const struct dsi_cmd_desc *)info->cmds[CMD_CODE_VREFRESH];
-	len = (cmds->wc_h << 8) | cmds->wc_l;
-	while (i < index) {
-		cmds = (const struct dsi_cmd_desc *)(cmds->payload + len);
-		len = (cmds->wc_h << 8) | cmds->wc_l;
-		i++;
-	}
-
-	sprd_panel_send_cmds(panel->slave, cmds, len);
+	sprd_panel_send_cmds(panel->slave,
+			     panel->info.vrefresh_cmds[index],
+			     panel->info.vrefresh_cmds_len[index]);
 
 	return 0;
 }
@@ -1163,8 +1145,9 @@ int sprd_panel_vrr_config(struct device_node *lcd_node,
 	struct sprd_panel *panel)
 {
 	struct panel_info *info = &panel->info;
-	int bytes, rc;
+	int bytes, rc, i, max_vrefresh;
 	const void *p;
+	char vrefresh_rate_node[60];
 	u32 val;
 
 	if (!info->cmd_dpi_mode)
@@ -1192,22 +1175,25 @@ int sprd_panel_vrr_config(struct device_node *lcd_node,
 		return rc;
 	}
 
-	p = of_get_property(lcd_node, "sprd,vrefresh-rate-cmd", &bytes);
-	if (p) {
-		info->cmds[CMD_CODE_VREFRESH] = p;
-		info->cmds_len[CMD_CODE_VREFRESH] = bytes;
-	} else {
-		DRM_ERROR("can't find sprd,vrefresh-rate-cmd property\n");
-		kfree (info->vrr_mode_vrefresh);
-		return -ENODEV;
+	max_vrefresh = info->vrr_mode_vrefresh[0];
+	for (i = 0; i < info->vrr_mode_count; i++) {
+		if (max_vrefresh < info->vrr_mode_vrefresh[i])
+			max_vrefresh = info->vrr_mode_vrefresh[i];
 	}
+	info->max_vrefresh = max_vrefresh;
+	DRM_INFO("current platform support max vrefresh rate is :%d\n", max_vrefresh);
 
-	p = of_get_property(lcd_node, "sprd,vrefresh-cmd-prefix", &bytes);
-	if (p) {
-		info->cmds[CMD_CODE_VREFRESH_PREFIX] = p;
-		info->cmds_len[CMD_CODE_VREFRESH_PREFIX] = bytes;
-	} else {
-		DRM_INFO("no need send prefix cmd\n");
+	for (i = 0; i < info->vrr_mode_count; i++) {
+		memset(vrefresh_rate_node, 0, sizeof(char) * 60);
+		snprintf(vrefresh_rate_node, sizeof(vrefresh_rate_node), "sprd,vrefresh-cmd-%d", info->vrr_mode_vrefresh[i]);
+		p = of_get_property(lcd_node, vrefresh_rate_node, &bytes);
+		if (p) {
+			info->vrefresh_cmds[i] = p;
+			info->vrefresh_cmds_len[i] = bytes;
+		} else {
+			DRM_ERROR("can't find %s property\n", vrefresh_rate_node);
+			return -ENODEV;
+		}
 	}
 
 	p = of_get_property(lcd_node, "sprd,bl-prefix", &bytes);

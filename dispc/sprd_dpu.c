@@ -254,7 +254,7 @@ static void sprd_dpu_mode_set_nofb(struct sprd_crtc *crtc)
 		for (i = 0; i < panel->info.display_mode_count; i++) {
 			if ((panel->info.buildin_modes[i].hdisplay == panel->info.mode.hdisplay) &&
 			    (panel->info.buildin_modes[i].vdisplay == panel->info.mode.vdisplay) &&
-			    (drm_mode_vrefresh(&panel->info.buildin_modes[i]) == DPI_VREFRESH_120)) {
+			    (drm_mode_vrefresh(&panel->info.buildin_modes[i]) == (panel->info.max_vrefresh))) {
 				sprd_drm_mode_copy(&dpu->actual_mode, &(panel->info.buildin_modes[i]));
 				drm_display_mode_to_videomode(&dpu->actual_mode, &dpu->ctx.vm);
 				drm_display_mode_to_videomode(&dpu->actual_mode, &dsi->ctx.vm);

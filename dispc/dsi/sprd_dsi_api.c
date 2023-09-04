@@ -442,7 +442,7 @@ void sprd_dsi_edpi_video(struct sprd_dsi *dsi)
 		}
 	}
 
-	if (i == cur_pkt_len && !find_pkt_size)
+	if ((i == cur_pkt_len && !find_pkt_size) || (ctx->format == SPRD_MIPI_DSI_FMT_DSC))
 		dsi_hal_edpi_max_pkt_size(dsi, cur_pkt_len);
 	else
 		dsi_hal_edpi_max_pkt_size(dsi, dcs_wm_pkt_size);
