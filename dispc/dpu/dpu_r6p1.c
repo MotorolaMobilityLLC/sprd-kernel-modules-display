@@ -22,7 +22,7 @@
 #include "sprd_crtc.h"
 #include "sprd_plane.h"
 #include "sprd_dsi_panel.h"
-#include "dpu_r6p1_scale_param.h"
+#include "dpu_r6px_scale_param.h"
 #include <../drivers/trusty/trusty.h>
 
 #define XFBC8888_HEADER_SIZE(w, h) (ALIGN((ALIGN((w), 16)) * \
@@ -243,24 +243,35 @@
 // #define BIT_DPU_LAY_EN				BIT(0)
 #define BIT_DPU_LAY_LAYER_ALPHA				(0x01 << 2)
 #define BIT_DPU_LAY_COMBO_ALPHA				(0x01 << 3)
-#define BIT_DPU_LAY_FORMAT_YUV422_2PLANE		(0x00 << 4)
-#define BIT_DPU_LAY_FORMAT_YUV420_2PLANE		(0x01 << 4)
-#define BIT_DPU_LAY_FORMAT_YUV420_3PLANE		(0x02 << 4)
-#define BIT_DPU_LAY_FORMAT_ARGB8888			(0x03 << 4)
-#define BIT_DPU_LAY_FORMAT_RGB565			(0x04 << 4)
-#define BIT_DPU_LAY_FORMAT_XFBC_ARGB8888		(0x08 << 4)
-#define BIT_DPU_LAY_FORMAT_XFBC_RGB565			(0x09 << 4)
-#define BIT_DPU_LAY_FORMAT_XFBC_YUV420			(0x0A << 4)
-#define BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3		(0x00 << 8)
-#define BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0		(0x01 << 8)
-#define BIT_DPU_LAY_DATA_ENDIAN_B2B3B0B1		(0x02 << 8)
-#define BIT_DPU_LAY_DATA_ENDIAN_B1B0B3B2		(0x03 << 8)
-#define BIT_DPU_LAY_NO_SWITCH				(0x00 << 10)
-#define BIT_DPU_LAY_RGB888_RB_SWITCH			(0x01 << 10)
-#define BIT_DPU_LAY_RGB565_RB_SWITCH			(0x01 << 12)
 #define BIT_DPU_LAY_PALLETE_EN				(0x01 << 13)
 #define BIT_DPU_LAY_MODE_BLEND_NORMAL			(0x01 << 16)
 #define BIT_DPU_LAY_MODE_BLEND_PREMULT			(0x01 << 16)
+
+#define FROMAT_YUV422_2P				(0x00 << 4)
+#define FROMAT_YUV420_2P				(0x01 << 4)
+#define FROMAT_YUV420_3P				(0x02 << 4)
+#define FROMAT_ARGB8888					(0x03 << 4)
+#define FORMAT_RGB565					(0x04 << 4)
+#define FORMAT_XFBC_ARGB8888				(0x08 << 4)
+#define FORMAT_XFBC_RGB565				(0x09 << 4)
+#define FORMAT_XFBC_YUV420				(0x0A << 4)
+
+#define ENDIAN_B0B1B2B3					(0x00 << 8)
+#define ENDIAN_B3B2B1B0					(0x01 << 8)
+#define ENDIAN_B2B3B0B1					(0x02 << 8)
+#define ENDIAN_B1B0B3B2					(0x03 << 8)
+
+#define SWITCH_565_RGB					(0x00 << 10)
+#define SWITCH_565_RBG					(0x01 << 10)
+#define SWITCH_565_GRB					(0x02 << 10)
+#define SWITCH_565_GBR					(0x03 << 10)
+#define SWITCH_565_BGR					(0x04 << 10)
+#define SWITCH_565_BRG					(0x05 << 10)
+#define SWITCH_OTHER_NO					(0x00 << 10)
+#define SWITCH_OTHER_RB					(0x01 << 10)
+#define SWITCH_OTHER_UV					(0x01 << 10)
+#define SWITCH_OTHER_RG					(0x02 << 10)
+#define SWITCH_OTHER_GB					(0x03 << 10)
 
 /*Interrupt control & status bits */
 #define BIT_DPU_INT_DONE				BIT(0)
@@ -562,6 +573,52 @@ struct dpu_enhance {
 	struct cabc_para cabc_para;
 	struct backlight_device *bl_dev;
 	struct device_node *g_np;
+};
+
+static const u32 primary_fmts[] = {
+	DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888, DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_RGBA8888, DRM_FORMAT_BGRA8888,
+	DRM_FORMAT_RGBX8888, DRM_FORMAT_BGRX8888,
+	DRM_FORMAT_RGB565, DRM_FORMAT_BGR565,
+	DRM_FORMAT_NV12, DRM_FORMAT_NV21,
+	DRM_FORMAT_NV16, DRM_FORMAT_NV61,
+	DRM_FORMAT_YUV420, DRM_FORMAT_YVU420,
+};
+
+static const u32 format_ctrl[][4] = {
+	/* DRM_FORMAT_XRGB8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B0B1B2B3, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_XBGR8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B0B1B2B3, SWITCH_OTHER_RB},
+	/* DRM_FORMAT_ARGB8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B0B1B2B3, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_ABGR8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B0B1B2B3, SWITCH_OTHER_RB},
+	/* DRM_FORMAT_RGBA8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B3B2B1B0, SWITCH_OTHER_RB},
+	/* DRM_FORMAT_BGRA8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B3B2B1B0, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_RGBX8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B3B2B1B0, SWITCH_OTHER_RB},
+	/* DRM_FORMAT_BGRX8888 */
+	{FROMAT_ARGB8888, FORMAT_XFBC_ARGB8888, ENDIAN_B3B2B1B0, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_RGB565 */
+	{FORMAT_RGB565, FORMAT_XFBC_RGB565, ENDIAN_B0B1B2B3, SWITCH_565_RGB},
+	/* DRM_FORMAT_BGR565 */
+	{FORMAT_RGB565, FORMAT_XFBC_RGB565, ENDIAN_B0B1B2B3, SWITCH_565_BGR},
+	/* DRM_FORMAT_NV12 */
+	{FROMAT_YUV420_2P, FORMAT_XFBC_YUV420, ENDIAN_B0B1B2B3, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_NV21 */
+	{FROMAT_YUV420_2P, FORMAT_XFBC_YUV420, ENDIAN_B0B1B2B3, SWITCH_OTHER_UV},
+	/* DRM_FORMAT_NV16 */
+	{FROMAT_YUV422_2P, FROMAT_YUV422_2P, ENDIAN_B3B2B1B0, SWITCH_OTHER_UV},
+	/* DRM_FORMAT_NV61 */
+	{FROMAT_YUV422_2P, FROMAT_YUV422_2P, ENDIAN_B0B1B2B3, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_YUV420 */
+	{FROMAT_YUV420_3P, FROMAT_YUV420_3P, ENDIAN_B0B1B2B3, SWITCH_OTHER_NO},
+	/* DRM_FORMAT_YVU420 */
+	{FROMAT_YUV420_3P, FROMAT_YUV420_3P, ENDIAN_B0B1B2B3, SWITCH_OTHER_UV},
 };
 
 static void dpu_sr_config(struct dpu_context *ctx);
@@ -1513,12 +1570,13 @@ static void dpu_scl_coef_cfg(struct dpu_context *ctx)
 	int i, j;
 
 	for (i = 0, j = 0; i < 64; i += 2) {
+		DPU_REG_WR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, r6px_scl_coef[i]);
+		DPU_REG_CLR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, (0xFFFF << 16));
+		DPU_REG_SET(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, (r6px_scl_coef[i+1] << 16));
 
-		DPU_REG_WR(ctx->base + REG_SCL_COEF_HOR_CFG + j * 4, r6p1_scl_coef[i] +
-			(r6p1_scl_coef[i+1] << 16));
-
-		DPU_REG_WR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, r6p1_scl_coef[i] +
-			(r6p1_scl_coef[i+1] << 16));
+		DPU_REG_WR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, r6px_scl_coef[i]);
+		DPU_REG_CLR(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, (0xFFFF << 16));
+		DPU_REG_SET(ctx->base + REG_SCL_COEF_VER_CFG + j * 4, (r6px_scl_coef[i+1] << 16));
 		j++;
 	}
 }
@@ -1666,109 +1724,23 @@ static u32 dpu_img_ctrl(u32 format, u32 blending, u32 compression, u32 y2r_coef,
 		u32 rotation)
 {
 	int reg_val = 0;
-	/* layer enable */
-	// reg_val |= BIT_DPU_LAY_EN;
+	int i;
 
-	switch (format) {
-	case DRM_FORMAT_BGRA8888:
-		/* BGRA8888 -> ARGB8888 */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0;
-		if (compression)
-			/* XFBC-ARGB8888 */
-			reg_val |= (BIT_DPU_LAY_FORMAT_XFBC_ARGB8888);
-		else
-			reg_val |= (BIT_DPU_LAY_FORMAT_ARGB8888);
-		break;
-	case DRM_FORMAT_RGBX8888:
-	case DRM_FORMAT_RGBA8888:
-		/* RGBA8888 -> ABGR8888 */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0;
-		fallthrough;
-	case DRM_FORMAT_ABGR8888:
-		/* rb switch */
-		reg_val |= BIT_DPU_LAY_RGB888_RB_SWITCH;
-		fallthrough;
-	case DRM_FORMAT_ARGB8888:
-		if (compression)
-			/* XFBC-ARGB8888 */
-			reg_val |= (BIT_DPU_LAY_FORMAT_XFBC_ARGB8888);
-		else
-			reg_val |= (BIT_DPU_LAY_FORMAT_ARGB8888);
-		break;
-	case DRM_FORMAT_XBGR8888:
-		/* rb switch */
-		reg_val |= BIT_DPU_LAY_RGB888_RB_SWITCH;
-		fallthrough;
-	case DRM_FORMAT_XRGB8888:
-		if (compression)
-			/* XFBC-ARGB8888 */
-			reg_val |= (BIT_DPU_LAY_FORMAT_XFBC_ARGB8888);
-		else
-			reg_val |= (BIT_DPU_LAY_FORMAT_ARGB8888);
-		break;
-	case DRM_FORMAT_BGR565:
-		/* rb switch */
-		reg_val |= BIT_DPU_LAY_RGB565_RB_SWITCH;
-		fallthrough;
-	case DRM_FORMAT_RGB565:
-		if (compression)
-			/* XFBC-RGB565 */
-			reg_val |= (BIT_DPU_LAY_FORMAT_XFBC_RGB565);
-		else
-			reg_val |= (BIT_DPU_LAY_FORMAT_RGB565);
-		break;
-	case DRM_FORMAT_NV12:
-		if (compression)
-			/*2-Lane: Yuv420 */
-			reg_val |= BIT_DPU_LAY_FORMAT_XFBC_YUV420;
-		else
-			reg_val |= BIT_DPU_LAY_FORMAT_YUV420_2PLANE;
-		/*Y endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		break;
-	case DRM_FORMAT_NV21:
-		if (compression)
-			/*2-Lane: Yuv420 */
-			reg_val |= BIT_DPU_LAY_FORMAT_XFBC_YUV420;
-		else
-			reg_val |= BIT_DPU_LAY_FORMAT_YUV420_2PLANE;
-		/*Y endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0 << 2;
-		break;
-	case DRM_FORMAT_NV16:
-		/*2-Lane: Yuv422 */
-		reg_val |= BIT_DPU_LAY_FORMAT_YUV422_2PLANE;
-		/*Y endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0;
-		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B3B2B1B0 << 2;
-		break;
-	case DRM_FORMAT_NV61:
-		/*2-Lane: Yuv422 */
-		reg_val |= BIT_DPU_LAY_FORMAT_YUV422_2PLANE;
-		/*Y endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		break;
-	case DRM_FORMAT_YUV420:
-		reg_val |= BIT_DPU_LAY_FORMAT_YUV420_3PLANE;
-		/*Y endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		/*UV endian */
-		reg_val |= BIT_DPU_LAY_DATA_ENDIAN_B0B1B2B3;
-		break;
-	default:
+	for (i = 0; i < ARRAY_SIZE(primary_fmts); i++) {
+		if (format == primary_fmts[i])
+			break;
+	}
+
+	if (i == ARRAY_SIZE(primary_fmts)) {
 		pr_err("error: invalid format %c%c%c%c\n", format,
 						format >> 8,
 						format >> 16,
 						format >> 24);
-		break;
+		return -EINVAL;
 	}
+
+	reg_val |= (compression ? format_ctrl[i][1] : format_ctrl[i][0]) |
+						format_ctrl[i][2] | format_ctrl[i][3];
 
 	switch (blending) {
 	case DRM_MODE_BLEND_PIXEL_NONE:
@@ -2046,6 +2018,20 @@ static int dpu_vrr_video(struct dpu_context *ctx)
 	return 0;
 }
 
+static void dpu_scaling_recovery(struct dpu_context *ctx)
+{
+	struct scale_config_param *scale_cfg = &ctx->scale_cfg;
+	u32 reg_val;
+
+	reg_val = (scale_cfg->in_h << 16) |
+		scale_cfg->in_w;
+	DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
+	if (!scale_cfg->need_scale)
+		DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+	else
+		DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+}
+
 static void dpu_scaling(struct dpu_context *ctx,
 		struct sprd_plane planes[], u8 count)
 {
@@ -2095,14 +2081,7 @@ static void dpu_scaling(struct dpu_context *ctx,
 			}
 			if (src_w == layer_state->dst_w
 					&& src_h == layer_state->dst_h) {
-				reg_val = (scale_cfg->in_h << 16) |
-					scale_cfg->in_w;
-				DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
-				if (!scale_cfg->need_scale) {
-					DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
-				} else {
-					DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
-				}
+				dpu_scaling_recovery(ctx);
 			} else {
 				/*
 				 * When the layer src size is not euqal to the
@@ -2111,7 +2090,14 @@ static void dpu_scaling(struct dpu_context *ctx,
 				 * whether the SR function is turned on, dpu
 				 * blend size should be set to the layer src
 				 * size.
+				 * However, blend size must be 4 pixel align,
+				 * so, if src size is not 4 pixel align, return
 				 */
+				if ((src_h % 4) || (src_w % 4)) {
+					pr_debug("src size is not 4 pixel align, use layer scaler\n");
+					dpu_scaling_recovery(ctx);
+					return;
+				}
 				reg_val = (src_h << 16) | src_w;
 				DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
 				/*
@@ -2128,13 +2114,7 @@ static void dpu_scaling(struct dpu_context *ctx,
 				}
 			}
 		} else {
-			reg_val = (scale_cfg->in_h << 16) |
-				scale_cfg->in_w;
-			DPU_REG_WR(ctx->base + REG_BLEND_SIZE, reg_val);
-			if (!scale_cfg->need_scale)
-				DPU_REG_CLR(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
-			else
-				DPU_REG_SET(ctx->base + REG_DPU_SCL_EN, BIT_DPU_SCALING_EN);
+			dpu_scaling_recovery(ctx);
 		}
 	}
 }
@@ -3758,17 +3738,6 @@ static int dpu_modeset(struct dpu_context *ctx,
 
 	return 0;
 }
-
-static const u32 primary_fmts[] = {
-	DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888,
-	DRM_FORMAT_ARGB8888, DRM_FORMAT_ABGR8888,
-	DRM_FORMAT_RGBA8888, DRM_FORMAT_BGRA8888,
-	DRM_FORMAT_RGBX8888, DRM_FORMAT_BGRX8888,
-	DRM_FORMAT_RGB565, DRM_FORMAT_BGR565,
-	DRM_FORMAT_NV12, DRM_FORMAT_NV21,
-	DRM_FORMAT_NV16, DRM_FORMAT_NV61,
-	DRM_FORMAT_YUV420,
-};
 
 static void dpu_capability(struct dpu_context *ctx,
 			struct sprd_crtc_capability *cap)
