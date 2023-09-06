@@ -21,6 +21,7 @@
 sprd-drm-y += \
 	umb9230s/i2c_drv.o \
 	umb9230s/kernel_gpio_fun.o \
+	umb9230s/high_refresh_efuse.o \
 	umb9230s/umb9230s_pll.o \
 	umb9230s/umb9230s_phy.o \
 	umb9230s/umb9230s_dsi.o \
