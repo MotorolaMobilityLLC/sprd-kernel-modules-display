@@ -313,7 +313,6 @@ struct cabc_para {
 	u8 p2;
 	u16 bl_fix;
 	u16 cur_bl;
-	u8 video_mode;
 	u8 slp_brightness;
 	u8 slp_local_weight;
 	u8 dci_en;
@@ -385,6 +384,7 @@ struct dpu_enhance {
 	bool ctm_set;
 	bool pq_update_by_flip;
 	bool flash_finished;
+	u8 video_mode;
 	struct hsv_lut hsv_copy;
 	struct cm_cfg cm_copy;
 	struct ltm_cfg ltm_copy;
@@ -1981,6 +1981,20 @@ static void dpu_enhance_backup(struct dpu_context *ctx, u32 id, void *param)
 	}
 }
 
+static void enhance_config_mode(u32 *p32, struct dpu_enhance *enhance)
+{
+	if (*p32 & ENHANCE_MODE_UI)
+		enhance->video_mode = 0;
+	else if (*p32 & ENHANCE_MODE_FULL_FRAME)
+		enhance->video_mode = 1;
+	else if (*p32 & ENHANCE_MODE_VIDEO)
+		enhance->video_mode = 1;
+	else if (*p32 & ENHANCE_MODE_CAMERA)
+		enhance->flash_finished = 1;
+	else
+		pr_info("enhance config other mode\n");
+}
+
 static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t count)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
@@ -1999,7 +2013,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		return;
 	}
 
-	if (!ctx->enabled) {
+	if (!ctx->enabled || ctx->stopped) {
 		dpu_enhance_backup(ctx, id, param);
 		return;
 	}
@@ -2095,14 +2109,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		return;
 	case ENHANCE_CFG_ID_MODE:
 		p = param;
-		if (*p & ENHANCE_MODE_UI)
-			enhance->cabc_para.video_mode = 0;
-		else if (*p & ENHANCE_MODE_FULL_FRAME)
-			enhance->cabc_para.video_mode = 1;
-		else if (*p & ENHANCE_MODE_VIDEO)
-			enhance->cabc_para.video_mode = 1;
-		else if (*p & ENHANCE_MODE_CAMERA)
-			enhance->flash_finished = 1;
+		enhance_config_mode(p, enhance);
 		pr_info("enhance mode: 0x%x\n", *p);
 		return;
 	case ENHANCE_CFG_ID_CABC_PARAM:

@@ -533,7 +533,6 @@ struct cabc_para {
 	u32 cfg4;
 	u16 bl_fix;
 	u16 cur_bl;
-	u8 video_mode;
 };
 
 struct dpu_enhance {
@@ -556,6 +555,7 @@ struct dpu_enhance {
 	u8 gamma_lut_index;
 	u8 hsv_lut_index;
 	u8 lut3d_index;
+	u8 video_mode;
 	int cabc_state;
 	bool ctm_set;
 	bool pq_update_by_flip;
@@ -2902,15 +2902,48 @@ static void dpu_luts_update(struct dpu_context *ctx, void *param)
 static void enhance_config_mode(u32 *p32, struct dpu_enhance *enhance)
 {
 	if (*p32 & ENHANCE_MODE_UI)
-		enhance->cabc_para.video_mode = 0;
+		enhance->video_mode = 0;
 	else if (*p32 & ENHANCE_MODE_FULL_FRAME)
-		enhance->cabc_para.video_mode = 1;
+		enhance->video_mode = 1;
 	else if (*p32 & ENHANCE_MODE_VIDEO)
-		enhance->cabc_para.video_mode = 1;
+		enhance->video_mode = 1;
 	else if (*p32 & ENHANCE_MODE_CAMERA)
 		enhance->flash_finished = 1;
 	else
 		pr_info("enhance config other mode\n");
+}
+
+static void enhance_update(struct dpu_context *ctx, u32 id, bool no_update) {
+	int ret = 0;
+
+	if (ctx->cmd_dpi_mode) {
+		spin_lock_irq(&ctx->irq_lock);
+		ctx->dpu_run_flag = true;
+		ctx->evt_te = false;
+		spin_unlock_irq(&ctx->irq_lock);
+		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
+							msecs_to_jiffies(20));
+		if (!ret) {
+			pr_err("enhance set wait for te time out!\n");
+		} else if (ret == -ERESTARTSYS) {
+			pr_err("enhance set waiting preocess is interrupted by signal!\n");
+		}
+	} else	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
+		if (id == ENHANCE_CFG_ID_SCL) {
+			dpu_wait_all_regs_update_done(ctx);
+		} else if (!no_update) {
+			DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
+			dpu_wait_pq_update_done(ctx);
+		}
+	} else if ((ctx->if_type == SPRD_DPU_IF_EDPI) && ctx->panel_ready) {
+		/*
+		 * In EDPI mode, we need to wait panel initializatin
+		 * completed. Otherwise, the dpu enhance settings may
+		 * start before panel initialization.
+		 */
+		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
+		ctx->stopped = false;
+	}
 }
 
 static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t count)
@@ -2926,7 +2959,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 	struct cabc_para cabc_param;
 	static u32 lut3d_table_index;
 	u32 *p32, *tmp32;
-	int i, j, ret;
+	int i, j;
 	bool no_update = false;
 	bool get_param_flag = false;
 
@@ -2935,7 +2968,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		return;
 	}
 
-	if (!ctx->enabled) {
+	if (!ctx->enabled || ctx->stopped) {
 		dpu_enhance_backup(ctx, id, param);
 		return;
 	}
@@ -3030,7 +3063,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 			(slp->s37 << 0));
 		DPU_REG_SET(ctx->base + REG_DPU_ENHANCE_CFG, BIT(6));
 		pr_info("enhance slp set\n");
-		if (enhance->cabc_para.video_mode) {
+		if (enhance->video_mode) {
 			enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG);
 			DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(2));
 			return;
@@ -3138,34 +3171,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		break;
 	}
 
-	if (ctx->cmd_dpi_mode) {
-		spin_lock_irq(&ctx->irq_lock);
-		ctx->dpu_run_flag = true;
-		ctx->evt_te = false;
-		spin_unlock_irq(&ctx->irq_lock);
-		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
-							msecs_to_jiffies(20));
-		if (!ret) {
-			pr_err("enhance set wait for te time out!\n");
-		} else if (ret == -ERESTARTSYS) {
-			pr_err("enhance set waiting preocess is interrupted by signal!\n");
-		}
-	} else	if ((ctx->if_type == SPRD_DPU_IF_DPI) && !ctx->stopped) {
-		if (id == ENHANCE_CFG_ID_SCL) {
-			dpu_wait_all_regs_update_done(ctx);
-		} else if (!no_update) {
-			DPU_REG_SET(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
-			dpu_wait_pq_update_done(ctx);
-		}
-	} else if ((ctx->if_type == SPRD_DPU_IF_EDPI) && ctx->panel_ready) {
-		/*
-		 * In EDPI mode, we need to wait panel initializatin
-		 * completed. Otherwise, the dpu enhance settings may
-		 * start before panel initialization.
-		 */
-		DPU_REG_SET(ctx->base + REG_DPU_CTRL, BIT(0));
-		ctx->stopped = false;
-	}
+	enhance_update(ctx, id, no_update);
 
 	enhance->enhance_en = DPU_REG_RD(ctx->base + REG_DPU_ENHANCE_CFG) |
 			(DPU_REG_RD(ctx->base + REG_SCL_EN) << 13);

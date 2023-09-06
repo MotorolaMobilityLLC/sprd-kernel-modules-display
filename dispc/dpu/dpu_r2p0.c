@@ -1248,7 +1248,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		return;
 	}
 
-	if (!ctx->enabled) {
+	if (!ctx->enabled || ctx->stopped) {
 		dpu_enhance_backup(ctx, id, param);
 		return;
 	}
