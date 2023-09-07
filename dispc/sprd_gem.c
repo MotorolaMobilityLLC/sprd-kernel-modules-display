@@ -13,6 +13,8 @@
 #include "sprd_drm.h"
 #include "sprd_gem.h"
 
+#define DUMB_CREATE_TIMES_LIMIT 10
+
 static const struct drm_gem_object_funcs sprd_gem_object_funcs = {
 	.free = sprd_gem_free_object,
 	.get_sg_table = sprd_gem_prime_get_sg_table,
@@ -74,10 +76,23 @@ int sprd_gem_dumb_create(struct drm_file *file_priv, struct drm_device *drm,
 			    struct drm_mode_create_dumb *args)
 {
 	struct sprd_gem_obj *sprd_gem;
+	static u8 create_cnt;
 	int ret;
+
+	if (create_cnt == DUMB_CREATE_TIMES_LIMIT) {
+		DRM_ERROR("dump create times over limit\n");
+		return -EINVAL;
+	}
+	create_cnt++;
 
 	args->pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
 	args->size = round_up(args->pitch * args->height, PAGE_SIZE);
+
+	if ((args->width * args->bpp) % 4) {
+		DRM_ERROR("dumb width * bpp is not 4 pixel align, width = %d, bpp = %d\n",
+				args->width, args->bpp);
+		return -EINVAL;
+	}
 
 	sprd_gem = sprd_gem_obj_create(drm, args->size);
 	if (IS_ERR(sprd_gem))
