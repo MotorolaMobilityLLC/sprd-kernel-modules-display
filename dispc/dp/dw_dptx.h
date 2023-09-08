@@ -76,6 +76,7 @@ enum sprd_dp_hpd_status {
 struct dptx_link {
 	u8 status[DP_LINK_STATUS_SIZE];
 	bool trained;
+	bool training_status;
 	u8 rate;
 	u8 lanes;
 	u8 preemp_level[4];

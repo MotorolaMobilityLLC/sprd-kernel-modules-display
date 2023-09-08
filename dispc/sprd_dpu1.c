@@ -157,13 +157,10 @@ static enum drm_mode_status sprd_dpu_mode_valid(struct sprd_crtc *crtc,
 static void sprd_dpu_atomic_enable(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
-	static bool is_enable = true;
 
 	DRM_INFO("%s()\n", __func__);
-	if (is_enable)
-		is_enable = false;
-	else
-		pm_runtime_get_sync(dpu->dev.parent);
+
+	pm_runtime_get_sync(dpu->dev.parent);
 
 	sprd_dpu_enable(dpu);
 

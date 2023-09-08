@@ -71,6 +71,7 @@ static int sprd_dp_pd_event(struct notifier_block *nb,
 
 	if (dp->hpd_status == false &&
 		property.intval ==  DP_HOT_PLUG) {
+		dp->snps_dptx->link.training_status = false;
 		pm_runtime_get_sync(dp->dev.parent);
 		sprd_dp_resume(dp);
 		sprd_dp_detect(dp, DP_HOT_PLUG);

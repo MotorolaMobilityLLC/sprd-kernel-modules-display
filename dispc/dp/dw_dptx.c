@@ -310,7 +310,14 @@ irqreturn_t dptx_irq(int irq, void *dev)
 		dptx_writel(dptx, DPTX_ISTS, DPTX_ISTS_TYPE_C);
 
 		reg = dptx_readl(dptx, DPTX_TYPE_C_CTRL);
+
 		if (reg & 0x2) {
+			if(!dptx->link.training_status) {
+				DRM_ERROR("%s:link training failed, return irq\n", __func__);
+				dptx_writel(dptx, DPTX_TYPE_C_CTRL, 0x5);
+				return IRQ_NONE;
+			}
+
 			/* Move PHY to P3 */
 			phyifctrl = dptx_readl(dptx, DPTX_PHYIF_CTRL);
 
@@ -326,6 +333,12 @@ irqreturn_t dptx_irq(int irq, void *dev)
 
 			dptx_writel(dptx, DPTX_TYPE_C_CTRL, 0x5);
 		} else {
+			if(!dptx->link.training_status) {
+				DRM_ERROR("%s:link training failed,return irq\n", __func__);
+				dptx_writel(dptx, DPTX_TYPE_C_CTRL, 0x4);
+				return IRQ_NONE;
+			}
+
 			dptx_phy_soft_reset(dptx);
 			dptx_phy_wait_busy(dptx, DPTX_MAX_LINK_LANES);
 			dptx_writel(dptx, DPTX_TYPE_C_CTRL, 0x4);

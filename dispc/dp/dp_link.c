@@ -639,7 +639,7 @@ again:
 
 	dptx_phy_enable_xmit(dptx, dptx->link.lanes, true);
 	dptx->link.trained = true;
-
+	dptx->link.training_status = true;
 	DRM_INFO("Link training succeeded rate=%d lanes=%d\n",
 		 dptx->link.rate, dptx->link.lanes);
 
@@ -653,6 +653,7 @@ fail:
 		retval1 =
 		    dptx_link_training_pattern_set(dptx,
 						   DP_TRAINING_PATTERN_DISABLE);
+		dptx->link.training_status = false;
 		DRM_ERROR("Link training failed %d\n", retval);
 		if (retval1)
 			return retval1;
