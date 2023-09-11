@@ -22,10 +22,10 @@
 
 
 /* dphy tx/rx registers */
-#define REG_PHY_TEST_CTRL   0xB000
+#define REG_PHY_TEST_CTRL_BASE      0xB000
 
-#define REG_PHY_TX_BASE     (REG_PHY_TEST_CTRL + 0x400)
-#define REG_PHY_RX_BASE     REG_PHY_TEST_CTRL
+#define REG_PHY_TX_BASE             (REG_PHY_TEST_CTRL_BASE + 0x400)
+#define REG_PHY_RX_BASE             REG_PHY_TEST_CTRL_BASE
 
 enum TIMING {
 	NONE,
@@ -270,7 +270,7 @@ static void umb9230s_reg_write(struct dphy_tx_context *ctx, uint16_t reg, uint8_
 {
     u32 buf[2] = {};
 
-    buf[0] = REG_PHY_TX_BASE + reg;
+    buf[0] = REG_PHY_TX_BASE + reg * 4;
     buf[1] = val;
 
     iic2cmd_write(ctx->i2c_addr, buf, 2);

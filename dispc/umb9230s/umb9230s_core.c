@@ -283,14 +283,20 @@ static int umb9230s_pattern_mode(struct umb9230s_device *umb9230s)
 
 static void umb9230s_video2cmd_mode(struct umb9230s_device *umb9230s, bool enable)
 {
+    struct videomode *vm = &umb9230s->dsi_ctx.vm;
     u32 buf[4];
 
     pr_info("video2cmd enable\n");
 
     buf[0] = REG_VIDEO2CMD_MODE;
     buf[1] = enable;
-    buf[2] = umb9230s->dsi_ctx.vm.hactive;
-    buf[3] = umb9230s->dsi_ctx.vm.vactive;
+
+    if ((vm->hactive % 3) && umb9230s->dsc_en)
+        buf[2] = vm->hactive / 3 + 1;
+    else
+        buf[2] = vm->hactive / 3;
+
+    buf[3] = vm->vactive;
     iic2cmd_write(umb9230s->i2c_addr, buf, 4);
 }
 #if 0
@@ -357,7 +363,7 @@ static void umb9230s_dsc_config(struct umb9230s_device *umb9230s)
             (vm->vfront_porch << 20);
 
     if (umb9230s->dsi_ctx.work_mode == DSI_MODE_CMD)
-        param->dsc_ctrl = 0x2000010b;
+        param->dsc_ctrl = 0x2000050b;
     else
         param->dsc_ctrl = 0x2000040b;
 

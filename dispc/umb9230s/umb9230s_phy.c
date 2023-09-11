@@ -20,8 +20,6 @@
 #define REG_DSI_RX_PHY_PD_N                 (REG_DSI_RX_BASE + 0x04)
 #define REG_DSI_RX_RST_DPHY_N               (REG_DSI_RX_BASE + 0x08)
 #define REG_DSI_RX_PHY_STATE                (REG_DSI_RX_BASE + 0x0C)
-#define REG_DSI_RX_PHY_TEST_CTRL0           (REG_DSI_RX_BASE + 0x2C)
-#define REG_DSI_RX_PHY_TEST_CTRL1           (REG_DSI_RX_BASE + 0x30)
 #define REG_DSI_RX_PHY_RX_TRIGGERS          (REG_DSI_RX_BASE + 0x34)
 
 /* dsi tx registers */
@@ -34,67 +32,51 @@
 #define REG_DSI_TX_PHY_LANE_NUM_CONFIG          (REG_DSI_TX_BASE + 0xA4)
 #define REG_DSI_TX_PHY_CLKLANE_TIME_CONFIG      (REG_DSI_TX_BASE + 0xA8)
 #define REG_DSI_TX_PHY_DATALANE_TIME_CONFIG     (REG_DSI_TX_BASE + 0xAC)
-#define REG_DSI_TX_PHY_TST_CTRL0                (REG_DSI_TX_BASE + 0xF0)
-#define REG_DSI_TX_PHY_TST_CTRL1                (REG_DSI_TX_BASE + 0xF4)
 #define REG_DSI_TX_INT_PLL_STS                  (REG_DSI_TX_BASE + 0x200)
 #define REG_DSI_TX_INT_PLL_MSK                  (REG_DSI_TX_BASE + 0x204)
 #define REG_DSI_TX_INT_PLL_CLR                  (REG_DSI_TX_BASE + 0x208)
 
 /* dphy tx/rx registers */
-#define REG_PHY_TEST_CTRL           0xB000
-#define REG_PHY_TX_BASE             (REG_PHY_TEST_CTRL + 0x400)
-#define REG_PHY_RX_BASE             REG_PHY_TEST_CTRL
+#define REG_PHY_TEST_CTRL_BASE      0xB000
+#define REG_PHY_TX_BASE             (REG_PHY_TEST_CTRL_BASE + 0x400)
+#define REG_PHY_RX_BASE             REG_PHY_TEST_CTRL_BASE
+#define REG_PHY_TX_TEST_CTRL        (REG_PHY_TEST_CTRL_BASE + 0xC00)
+#define REG_PHY_RX_TEST_CTRL        (REG_PHY_TEST_CTRL_BASE + 0x800)
 
 void umb9230s_phy_rx_init(struct umb9230s_device *umb9230s)
 {
-    struct dsi_rx_reg reg = {};
     u32 buf[2];
 
     pr_info("umb9230s lanes : %d\n", umb9230s->phy_ctx.lanes);
 
     /* rstz */
-    iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_RST_DPHY_N, &reg.RST_DPHY_N.val, 1);
-    reg.RST_DPHY_N.bits.rst_dphy_n = 0;
     buf[0] = REG_DSI_RX_RST_DPHY_N;
-    buf[1] = reg.RST_DPHY_N.val;
+    buf[1] = 0;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     /* shutdownz */
-    iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_PD_N, &reg.PHY_PD_N.val, 1);
-    reg.PHY_PD_N.bits.phy_pd_n = 0;
     buf[0] = REG_DSI_RX_PHY_PD_N;
-    buf[1] = reg.PHY_PD_N.val;
+    buf[1] = 0;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     /* test_clr */
-    iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_TEST_CTRL0, &reg.PHY_TEST_CTRL0.val, 1);
-    reg.PHY_TEST_CTRL0.bits.phy_testclr = 0;
-    buf[0] = REG_DSI_RX_PHY_TEST_CTRL0;
-    buf[1] = reg.PHY_TEST_CTRL0.val;
+    buf[0] = REG_PHY_RX_TEST_CTRL;
+    buf[1] = 0;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
-    /* test_clr */
-    reg.PHY_TEST_CTRL0.bits.phy_testclr = 1;
-    buf[0] = REG_DSI_RX_PHY_TEST_CTRL0;
-    buf[1] = reg.PHY_TEST_CTRL0.val;
-    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
-
-    /* test_clr */
-    reg.PHY_TEST_CTRL0.bits.phy_testclr = 0;
-    buf[0] = REG_DSI_RX_PHY_TEST_CTRL0;
-    buf[1] = reg.PHY_TEST_CTRL0.val;
+    /* test_clr, clear by hardware automatically */
+    buf[0] = REG_PHY_RX_TEST_CTRL;
+    buf[1] = 1;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     /* shutdownz */
-    reg.PHY_PD_N.bits.phy_pd_n = 1;
     buf[0] = REG_DSI_RX_PHY_PD_N;
-    buf[1] = reg.PHY_PD_N.val;
+    buf[1] = 1;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     /* rstz */
-    reg.RST_DPHY_N.bits.rst_dphy_n = 1;
     buf[0] = REG_DSI_RX_RST_DPHY_N;
-    buf[1] = reg.RST_DPHY_N.val;
+    buf[1] = 1;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 }
 
@@ -237,22 +219,13 @@ int umb9230s_phy_tx_enable(struct umb9230s_device *umb9230s)
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     /* test_clr */
-    iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TX_PHY_TST_CTRL0, &reg.PHY_TST_CTRL0.val, 1);
-    reg.PHY_TST_CTRL0.bits.phy_testclr = 0;
-    buf[0] = REG_DSI_TX_PHY_TST_CTRL0;
-    buf[1] = reg.PHY_TST_CTRL0.val;
+    buf[0] = REG_PHY_TX_TEST_CTRL;
+    buf[1] = 0;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
-    /* test_clr */
-    reg.PHY_TST_CTRL0.bits.phy_testclr = 1;
-    buf[0] = REG_DSI_TX_PHY_TST_CTRL0;
-    buf[1] = reg.PHY_TST_CTRL0.val;
-    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
-
-    /* test_clr */
-    reg.PHY_TST_CTRL0.bits.phy_testclr = 0;
-    buf[0] = REG_DSI_TX_PHY_TST_CTRL0;
-    buf[1] = reg.PHY_TST_CTRL0.val;
+    /* test_clr, clear by hardware automatically */
+    buf[0] = REG_PHY_TX_TEST_CTRL;
+    buf[1] = 1;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     pll->pll_config(&umb9230s->phy_ctx);
@@ -266,6 +239,7 @@ int umb9230s_phy_tx_enable(struct umb9230s_device *umb9230s)
 
     /* rstz */
     reg.PHY_INTERFACE_CTRL.bits.rf_phy_reset_n = 1;
+    buf[0] = REG_DSI_TX_PHY_INTERFACE_CTRL;
     buf[1] = reg.PHY_INTERFACE_CTRL.val;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 

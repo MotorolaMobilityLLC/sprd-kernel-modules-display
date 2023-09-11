@@ -42,11 +42,14 @@ static ssize_t regs_offset_store(struct device *dev,
 
 	str_to_u32_array(buf, 16, input_param, 2);
 
-	if ((input_param[0] < 0xB000 || input_param[0] > 0xBF00) && input_param[0] % 4)
+	if (input_param[0] % 4)
 		pr_info("input_param[0] is not a multiple of 4!\n");
-
-	sysfs->base_offset[0] = input_param[0];
-	sysfs->base_offset[1] = input_param[1];
+	else if ((input_param[0] + input_param[1]) > 0xBFFF)
+		pr_info("input_param[0] is beyond the scope of address!\n");
+	else {
+		sysfs->base_offset[0] = input_param[0];
+		sysfs->base_offset[1] = input_param[1];
+	}
 
 	pr_info("addr:0x%08x length: 0x%lx\n", input_param[0], input_param[1]);
 
@@ -63,7 +66,6 @@ static ssize_t wr_regs_show(struct device *dev,
 	int ret = 0;
 	int i;
 	u32 reg;
-	int reg_width = 4;
 
 	mutex_lock(&umb9230s->lock);
 	if (!umb9230s->enabled) {
@@ -72,11 +74,8 @@ static ssize_t wr_regs_show(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (addr >= 0xB000 && addr <= 0xBF00)
-		reg_width = 1;
-
 	for (i = 0; i < length; i++) {
-	        iic2cmd_read(umb9230s->i2c_addr, (addr + i * reg_width), &reg, 1);
+	        iic2cmd_read(umb9230s->i2c_addr, (addr + i * 4), &reg, 1);
 		ret += snprintf(buf + ret, PAGE_SIZE, "%x ", reg);
 	}
 
@@ -92,8 +91,7 @@ static ssize_t wr_regs_store(struct device *dev,
 	u32 addr = sysfs->base_offset[0];
 	u32 length = sysfs->base_offset[1];
 	u32 *value;
-	u32 i, actual_len;
-	u32 reg[2];
+	u32 actual_len;
 
 	mutex_lock(&umb9230s->lock);
 	if (!umb9230s->enabled) {
@@ -117,16 +115,8 @@ static ssize_t wr_regs_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (addr >= 0xB000 && addr <= 0xBF00) {
-		for (i = 0; i < actual_len; i++) {
-			reg[0] = addr + i;
-			reg[1] = value[1 + i];
-			iic2cmd_write(umb9230s->i2c_addr, reg, 2);
-		}
-	} else {
-		value[0] = addr;
-		iic2cmd_write(umb9230s->i2c_addr, value, actual_len + 1);
-	}
+	value[0] = addr;
+	iic2cmd_write(umb9230s->i2c_addr, value, actual_len + 1);
 
 	kfree(value);
 	mutex_unlock(&umb9230s->lock);
