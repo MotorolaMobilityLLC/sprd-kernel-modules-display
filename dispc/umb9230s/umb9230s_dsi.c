@@ -109,6 +109,7 @@
 #define REG_DSI_TX_INT_PLL_MSK                  (REG_DSI_TX_BASE + 0x204)
 #define REG_DSI_TX_INT_PLL_CLR                  (REG_DSI_TX_BASE + 0x208)
 
+#define BYTE_PER_PIXEL_RGB888 3
 
 void umb9230s_dsi_rx_vrr_timing(struct umb9230s_device *umb9230s)
 {
@@ -292,25 +293,101 @@ static u16 calc_bytes_per_pixel_x100(int coding)
     u16 Bpp_x100;
 
     switch (coding) {
+    case COLOR_CODE_16BIT_CONFIG1:
+    case COLOR_CODE_16BIT_CONFIG2:
+    case COLOR_CODE_16BIT_CONFIG3:
+        Bpp_x100 = 200;
+        break;
+    case COLOR_CODE_18BIT_CONFIG1:
+    case COLOR_CODE_18BIT_CONFIG2:
+        Bpp_x100 = 225;
+        break;
     case COLOR_CODE_24BIT:
         Bpp_x100 = 300;
         break;
     case COLOR_CODE_COMPRESSTION:
         Bpp_x100 = 100;
         break;
+    case COLOR_CODE_20BIT_YCC422_LOOSELY:
+        Bpp_x100 = 250;
+        break;
+    case COLOR_CODE_24BIT_YCC422:
+        Bpp_x100 = 300;
+        break;
+    case COLOR_CODE_16BIT_YCC422:
+        Bpp_x100 = 200;
+        break;
+    case COLOR_CODE_30BIT:
+        Bpp_x100 = 375;
+        break;
+    case COLOR_CODE_36BIT:
+        Bpp_x100 = 450;
+        break;
+    case COLOR_CODE_12BIT_YCC420:
+        Bpp_x100 = 150;
+        break;
     default:
         pr_err("invalid color coding");
-        Bpp_x100 = 100;
+        Bpp_x100 = 0;
         break;
     }
 
     return Bpp_x100;
 }
 
+static u8 calc_video_size_step(int coding)
+{
+    u8 video_size_step;
+
+    switch (coding) {
+    case COLOR_CODE_16BIT_CONFIG1:
+    case COLOR_CODE_16BIT_CONFIG2:
+    case COLOR_CODE_16BIT_CONFIG3:
+    case COLOR_CODE_18BIT_CONFIG1:
+    case COLOR_CODE_18BIT_CONFIG2:
+    case COLOR_CODE_24BIT:
+    case COLOR_CODE_COMPRESSTION:
+        return video_size_step = 1;
+    case COLOR_CODE_20BIT_YCC422_LOOSELY:
+    case COLOR_CODE_24BIT_YCC422:
+    case COLOR_CODE_16BIT_YCC422:
+    case COLOR_CODE_30BIT:
+    case COLOR_CODE_36BIT:
+    case COLOR_CODE_12BIT_YCC420:
+        return video_size_step = 2;
+    default:
+        pr_err("invalid color coding");
+        return 0;
+    }
+}
+
+static u16 round_video_size(int coding, u16 video_size)
+{
+    switch (coding) {
+    case COLOR_CODE_16BIT_YCC422:
+    case COLOR_CODE_24BIT_YCC422:
+    case COLOR_CODE_20BIT_YCC422_LOOSELY:
+    case COLOR_CODE_12BIT_YCC420:
+        /* round up active H pixels to a multiple of 2 */
+        if ((video_size % 2) != 0)
+            video_size += 1;
+        break;
+    default:
+        break;
+    }
+
+    return video_size;
+}
+
 #define SPRD_MIPI_DSI_FMT_DSC 0xff
 static u32 fmt_to_coding(u32 fmt)
 {
     switch (fmt) {
+    case MIPI_DSI_FMT_RGB565:
+        return COLOR_CODE_16BIT_CONFIG1;
+    case MIPI_DSI_FMT_RGB666_PACKED:
+        return COLOR_CODE_18BIT_CONFIG1;
+    case MIPI_DSI_FMT_RGB666:
     case MIPI_DSI_FMT_RGB888:
         return COLOR_CODE_24BIT;
     case SPRD_MIPI_DSI_FMT_DSC:
@@ -683,9 +760,9 @@ static int umb9230s_dsi_tx_dpi_video(struct umb9230s_device *umb9230s)
     pr_info("dsi tx dpi video\n");
 
     coding = fmt_to_coding(ctx->format);
-    video_size = vm->hactive;
+    video_size = round_video_size(coding, vm->hactive);
     Bpp_x100 = calc_bytes_per_pixel_x100(coding);
-    video_size_step = 1;
+    video_size_step = calc_video_size_step(coding);
     ratio_x1000 = ctx->byte_clk * 1000 / (vm->pixelclock / 1000);
     hline = vm->hactive + vm->hsync_len + vm->hfront_porch +
         vm->hback_porch;
@@ -884,7 +961,10 @@ static void umb9230s_dsi_tx_edpi_video(struct umb9230s_device *umb9230s)
     u32 hactive = ctx->vm.hactive;
     u32 Bpp_x100;
     u32 max_fifo_len;
+    u32 cur_pkt_len, dcs_wm_pkt_size;
     u8 coding;
+    int i, remainder;
+    bool find_pkt_size = false;
     u32 buf[4];
     struct dsi_reg reg = {};
 
@@ -914,11 +994,27 @@ static void umb9230s_dsi_tx_edpi_video(struct umb9230s_device *umb9230s)
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     if (max_fifo_len > hactive)
-        /* edpi_max_pkt_size */
-        buf[1] = hactive;
+        cur_pkt_len = hactive;
     else
-        /* edpi_max_pkt_size */
-        buf[1] = max_fifo_len;
+        cur_pkt_len = max_fifo_len;
+
+    for (i = 1; i <= cur_pkt_len; i++) {
+        if (cur_pkt_len % i != 0)
+            continue;
+
+        dcs_wm_pkt_size = cur_pkt_len / i;
+        remainder = (dcs_wm_pkt_size * BYTE_PER_PIXEL_RGB888 + 1) % 8;
+        if (remainder == 0 || remainder > 4) {
+            find_pkt_size = true;
+            break;
+        }
+    }
+
+     /* edpi_max_pkt_size */
+    if ((i == cur_pkt_len && !find_pkt_size) || (ctx->format == SPRD_MIPI_DSI_FMT_DSC))
+        buf[1] = cur_pkt_len;
+    else
+        buf[1] = dcs_wm_pkt_size;
 
     buf[0] = REG_DSI_TX_DCS_WM_PKT_SIZE;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
