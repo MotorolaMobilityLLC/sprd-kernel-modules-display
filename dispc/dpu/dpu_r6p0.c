@@ -608,6 +608,7 @@ struct dpu_enhance {
 	u8 lut3d_index;
 	int cabc_state;
 	bool ctm_set;
+	bool pq_update_by_flip;
 	struct cm_cfg cm_copy;
 	struct cm_cfg ctm_copy;
 	struct slp_cfg slp_copy;
@@ -1137,6 +1138,7 @@ static void dpu_cabc_work_func(struct work_struct *data)
 	int ret;
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, cabc_work);
+	struct dpu_enhance *enhance = ctx->enhance;
 
 	down(&ctx->cabc_lock);
 	if (ctx->enabled) {
@@ -1154,8 +1156,7 @@ static void dpu_cabc_work_func(struct work_struct *data)
 				pr_err("cabc set waiting process is interrupted by signal!\n");
 			}
 		} else {
-			DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
-			dpu_wait_pq_update_done(ctx);
+			enhance->pq_update_by_flip = true;
 		}
 	}
 	up(&ctx->cabc_lock);
@@ -2324,7 +2325,13 @@ static void dpu_update_and_wait(struct dpu_context *ctx)
 				dpu_wait_all_update_done(ctx);
 				enhance->first_frame = false;
 			} else
-				dpu_wait_update_done(ctx);
+				if (enhance->pq_update_by_flip == true) {
+					DPU_REG_WR(ctx->base + REG_ENHANCE_UPDATE, BIT(0));
+					dpu_wait_all_regs_update_done(ctx);
+					enhance->pq_update_by_flip = false;
+				} else {
+					dpu_wait_update_done(ctx);
+				}
 		}
 
 		DPU_REG_SET(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_ERR);
