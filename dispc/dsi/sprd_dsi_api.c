@@ -573,6 +573,16 @@ int sprd_dsi_rd_pkt(struct sprd_dsi *dsi, u8 vc, u8 type,
 
 void sprd_dsi_set_work_mode(struct sprd_dsi *dsi, u8 mode)
 {
+	/*
+	 * FIXME:
+	 * When the last mipi cmd does not contain delay time,
+	 * dsi may change work mode during mipi cmd send procedure and it may cause misdisplay.
+	 * So we force dsi wait cmd and payload empty before change workmode.
+	 */
+	if (!(dsi_wait_tx_cmd_fifo_empty(dsi) &&
+	      dsi_wait_tx_payload_fifo_empty(dsi)))
+		pr_err("tx cmd fifo or payload fifo is not empty\n");
+
 	if (mode == DSI_MODE_CMD)
 		dsi_hal_cmd_mode(dsi);
 	else
