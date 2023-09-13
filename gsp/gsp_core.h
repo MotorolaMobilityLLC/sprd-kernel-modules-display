@@ -157,6 +157,8 @@ struct gsp_core {
 	bool need_iommu;
 
 	struct timer_list timer;
+
+	struct semaphore gsp_hdr_lock;
 };
 
 

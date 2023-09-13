@@ -913,6 +913,8 @@ int gsp_core_init(struct gsp_core *core)
 		sched_setscheduler(core->work_thread, SCHED_FIFO, &param);
 	}
 
+	sema_init(&core->gsp_hdr_lock, 1);
+
 	return ret;
 }
 

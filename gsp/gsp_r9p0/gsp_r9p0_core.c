@@ -1346,7 +1346,6 @@ static void gsp_r9p0_hdr10_set(void __iomem *base, struct gsp_r9p0_cfg *cfg, int
 
 	gsp_core_reg_write(R9P0_HDR26_CFG(base, icnt), HDR_DR_LUT_WRITE_FINISH);
 
-
 	if (para->tone_map_en == 1) {
 		gsp_core_reg_write(R9P0_HDR26_CFG(base, icnt), HDR_TM_LUT_WRITE);
 
@@ -1425,88 +1424,23 @@ static void gsp_r9p0_hdr10plus_set(void __iomem *base, struct gsp_r9p0_cfg *cfg,
 	}
 }
 
-static int coreNumSwitch(struct gsp_r9p0_cfg *cfg)
-{
-	/*judge gsp core num status*/
-	int core_switch_status;
-	static bool last_is_2core_enable;
-	bool cur_is_2core_enable = cfg->misc.core_num;
-
-	if (last_is_2core_enable && !cur_is_2core_enable)
-		core_switch_status = CORE_FROM_2_TO_1;
-	else if (!last_is_2core_enable && cur_is_2core_enable)
-		core_switch_status = CORE_FROM_1_TO_2;
-	else
-		core_switch_status = CORE_STS_NO_CHG;
-
-	last_is_2core_enable = cur_is_2core_enable;
-
-	return core_switch_status;
-}
-
 static void gsp_r9p0_core_hdr_reg_set(struct gsp_core *core,
 			struct gsp_r9p0_cfg *cfg)
 {
 	void __iomem *base = NULL;
 	int icnt = 0;
-	static struct gsp_r9p0_hdr10_cfg para_backup_2core;
-	static struct gsp_r9p0_hdr10_cfg para_backup_1core[2];
-	int core_status = 0;
-
 	base = core->base;
 
 	for (icnt = 0; icnt < R9P0_IMGL_NUM; icnt++) {
-		if (icnt == 1 && core_status != CORE_STS_NO_CHG
-			&& cfg->limg[icnt].params.hdr2rgb_mod == 0) {
-			/*recover hdr set of layer1 when core status changed
-			 * but layer1 is not YCBCR10*/
-			memcpy(&(cfg->misc.hdr10_para[icnt]), &(para_backup_1core[icnt]),
-				sizeof(struct gsp_r9p0_hdr10_cfg));
-			if (para_backup_1core[icnt].transfer_char == 16
-				|| para_backup_1core[icnt].transfer_char == 18)
-				gsp_r9p0_hdr10_set(base, cfg, icnt);
-			else
-				gsp_r9p0_bit10_set(base, cfg, icnt);
-		}
-
 		if (cfg->limg[icnt].params.hdr2rgb_mod == 1) {
-			if (icnt == 0)
-				core_status = coreNumSwitch(cfg);
 			if (cfg->misc.first10bit_frame[icnt] == 1) {
-				/*backup hdr para when first frame of hdr video played*/
-				if (cfg->misc.core_num == 1)
-					memcpy(&para_backup_2core,
-						&(cfg->misc.hdr10_para[icnt]),
-						sizeof(struct gsp_r9p0_hdr10_cfg));
-				else
-					memcpy(&(para_backup_1core[icnt]),
-						&(cfg->misc.hdr10_para[icnt]),
-						sizeof(struct gsp_r9p0_hdr10_cfg));
-
 				if (cfg->misc.hdr_flag[icnt] == 1) {
 					gsp_r9p0_hdr10_set(base, cfg, icnt);
 					gsp_r9p0_hdr10plus_set(base, cfg, icnt);
 				} else
 					gsp_r9p0_bit10_set(base, cfg, icnt);
-			} else {
-				/*recover hdr set when core status changed
-				 * and layer format is YCBCR10*/
-				if (core_status != CORE_STS_NO_CHG) {
-					if (core_status == CORE_FROM_2_TO_1)
-						memcpy(&(cfg->misc.hdr10_para[icnt]),
-							&(para_backup_1core[icnt]),
-							sizeof(struct gsp_r9p0_hdr10_cfg));
-					else if (core_status == CORE_FROM_1_TO_2)
-						memcpy(&(cfg->misc.hdr10_para[icnt]),
-							&para_backup_2core,
-							sizeof(struct gsp_r9p0_hdr10_cfg));
-
-					if (cfg->misc.hdr_flag[icnt] == 1)
-						gsp_r9p0_hdr10_set(base, cfg, icnt);
-					else
-						gsp_r9p0_bit10_set(base, cfg, icnt);
-				} else if (cfg->misc.hdr10plus_update[icnt] == 1)
-					gsp_r9p0_hdr10plus_set(base, cfg, icnt);
+			} else if (cfg->misc.hdr10plus_update[icnt] == 1) {
+				gsp_r9p0_hdr10plus_set(base, cfg, icnt);
 			}
 		}
 	}
@@ -1621,7 +1555,9 @@ static void gsp_r9p0_core_misc_reg_set(struct gsp_core *core,
 	gsp_core_reg_update(R9P0_WORK_AREA_SIZE(base),
 		work_area_size_value.value, work_area_size_mask.value);
 
+	down(&core->gsp_hdr_lock);
 	gsp_r9p0_core_hdr_reg_set(core, cfg);
+	up(&core->gsp_hdr_lock);
 }
 
 static void gsp_r9p0_core_limg_reg_set(void __iomem *base,
