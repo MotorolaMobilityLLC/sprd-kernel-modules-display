@@ -409,13 +409,18 @@ void sprd_dsi_edpi_video(struct sprd_dsi *dsi)
 	const u32 fifo_depth = 1096;
 	const u32 word_length = 4;
 	struct dsi_context *ctx = &dsi->ctx;
-	u32 hactive = ctx->vm.hactive;
+	u32 hactive;
 	u32 Bpp_x100;
 	u32 max_fifo_len;
 	u32 cur_pkt_len, dcs_wm_pkt_size;
 	u8 coding;
 	int i, remainder;
 	bool find_pkt_size = false;
+
+	if (dsi->dsi_master)
+		hactive = dsi->dsi_master->ctx.vm.hactive;
+	else
+		hactive = dsi->ctx.vm.hactive;
 
 	coding = fmt_to_coding(ctx->format);
 	Bpp_x100 = calc_bytes_per_pixel_x100(coding);
