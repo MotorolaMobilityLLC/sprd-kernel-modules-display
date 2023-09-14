@@ -821,7 +821,10 @@ static int umb9230s_remove(struct platform_device *pdev)
 
     umb9230s = platform_get_drvdata(pdev);
 
-    intr_irq_free(umb9230s);
+    if (umb9230s) {
+        umb9230s_sysfs_deinit(&umb9230s->dev);
+        intr_irq_free(umb9230s);
+    }
 
     return 0;
 }

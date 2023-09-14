@@ -667,6 +667,7 @@ int umb9230s_phy_tx_enable(struct umb9230s_device *umb9230s);
 void umb9230s_phy_tx_hs_clk_en(struct umb9230s_device *umb9230s, bool enable);
 void umb9230s_phy_tx_ulps_enter(struct umb9230s_device *umb9230s);
 int umb9230s_sysfs_init(struct device *dev);
+void umb9230s_sysfs_deinit(struct device *dev);
 #else
 static inline int umb9230s_dsi_tx_wr_pkt(struct umb9230s_device *umb9230s, u8 vc, u8 type,
             const u8 *param, u16 len)

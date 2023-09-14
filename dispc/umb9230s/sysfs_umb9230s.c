@@ -335,3 +335,12 @@ int umb9230s_sysfs_init(struct device *dev)
 	return rc;
 }
 EXPORT_SYMBOL(umb9230s_sysfs_init);
+
+void umb9230s_sysfs_deinit(struct device *dev)
+{
+	sysfs_remove_groups(&(dev->kobj), umb9230s_groups);
+
+	kfree(sysfs);
+	sysfs = NULL;
+}
+EXPORT_SYMBOL(umb9230s_sysfs_deinit);
