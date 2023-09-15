@@ -711,6 +711,10 @@ static int of_parse_buildin_modes(struct panel_info *info,
 
 	info->buildin_modes = kzalloc(sizeof(struct drm_display_mode) *
 				num_timings, GFP_KERNEL);
+	if (!info->buildin_modes) {
+		DRM_ERROR("alloc modes memory failed\n");
+		return -ENOMEM;
+	}
 
 	for (i = 0; i < num_timings; i++) {
 		rc = of_get_drm_display_mode(lcd_node,
