@@ -87,14 +87,19 @@ static int efuse_i2c_write(u16 reg, u32 val)
 static void efuse_reg_conf(u16 reg, u32 bit, bool enable)
 {
 	u32 cfg0 = 0;
+	int ret = 0;
 
-	efuse_i2c_read(reg, &cfg0);
-	if (enable)
-		cfg0 |= bit;
-	else
-		cfg0 &= ~bit;
+	ret = efuse_i2c_read(reg, &cfg0);
+	if (ret < 0) {
+		pr_err("%s: efuse read reg:0x%x failed\n", __func__, reg);
+	} else {
+		if (enable)
+			cfg0 |= bit;
+		else
+			cfg0 &= ~bit;
 
-	efuse_i2c_write(reg, cfg0);
+		efuse_i2c_write(reg, cfg0);
+	}
 }
 
 static u32 efuse_check_status(void)
@@ -151,7 +156,7 @@ static void efuse_read_power_off(void)
 u32 high_refresh_efuse_prog(int start_index, int end_index, bool isdouble, u32 val)
 {
 	int blk_index;
-	u32 err_flag = 0;
+	u32 err_flag = ERR_FLAG_MASK;
 
 	mutex_lock(&efuse_lock);
 	efuse_i2c_write(EFUSE_SEC_FLAG_CLR, ERR_CLR_MASK);
@@ -178,8 +183,8 @@ u32 high_refresh_efuse_prog(int start_index, int end_index, bool isdouble, u32 v
 
 u32 high_refresh_efuse_read(int start_index, int end_index, bool isdouble, u32 *val)
 {
-	int blk_index;
-	u32 err_flag = 0;
+	int blk_index, ret = 0;
+	uint32_t err_flag = ERR_FLAG_MASK;
 
 	mutex_lock(&efuse_lock);
 	efuse_i2c_write(EFUSE_SEC_FLAG_CLR, ERR_CLR_MASK);
@@ -187,12 +192,16 @@ u32 high_refresh_efuse_read(int start_index, int end_index, bool isdouble, u32 *
 	efuse_double(isdouble);
 
 	for (blk_index = start_index; blk_index <= end_index; blk_index++) {
-		efuse_i2c_read(EFUSE_MEM(blk_index), val);
-		err_flag = efuse_check_status();
-		if (err_flag != 0)
-			pr_err("%s: efuse read failed, status:0x%08x\n", __func__, err_flag);
-
-		pr_info("%s: efuse read blk%d, val:0x%08x\n", __func__, blk_index, *val);
+		ret = efuse_i2c_read(EFUSE_MEM(blk_index), val);
+		if (ret < 0) {
+			pr_err("%s: efuse read block error\n", __func__);
+		} else {
+			err_flag = efuse_check_status();
+			if (err_flag != 0)
+				pr_err("%s: efuse read failed, status:0x%08x\n", __func__,
+					err_flag);
+			pr_info("%s: efuse read blk%d, val:0x%08x\n", __func__, blk_index, *val);
+		}
 	}
 
 	efuse_double(FALSE);
