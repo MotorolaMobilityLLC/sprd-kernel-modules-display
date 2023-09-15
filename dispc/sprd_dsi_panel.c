@@ -306,6 +306,11 @@ static struct drm_display_mode * sprd_panel_create_sr_mode(struct drm_device *dr
 	struct videomode vm = {};
 
 	new_mode = drm_mode_create(drm);
+	if (!new_mode) {
+		DRM_ERROR("drm mode create failed\n");
+		return NULL;
+	}
+
 	drm_display_mode_to_videomode(original_mode, &vm);
 	vm.hactive = sr_width;
 	vm.vactive = sr_height;
@@ -360,6 +365,10 @@ static int sprd_panel_get_modes(struct drm_panel *p, struct drm_connector *conne
 		for (i = 0; i < panel->info.num_buildin_modes; i++) {
 			mode = sprd_panel_create_sr_mode(connector->dev,
 						&panel->info.buildin_modes[i], sr_width, sr_height);
+			if (!mode) {
+				DRM_ERROR("create sr display mode failed\n");
+				break;
+			}
 			mode->type = DRM_MODE_TYPE_DRIVER;
 			mode->width_mm = panel->info.mode.width_mm;
 			mode->height_mm = panel->info.mode.height_mm;
