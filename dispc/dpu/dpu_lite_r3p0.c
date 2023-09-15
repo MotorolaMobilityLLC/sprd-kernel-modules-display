@@ -923,9 +923,10 @@ static void disable_vsync(struct dpu_context *ctx)
 	//DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC);
 }
 
-static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
+static int dpu_context_init(struct dpu_context *ctx, struct device *dev)
 {
 	struct device_node *qos_np;
+	struct device_node *np = dev->of_node;
 	int ret;
 
 	qos_np = of_parse_phandle(np, "sprd,qos", 0);

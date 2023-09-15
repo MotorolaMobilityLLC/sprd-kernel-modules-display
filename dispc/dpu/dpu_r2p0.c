@@ -515,9 +515,10 @@ static void dpu_fini(struct dpu_context *ctx)
 	ctx->panel_ready = false;
 }
 
-static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
+static int dpu_context_init(struct dpu_context *ctx, struct device *dev)
 {
 	struct dpu_enhance *enhance;
+	struct device_node *np = dev->of_node;
 	int ret = 0;
 
 	ret = of_property_read_u32(np, "sprd,corner-radius",
@@ -529,8 +530,7 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 					ctx->sprd_corner_radius);
 	}
 
-
-	enhance = kzalloc(sizeof(*enhance), GFP_KERNEL);
+	enhance = devm_kzalloc(dev, sizeof(*enhance), GFP_KERNEL);
 	if (!enhance)
 		return -ENOMEM;
 

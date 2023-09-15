@@ -2493,13 +2493,14 @@ static void disable_vsync(struct dpu_context *ctx)
 	//DPU_REG_CLR(ctx->base + REG_DPU_INT_EN, BIT_DPU_INT_VSYNC);
 }
 
-static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
+static int dpu_context_init(struct dpu_context *ctx, struct device *dev)
 {
 	struct device_node *qos_np, *bl_np, *oled_bl_node, *lcd_node;
 	struct dpu_enhance *enhance;
+	struct device_node *np = dev->of_node;
 	int ret = 0;
 
-	enhance = kzalloc(sizeof(*enhance), GFP_KERNEL);
+	enhance = devm_kzalloc(dev, sizeof(*enhance), GFP_KERNEL);
 	if (!enhance) {
 		pr_err("%s() enhance kzalloc failed!\n", __func__);
 		return -ENOMEM;
@@ -2515,7 +2516,6 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
 			of_node_put(bl_np);
 			if (IS_ERR_OR_NULL(enhance->bl_dev)) {
 				DRM_WARN("backlight is not ready, dpu probe deferred\n");
-				kfree(enhance);
 				return -EPROBE_DEFER;
 			}
 		} else {
@@ -2589,7 +2589,7 @@ static int dpu_context_init(struct dpu_context *ctx, struct device_node *np)
                 ctx->evt_wb_done = true;
 
 	/* Allocate memory for trusty */
-	ctx->tos_msg = kmalloc(sizeof(struct disp_message) + sizeof(struct layer_reg), GFP_KERNEL);
+	ctx->tos_msg = devm_kzalloc(dev, sizeof(struct disp_message) + sizeof(struct layer_reg), GFP_KERNEL);
 	if (!ctx->tos_msg)
 		return -ENOMEM;
 

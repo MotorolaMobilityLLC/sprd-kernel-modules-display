@@ -49,7 +49,7 @@ struct dpu_core_ops {
 	void (*capability)(struct dpu_context *ctx,
 			 struct sprd_crtc_capability *cap);
 	void (*bg_color)(struct dpu_context *ctx, u32 color);
-	int (*context_init)(struct dpu_context *ctx, struct device_node *np);
+	int (*context_init)(struct dpu_context *ctx, struct device *dev);
 	int (*modeset)(struct dpu_context *ctx, struct drm_display_mode *mode);
 	void (*reg_dump)(struct dpu_context *ctx);
 };

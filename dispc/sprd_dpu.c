@@ -751,14 +751,15 @@ static int of_get_logo_memory_info(struct sprd_dpu *dpu,
 }
 
 static int sprd_dpu_context_init(struct sprd_dpu *dpu,
-				struct device_node *np)
+				struct device *dev)
 {
 	struct resource r;
 	struct dpu_context *ctx = &dpu->ctx;
+	struct device_node *np = dev->of_node;
 	int ret;
 
 	if (dpu->core->context_init) {
-		ret = dpu->core->context_init(ctx, np);
+		ret = dpu->core->context_init(ctx, dev);
 		if (ret)
 			return ret;
 	}
@@ -918,12 +919,12 @@ static const struct of_device_id dpu_match_table[] = {
 
 static int sprd_dpu_probe(struct platform_device *pdev)
 {
-	struct device_node *np = pdev->dev.of_node;
+	struct device *dev = &pdev->dev;
 	const struct sprd_dpu_ops *pdata;
 	struct sprd_dpu *dpu;
 	int ret;
 
-	dpu = devm_kzalloc(&pdev->dev, sizeof(*dpu), GFP_KERNEL);
+	dpu = devm_kzalloc(dev, sizeof(*dpu), GFP_KERNEL);
 	if (!dpu)
 		return -ENOMEM;
 
@@ -936,7 +937,7 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 	 */
 	mutex_init(&dpu->dpu_gsp_lock);
 
-	pdata = of_device_get_match_data(&pdev->dev);
+	pdata = of_device_get_match_data(dev);
 	if (pdata) {
 		dpu->core = pdata->core;
 		dpu->clk = pdata->clk;
@@ -946,11 +947,11 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ret = sprd_dpu_context_init(dpu, np);
+	ret = sprd_dpu_context_init(dpu, dev);
 	if (ret)
 		return ret;
 
-	ret = sprd_dpu_device_create(dpu, &pdev->dev);
+	ret = sprd_dpu_device_create(dpu, dev);
 	if (ret)
 		return ret;
 
@@ -964,11 +965,11 @@ static int sprd_dpu_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dpu);
 
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_get_noresume(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
+	pm_runtime_set_active(dev);
+	pm_runtime_get_noresume(dev);
+	pm_runtime_enable(dev);
 
-	return component_add(&pdev->dev, &dpu_component_ops);
+	return component_add(dev, &dpu_component_ops);
 }
 
 static int sprd_dpu_remove(struct platform_device *pdev)

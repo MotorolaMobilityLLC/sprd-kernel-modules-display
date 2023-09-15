@@ -117,7 +117,7 @@ struct dpu_core_ops {
 	void (*capability)(struct dpu_context *ctx,
 			 struct sprd_crtc_capability *cap);
 	void (*bg_color)(struct dpu_context *ctx, u32 color);
-	int (*context_init)(struct dpu_context *ctx, struct device_node *np);
+	int (*context_init)(struct dpu_context *ctx, struct device *dev);
 	void (*enhance_set)(struct dpu_context *ctx, u32 id, void *param, size_t count);
 	void (*enhance_get)(struct dpu_context *ctx, u32 id, void *param, size_t count);
 	bool (*check_raw_int)(struct dpu_context *ctx, u32 mask);
