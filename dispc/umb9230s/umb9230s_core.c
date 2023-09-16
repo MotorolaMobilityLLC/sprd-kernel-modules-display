@@ -8,7 +8,6 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 
-#include "../dsi/core/dsi_ctrl_r1p1.h"
 #include "../sprd_dsi.h"
 #include "../sprd_dsi_panel.h"
 #include "../sysfs/sysfs_display.h"
@@ -195,7 +194,7 @@ void umb9230s_videomode_copy(struct umb9230s_device *umb9230s, struct videomode 
         memcpy(&umb9230s->dsi_ctx.vm, vm, sizeof(struct videomode));
 }
 
-static int umb9230s_pattern_mode(struct umb9230s_device *umb9230s)
+int umb9230s_pattern_mode(struct umb9230s_device *umb9230s)
 {
     struct videomode *vm = &umb9230s->dsi_ctx.vm;
     u32 buf[2] = {0};
@@ -321,8 +320,6 @@ static void umb9230s_dsc_porch_set(struct umb9230s_device *umb9230s)
     struct videomode *vm = &umb9230s->dsi_ctx.vm;
     u32 buf[3];
 
-    pr_info("change umb9230s dsc porch\n");
-
     buf[0] = REG_DSC_H_TIMING;
     buf[1] = (vm->hsync_len << 0) | (vm->hback_porch  << 8) |
             (vm->hfront_porch << 20);
@@ -374,8 +371,6 @@ static void umb9230s_dsc_config(struct umb9230s_device *umb9230s)
 
 int umb9230s_vrr_timing(struct umb9230s_device *umb9230s)
 {
-    pr_info("umb9230s vrr\n");
-
     umb9230s_dsi_rx_state_reset(umb9230s);
 
     umb9230s_dsi_rx_vrr_timing(umb9230s);
@@ -459,12 +454,6 @@ void umb9230s_enable(struct umb9230s_device *umb9230s)
     umb9230s_enable_irq(umb9230s);
 
     umb9230s->enabled = true;
-
-    if (umb9230s->pattern_en) {
-        umb9230s_dsi_tx_set_work_mode(umb9230s, umb9230s->dsi_ctx.work_mode);
-        umb9230s_pattern_mode(umb9230s);
-        mdelay(500);
-    }
 
     mutex_unlock(&umb9230s->lock);
 }
@@ -572,7 +561,7 @@ void umb9230s_isr(void *data)
      if (reg_val & BIT_INTR_VIDEO2CMD_FIFO_UNDERFLOW)
         pr_err("VIDEO2CMD_FIFO_UNDERFLOW\n");
 }
-
+#if 0
 static int wait_umb9230s_idle(struct umb9230s_device *umb9230s)
 {
     union _dsi_rx_0x0C phy_state;
@@ -609,7 +598,7 @@ static int wait_umb9230s_idle(struct umb9230s_device *umb9230s)
 
     return -1;
 }
-
+#endif
 void umb9230s_disable(struct umb9230s_device *umb9230s)
 {
     if (!umb9230s)
@@ -621,8 +610,8 @@ void umb9230s_disable(struct umb9230s_device *umb9230s)
 
     umb9230s_disable_irq(umb9230s);
 
-    if (wait_umb9230s_idle(umb9230s))
-        pr_err("wait umb9230s idle timeout\n");
+    //if (wait_umb9230s_idle(umb9230s))
+    //    pr_err("wait umb9230s idle timeout\n");
 
     umb9230s_dsi_tx_fini(umb9230s);
 
@@ -781,8 +770,6 @@ static int umb9230s_probe(struct platform_device *pdev)
     struct umb9230s_device *umb9230s;
     int ret;
 
-    pr_info("enter\n");
-
     umb9230s = devm_kzalloc(&pdev->dev, sizeof(*umb9230s), GFP_KERNEL);
     if (!umb9230s) {
         pr_err("failed to allocate umb9230s data.\n");
@@ -822,7 +809,6 @@ static int umb9230s_probe(struct platform_device *pdev)
     mutex_init(&umb9230s->lock);
 
     intr_irq_registration(umb9230s);
-    pr_info("exit\n");
 
     return ret;
 }

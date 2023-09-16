@@ -145,7 +145,7 @@ int intr_irq_registration(void *data)
 		return ret;
 	} else {
 		pr_err("succeed to registrate intr irq.\n");
-		intr_irq_flags = false;
+		intr_irq_flags = true;
 	}
 
 	return ret;

@@ -8,10 +8,6 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 
-#include "../dsi/core/dsi_ctrl_r1p1.h"
-#include "../sprd_dsi.h"
-#include "../sysfs/sysfs_display.h"
-
 #include "umb9230s.h"
 
 
@@ -42,6 +38,14 @@
 #define REG_PHY_RX_BASE             REG_PHY_TEST_CTRL_BASE
 #define REG_PHY_TX_TEST_CTRL        (REG_PHY_TEST_CTRL_BASE + 0xC00)
 #define REG_PHY_RX_TEST_CTRL        (REG_PHY_TEST_CTRL_BASE + 0x800)
+
+#define REG_PHY_TX_A2D_LANE0_MAP    (REG_PHY_TX_BASE + (0x4D * 4))
+#define REG_PHY_TX_A2D_LANE2_MAP    (REG_PHY_TX_BASE + (0x6D * 4))
+#define REG_PHY_TX_D2A_LANE_SWAP    (REG_PHY_TX_BASE + (0xF1 * 4))
+
+#define REG_PHY_RX_A2D_LANE0_MAP    (REG_PHY_RX_BASE + (0x4D * 4))
+#define REG_PHY_RX_A2D_LANE2_MAP    (REG_PHY_RX_BASE + (0x6D * 4))
+#define REG_PHY_RX_D2A_LANE_SWAP    (REG_PHY_RX_BASE + (0xF1 * 4))
 
 void umb9230s_phy_rx_init(struct umb9230s_device *umb9230s)
 {
@@ -78,14 +82,45 @@ void umb9230s_phy_rx_init(struct umb9230s_device *umb9230s)
     buf[0] = REG_DSI_RX_RST_DPHY_N;
     buf[1] = 1;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+    udelay(1);
+
+    /* swap datalane0 and datalane2 */
+    buf[0] = REG_PHY_RX_D2A_LANE_SWAP;
+    buf[1] = 0xc6;
+    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+    buf[0] = REG_PHY_RX_A2D_LANE0_MAP;
+    buf[1] = 0x40;
+    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+    buf[0] = REG_PHY_RX_A2D_LANE2_MAP;
+    buf[1] = 0x00;
+    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+}
+
+int umb9230s_phy_rx_wait_clklane_stop_state(struct umb9230s_device *umb9230s)
+{
+    u32 i = 0;
+    union _dsi_rx_0x0C phy_state;
+
+    for (i = 0; i < 5000; i++) {
+        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_STATE, &phy_state.val, 1);
+        if (phy_state.bits.phy_stopstateclk)
+            return 0;
+
+        udelay(10);
+    }
+
+    pr_err("umb9230s rx phy clklane stop state wait time out\n");
+    return -1;
 }
 
 static int umb9230s_phy_tx_wait_pll_locked(struct umb9230s_device *umb9230s)
 {
     u32 i = 0;
     union _0x9C phy_status;
-
-    pr_info("phy tx wait pll locked\n");
 
     for (i = 0; i < 50000; i++) {
         iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TX_PHY_STATUS, &phy_status.val, 1);
@@ -197,8 +232,6 @@ int umb9230s_phy_tx_enable(struct umb9230s_device *umb9230s)
     u32 buf[2];
     const struct dphy_tx_pll_ops *pll = umb9230s->pll;
 
-    pr_info("phy tx enable\n");
-
     /* rstz */
     iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TX_PHY_INTERFACE_CTRL, &reg.PHY_INTERFACE_CTRL.val, 1);
     reg.PHY_INTERFACE_CTRL.bits.rf_phy_reset_n = 0;
@@ -263,6 +296,19 @@ int umb9230s_phy_tx_enable(struct umb9230s_device *umb9230s)
     ret = umb9230s_phy_tx_wait_pll_locked(umb9230s);
     if (ret)
         return ret;
+
+    /* swap datalane0 and datalane2 */
+    buf[0] = REG_PHY_TX_D2A_LANE_SWAP;
+    buf[1] = 0xc6;
+    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+    buf[0] = REG_PHY_TX_A2D_LANE0_MAP;
+    buf[1] = 0x40;
+    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+    buf[0] = REG_PHY_TX_A2D_LANE2_MAP;
+    buf[1] = 0;
+    iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     return 0;
 }

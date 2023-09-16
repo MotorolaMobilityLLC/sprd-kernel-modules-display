@@ -8,9 +8,7 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 
-#include "../dsi/core/dsi_ctrl_r1p1.h"
 #include "../sprd_dsi.h"
-#include "../sysfs/sysfs_display.h"
 
 #include "kernel_gpio_fun.h"
 #include "umb9230s.h"
@@ -114,8 +112,6 @@ void umb9230s_dsi_rx_vrr_timing(struct umb9230s_device *umb9230s)
     u16 hline;
     u32 buf[8];
 
-    pr_info("dsi rx timming change\n");
-
      /* line start delay(0x38) */
     hline = vm->hactive + vm->hsync_len + vm->hfront_porch + vm->hback_porch;
     reg.LINE_START_DELAY.bits.line_start_delay = 30 * hline / 100;
@@ -165,8 +161,6 @@ void umb9230s_dsi_rx_init(struct umb9230s_device *umb9230s)
     struct dsi_rx_reg reg = {};
     u16 hline;
     u32 buf[8];
-
-    pr_info("umb9230s dsi rx init\n");
 
     /* power_en */
     buf[0] = REG_DSI_RX_SOFT_RESET;
@@ -218,11 +212,6 @@ void umb9230s_dsi_rx_init(struct umb9230s_device *umb9230s)
     /* hfp(0x50) */
     reg.VIDEO_LINE_HFP_TIME.bits.video_line_hfp_time = vm->hfront_porch;
 
-    pr_info("hactive:0x%x hsync_len:0x%x hfront_porch:0x%x hback_porch:0x%x\n",
-                vm->hactive, vm->hsync_len, vm->hfront_porch, vm->hback_porch);
-    pr_info("vactive:0x%x vsync_len:0x%x vfront_porch:0x%x vback_porch:0x%x\n",
-                vm->vactive, vm->vsync_len, vm->vfront_porch, vm->vback_porch);
-
     buf[0] = REG_DSI_RX_LINE_START_DELAY;
     memcpy(&buf[1], &reg.LINE_START_DELAY.val, 7 * 4);
     iic2cmd_write(umb9230s->i2c_addr, buf, 8);
@@ -269,8 +258,6 @@ static int umb9230s_dsi_tx_wait_rd_resp_completed(struct umb9230s_device *umb923
 {
     int timeout;
     union _0x98 cmd_mode_status;
-
-    pr_info("%s()\n", __func__);
 
     for (timeout = 0; timeout < 10000; timeout++) {
         udelay(10);
@@ -424,8 +411,6 @@ int umb9230s_dsi_tx_wr_pkt(struct umb9230s_device *umb9230s, u8 vc, u8 type,
     int i, j, ret;
     u32 buf[2];
 
-    pr_info("%s()\n", __func__);
-
     if (vc > 3)
         return -EINVAL;
 
@@ -470,8 +455,6 @@ int umb9230s_dsi_tx_rd_pkt(struct umb9230s_device *umb9230s, u8 vc, u8 type,
     int count = 0;
     u32 temp;
     union _0x98 cmd_mode_status;
-
-    pr_info("%s()\n", __func__);
 
     if (vc > 3)
         return -EINVAL;
@@ -527,8 +510,6 @@ void umb9230s_dsi_tx_lp_cmd_enable(struct umb9230s_device *umb9230s, bool enable
     if (!umb9230s)
         return;
 
-    pr_info("dsi tx lp cmd enable\n");
-
     /* is_cmd_mode */
     iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TX_DSI_MODE_CFG, &dsi_mode_cfg.val, 1);
     if (dsi_mode_cfg.bits.cmd_video_mode) {
@@ -569,8 +550,6 @@ void umb9230s_dsi_tx_set_work_mode(struct umb9230s_device *umb9230s, u8 mode)
     if (!umb9230s)
         return;
 
-    pr_info("dsi tx work mode:%d\n", mode);
-
     if (mode == DSI_MODE_CMD)
         /* cmd_mode */
         buf[1] = 1;
@@ -588,8 +567,6 @@ void umb9230s_dsi_tx_state_reset(struct umb9230s_device *umb9230s)
 
     if (!umb9230s)
         return;
-
-    pr_info("dsi tx state reset\n");
 
     /* power_en */
     buf[0] = REG_DSI_TX_SOFT_RESET;
@@ -615,8 +592,6 @@ void umb9230s_dsi_tx_vrr_timing(struct umb9230s_device *umb9230s)
     union _0xD0 video_sig_delay_config;
     u32 buf[5];
     struct dsi_reg reg = {};
-
-    pr_info("dsi tx vrr timing change\n");
 
     coding = fmt_to_coding(ctx->format);
     Bpp_x100 = calc_bytes_per_pixel_x100(coding);
@@ -666,8 +641,6 @@ static void umb9230s_dsi_tx_init(struct umb9230s_device *umb9230s)
     u16 data_hs2lp, data_lp2hs, clk_hs2lp, clk_lp2hs;
     u32 buf[7];
     struct dsi_reg reg = {};
-
-    pr_info("dsi tx init\n");
 
     /* power_en */
     buf[0] = REG_DSI_TX_SOFT_RESET;
@@ -752,8 +725,6 @@ static int umb9230s_dsi_tx_dpi_video(struct umb9230s_device *umb9230s)
     struct videomode *vm = &umb9230s->dsi_ctx.vm;
     struct dsi_reg reg = {};
     u32 buf[6];
-
-    pr_info("dsi tx dpi video\n");
 
     coding = fmt_to_coding(ctx->format);
     video_size = round_video_size(coding, vm->hactive);
@@ -964,8 +935,6 @@ static void umb9230s_dsi_tx_edpi_video(struct umb9230s_device *umb9230s)
     u32 buf[4];
     struct dsi_reg reg = {};
 
-    pr_info("dsi tx edpi video\n");
-
     coding = fmt_to_coding(ctx->format);
     Bpp_x100 = calc_bytes_per_pixel_x100(coding);
     max_fifo_len = word_length * fifo_depth * 100 / Bpp_x100;
@@ -1057,8 +1026,6 @@ void umb9230s_dsi_tx_enable(struct umb9230s_device *umb9230s)
 void umb9230s_dsi_tx_fini(struct umb9230s_device *umb9230s)
 {
     u32 buf[4];
-
-    pr_info("dsi tx finit\n");
 
     /* int0_mask(0x0C) int1_sts(0x10) int1_mask(0x14) */
     buf[0] = REG_DSI_TX_MASK_PROTOCOL_INT;

@@ -110,6 +110,15 @@ int dsi_panel_set_dpms_mode(struct sprd_dsi *dsi)
 	return 0;
 }
 
+static void dphy_hs_clk_enable_for_umb9230s(struct sprd_dsi *dsi)
+{
+	if (!dsi->umb9230s)
+		return;
+
+	umb9230s_phy_rx_wait_clklane_stop_state(dsi->umb9230s);
+	sprd_dphy_hs_clk_en(dsi->phy, true);
+}
+
 static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
@@ -149,14 +158,15 @@ static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 	if (!strcmp(dpu->ctx.version, "dpu-r6p0") || !strcmp(dpu->ctx.version, "dpu-r6p1"))
 		pm_runtime_get_sync(dsi->dev.parent);
 
+	umb9230s_enable(dsi->umb9230s);
 	sprd_dsi_enable(dsi);
 	sprd_dphy_enable(dsi->phy);
+
+	dphy_hs_clk_enable_for_umb9230s(dsi);
 
 	sprd_dsi_lp_cmd_enable(dsi, true);
 	if (dsi->dsi_slave)
 		sprd_dsi_lp_cmd_enable(dsi->dsi_slave, true);
-
-	umb9230s_enable(dsi->umb9230s);
 
 	if (dsi->panel) {
 		if ((dsi->ctx.last_dpms == DRM_MODE_DPMS_SUSPEND) &&
@@ -478,7 +488,7 @@ static int sprd_dsi_umb9230s_attach(struct sprd_dsi *dsi)
 	umb9230s_parse_lcd_info(dsi->umb9230s, lcd_node);
 
 	dsi->umb9230s->phy_ctx.lanes = dsi->ctx.lanes;
-	dsi->umb9230s->phy_ctx.freq = dsi->ctx.byte_clk * 8;
+	dsi->umb9230s->phy_ctx.freq = dsi->umb9230s->dsi_ctx.byte_clk * 8;
 
 	return 0;
 }

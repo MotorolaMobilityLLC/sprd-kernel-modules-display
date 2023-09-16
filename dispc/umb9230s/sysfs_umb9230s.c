@@ -11,6 +11,9 @@
 #include <linux/sysfs.h>
 
 #include "disp_lib.h"
+#include "sprd_dphy.h"
+#include "sprd_dpu.h"
+#include "sprd_dsi.h"
 #include "umb9230s.h"
 
 struct umb9230_sysfs {
@@ -135,6 +138,31 @@ static ssize_t ssc_show(struct device *dev,
 	return ret;
 }
 
+static struct sprd_dpu *sprd_disp_pipe_get_dpu(struct device *umb9230s_dev)
+{
+	struct device *dev;
+	struct sprd_dphy *dphy;
+	struct sprd_dsi *dsi;
+
+	dev = sprd_disp_pipe_get_input(umb9230s_dev);
+	if (!dev)
+		return NULL;
+
+	dphy = dev_get_drvdata(dev);
+	if (!dphy)
+		return NULL;
+
+	dev = sprd_disp_pipe_get_input(dphy->dev.parent);
+	if (!dev)
+		return NULL;
+
+	dsi = dev_get_drvdata(dev);
+	if (!dsi)
+		return NULL;
+
+	return dsi->dpu;
+}
+
 static ssize_t ssc_store(struct device *dev,
 			struct device_attribute *attr,
 			const char *buf, size_t count)
@@ -142,6 +170,7 @@ static ssize_t ssc_store(struct device *dev,
 	struct umb9230s_device *umb9230s = dev_get_drvdata(dev);
 	const struct dphy_tx_pll_ops *pll = umb9230s->pll;
 	struct dphy_tx_context *ctx = &umb9230s->phy_ctx;
+	struct sprd_dpu *dpu;
 	int ret;
 
 	mutex_lock(&umb9230s->lock);
@@ -158,8 +187,18 @@ static ssize_t ssc_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (pll->ssc_en)
+	dpu = sprd_disp_pipe_get_dpu(dev);
+	if (!dpu) {
+		mutex_unlock(&umb9230s->lock);
+		pr_err("get dpu failed\n");
+		return -ENXIO;
+	}
+
+	if (pll->ssc_en) {
+		mutex_lock(&dpu->ctx.vrr_lock);
 		pll->ssc_en(ctx, sysfs->ssc_en);
+		mutex_unlock(&dpu->ctx.vrr_lock);
+	}
 
 	mutex_unlock(&umb9230s->lock);
 
@@ -184,6 +223,7 @@ static ssize_t hop_store(struct device *dev,
 	struct umb9230s_device *umb9230s = dev_get_drvdata(dev);
 	struct dphy_tx_context *ctx = &umb9230s->phy_ctx;
 	const struct dphy_tx_pll_ops *pll = umb9230s->pll;
+	struct sprd_dpu *dpu;
 	int ret;
 	int delta;
 
@@ -201,6 +241,13 @@ static ssize_t hop_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	dpu = sprd_disp_pipe_get_dpu(dev);
+	if (!dpu) {
+		mutex_unlock(&umb9230s->lock);
+		pr_err("get dpu failed\n");
+		return -ENXIO;
+	}
+
 	/*
 	 * because of double edge trigger,
 	 * the rule is actual freq * 10 / 2,
@@ -214,8 +261,11 @@ static ssize_t hop_store(struct device *dev,
 	pr_info("input freq is %d\n", sysfs->hop_freq);
 
 	delta = sysfs->hop_freq - ctx->freq;
-	if (pll->hop_config)
+	if (pll->hop_config) {
+		mutex_lock(&dpu->ctx.vrr_lock);
 		pll->hop_config(ctx, delta, 200);
+		mutex_unlock(&dpu->ctx.vrr_lock);
+	}
 
 	mutex_unlock(&umb9230s->lock);
 
