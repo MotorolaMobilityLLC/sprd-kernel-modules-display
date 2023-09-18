@@ -25,6 +25,8 @@
 #define host_to_dsi(host) \
 	container_of(host, struct sprd_dsi, host)
 
+static int sprd_oled_set_brightness(struct backlight_device *bdev);
+
 struct device_node *sprd_get_panel_node_by_name(void)
 {
 	struct device_node *lcd_node, *cmdline_node;
@@ -250,7 +252,7 @@ static int sprd_panel_disable(struct drm_panel *p)
 
 	mutex_lock(&panel->lock);
 
-	if (panel->backlight) {
+	if (panel->backlight && !panel->sprd_bl_mipi_type) {
 		panel->backlight->props.power = FB_BLANK_POWERDOWN;
 		panel->backlight->props.state |= BL_CORE_FBBLANK;
 		backlight_update_status(panel->backlight);
@@ -277,7 +279,7 @@ static int sprd_panel_enable(struct drm_panel *p)
 			     panel->info.cmds[CMD_CODE_INIT],
 			     panel->info.cmds_len[CMD_CODE_INIT]);
 
-	if (panel->backlight) {
+	if (panel->backlight && !panel->sprd_bl_mipi_type) {
 		panel->backlight->props.power = FB_BLANK_UNBLANK;
 		panel->backlight->props.state &= ~BL_CORE_FBBLANK;
 		backlight_update_status(panel->backlight);
@@ -549,6 +551,24 @@ static int sprd_panel_mix_check(struct sprd_panel *panel)
 	return 0;
 }
 
+static void sprd_recovery_oled_backlight(struct sprd_panel *panel)
+{
+	if (!panel->sprd_bl_mipi_type) {
+		DRM_DEBUG("not support mipi command backlight, skip recovery backlight\n");
+		return;
+	}
+
+	if (panel->backlight) {
+		DRM_INFO("====== recovery oled backlight ========\n");
+		if (panel->backlight->props.brightness) {
+			sprd_oled_set_brightness(panel->backlight);
+		} else {
+			panel->backlight->props.brightness = SPRD_OLED_DEFAULT_BRIGHTNESS;
+			sprd_oled_set_brightness(panel->backlight);
+		}
+	}
+}
+
 static void sprd_panel_esd_work_func(struct work_struct *work)
 {
 	struct sprd_panel *panel = container_of(work, struct sprd_panel,
@@ -606,6 +626,7 @@ static void sprd_panel_esd_work_func(struct work_struct *work)
 		panel->is_esd_rst = true;
 		encoder_funcs->disable(encoder);
 		encoder_funcs->enable(encoder);
+		sprd_recovery_oled_backlight(panel);
 		panel->is_esd_rst = false;
 		if (!panel->esd_work_pending && panel->enabled)
 			schedule_delayed_work(&panel->esd_work,
@@ -897,6 +918,8 @@ static int sprd_oled_backlight_init(struct sprd_panel *panel,
 
 	oled->bdev->props.max_brightness = oled->max_level;
 	oled->panel = panel;
+	panel->backlight = oled->bdev;
+	panel->sprd_bl_mipi_type = true;
 	of_parse_oled_cmds(oled,
 			panel->info.cmds[CMD_OLED_BRIGHTNESS],
 			panel->info.cmds_len[CMD_OLED_BRIGHTNESS]);

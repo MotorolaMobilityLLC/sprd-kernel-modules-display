@@ -16,6 +16,7 @@
 #include <drm/drm_panel.h>
 
 #define VREFRESH_CNT_MAX	20
+#define SPRD_OLED_DEFAULT_BRIGHTNESS 25
 
 enum {
 	CMD_CODE_INIT = 0,
@@ -128,6 +129,7 @@ struct sprd_panel {
 	struct panel_info info;
 	char lcd_name[50];
 	struct backlight_device *backlight;
+	bool sprd_bl_mipi_type;
 	struct regulator *supply;
 	struct delayed_work esd_work;
 	bool esd_work_pending;
