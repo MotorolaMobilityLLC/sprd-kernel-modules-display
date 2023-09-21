@@ -808,6 +808,8 @@ static int umb9230s_probe(struct platform_device *pdev)
 
     mutex_init(&umb9230s->lock);
 
+    umb9230s->enabled = true;
+
     intr_irq_registration(umb9230s);
 
     return ret;

@@ -489,6 +489,7 @@ static int sprd_dsi_umb9230s_attach(struct sprd_dsi *dsi)
 
 	dsi->umb9230s->phy_ctx.lanes = dsi->ctx.lanes;
 	dsi->umb9230s->phy_ctx.freq = dsi->umb9230s->dsi_ctx.byte_clk * 8;
+	dsi->umb9230s->phy_ctx.ulps_enable = dsi->phy->ctx.ulps_enable;
 
 	return 0;
 }
