@@ -969,9 +969,10 @@ static void sprd_edid_set_default_prop(struct edid *edid_info)
 	memcpy(edid_info, kEdid0, sizeof(struct edid));
 }
 
-static int sprd_dsi_context_init(struct sprd_dsi *dsi, struct device_node *np)
+static int sprd_dsi_context_init(struct sprd_dsi *dsi, struct device *dev)
 {
 	struct dsi_context *ctx = &dsi->ctx;
+	struct device_node *np = dev->of_node;
 	struct resource r;
 	u32 tmp;
 
@@ -983,7 +984,7 @@ static int sprd_dsi_context_init(struct sprd_dsi *dsi, struct device_node *np)
 		return -ENODEV;
 	}
 	ctx->base = (unsigned long)
-	    ioremap(r.start, resource_size(&r));
+	    devm_ioremap(dev, r.start, resource_size(&r));
 	if (ctx->base == 0) {
 		DRM_ERROR("dsi ctrl reg base ioremap failed\n");
 		return -ENODEV;
@@ -1177,7 +1178,7 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ret = sprd_dsi_context_init(dsi, np);
+	ret = sprd_dsi_context_init(dsi, &pdev->dev);
 	if (ret)
 		return ret;
 

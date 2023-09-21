@@ -181,17 +181,18 @@ static int sprd_dphy_device_create(struct sprd_dphy *dphy,
 }
 
 static int sprd_dphy_context_init(struct sprd_dphy *dphy,
-				  struct device_node *np)
+				  struct device *dev)
 {
 	struct resource r;
 	u32 tmp;
+	struct device_node *np = dev->of_node;
 
 	if (dphy->glb->parse_dt)
 		dphy->glb->parse_dt(&dphy->ctx, np);
 
 	if (!of_address_to_resource(np, 0, &r)) {
 		dphy->ctx.ctrlbase = (unsigned long)
-		    ioremap(r.start, resource_size(&r));
+		    devm_ioremap(dev, r.start, resource_size(&r));
 		if (dphy->ctx.ctrlbase == 0) {
 			DRM_ERROR("dphy ctrlbase ioremap failed\n");
 			return -EFAULT;
@@ -204,7 +205,7 @@ static int sprd_dphy_context_init(struct sprd_dphy *dphy,
 	if (!of_address_to_resource(np, 1, &r)) {
 		DRM_INFO("this dphy has apb reg base\n");
 		dphy->ctx.apbbase = (unsigned long)
-		    ioremap(r.start, resource_size(&r));
+		    devm_ioremap(dev, r.start, resource_size(&r));
 		if (dphy->ctx.apbbase == 0) {
 			DRM_ERROR("dphy apbbase ioremap failed\n");
 			return -EFAULT;
@@ -348,7 +349,7 @@ static int sprd_dphy_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ret = sprd_dphy_context_init(dphy, pdev->dev.of_node);
+	ret = sprd_dphy_context_init(dphy, &pdev->dev);
 	if (ret)
 		return ret;
 

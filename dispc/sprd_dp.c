@@ -611,10 +611,11 @@ static void sprd_edid_set_default_prop(struct edid *edid_info)
 	memcpy(edid_info, kEdid1, sizeof(struct edid));
 }
 
-static int sprd_dp_context_init(struct sprd_dp *dp, struct device_node *np)
+static int sprd_dp_context_init(struct sprd_dp *dp, struct device *dev)
 {
 	struct dp_context *ctx = &dp->ctx;
 	struct resource r;
+	struct device_node *np = dev->of_node;
 
 	if (dp->glb && dp->glb->parse_dt)
 		dp->glb->parse_dt(&dp->ctx, np);
@@ -623,7 +624,7 @@ static int sprd_dp_context_init(struct sprd_dp *dp, struct device_node *np)
 		DRM_ERROR("parse dp ctrl reg base failed\n");
 		return -ENODEV;
 	}
-	ctx->base = ioremap(r.start, resource_size(&r));
+	ctx->base = devm_ioremap(dev, r.start, resource_size(&r));
 	if (ctx->base == NULL) {
 		DRM_ERROR("dp ctrl reg base ioremap failed\n");
 		return -ENODEV;
@@ -646,7 +647,6 @@ static const struct of_device_id dp_match_table[] = {
 
 static int sprd_dp_probe(struct platform_device *pdev)
 {
-	struct device_node *np = pdev->dev.of_node;
 	const struct sprd_dp_ops *pdata;
 	struct sprd_dp *dp;
 	int ret;
@@ -665,7 +665,7 @@ static int sprd_dp_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ret = sprd_dp_context_init(dp, np);
+	ret = sprd_dp_context_init(dp, &pdev->dev);
 	if (ret)
 		return ret;
 

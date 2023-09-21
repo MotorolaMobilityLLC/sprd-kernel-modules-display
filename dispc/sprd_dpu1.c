@@ -513,7 +513,7 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 		DRM_ERROR("parse dt base address failed\n");
 		return -ENODEV;
 	}
-	ctx->base = ioremap(r.start, resource_size(&r));
+	ctx->base = devm_ioremap(dev, r.start, resource_size(&r));
 	if (!ctx->base) {
 		DRM_ERROR("ioremap base address failed\n");
 		return -EFAULT;
