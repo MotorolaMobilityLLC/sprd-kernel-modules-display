@@ -26,6 +26,7 @@ static struct dpu_clk_context {
 	struct clk *clk_src_256m;
 	struct clk *clk_src_307m2;
 	struct clk *clk_src_384m;
+	struct clk *clk_src_468m;
 	struct clk *clk_dpu_core;
 	struct clk *clk_dpu_dpi;
 	struct clk *clk_src_250m;
@@ -39,7 +40,8 @@ static const u32 dpu_core_clk[] = {
 	192000000,
 	256000000,
 	307200000,
-	384000000
+	384000000,
+	468000000
 };
 
 static const u32 dpi_clk_src[] = {
@@ -73,6 +75,8 @@ static struct clk *val_to_clk(struct dpu_clk_context *ctx, u32 val)
 		return ctx->clk_src_307m2;
 	case 384000000:
 		return ctx->clk_src_384m;
+	case 468000000:
+		return ctx->clk_src_468m;
 	default:
 		pr_err("invalid clock value %u\n", val);
 		return NULL;
@@ -115,6 +119,8 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 		of_clk_get_by_name(np, "clk_src_307m2");
 	clk_ctx->clk_src_384m =
 		of_clk_get_by_name(np, "clk_src_384m");
+	clk_ctx->clk_src_468m =
+		of_clk_get_by_name(np, "clk_src_468m");
 	clk_ctx->clk_dpu_core =
 		of_clk_get_by_name(np, "clk_dpu_core");
 	clk_ctx->clk_dpu_dpi =
@@ -157,6 +163,11 @@ static int dpu_clk_parse_dt(struct dpu_context *ctx,
 	if (IS_ERR(clk_ctx->clk_src_384m)) {
 		pr_warn("read clk_src_384m failed\n");
 		clk_ctx->clk_src_384m = NULL;
+	}
+
+	if (IS_ERR(clk_ctx->clk_src_468m)) {
+		pr_warn("read clk_src_468m failed\n");
+		clk_ctx->clk_src_468m = NULL;
 	}
 
 	if (IS_ERR(clk_ctx->clk_dpu_core)) {
@@ -210,6 +221,9 @@ static int dpu_clk_init(struct dpu_context *ctx)
 				struct sprd_dpu, ctx);
 
 	dpu_core_val = calc_dpu_core_clk();
+
+	if (!ctx->vrr_enabled)
+		dpu_core_val = dpu_core_clk[ARRAY_SIZE(dpu_core_clk) - 2];
 
 	if (dpu->dsi->ctx.dpi_clk_div) {
 		pr_info("DPU_CORE_CLK = %u, DPI_CLK_DIV = %d\n",
@@ -270,11 +284,11 @@ static int dpu_clk_disable(struct dpu_context *ctx)
 {
 	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
 
-	clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
-	clk_disable_unprepare(clk_ctx->clk_dpu_core);
-
 	clk_set_parent(clk_ctx->clk_dpu_dpi, clk_ctx->clk_src_96m);
 	clk_set_parent(clk_ctx->clk_dpu_core, clk_ctx->clk_src_153m6);
+
+	clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
+	clk_disable_unprepare(clk_ctx->clk_dpu_core);
 
 	return 0;
 }

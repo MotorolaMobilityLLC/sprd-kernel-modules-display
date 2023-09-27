@@ -925,18 +925,11 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	return 0;
 }
 
-static void dpu_dvfs_task_func(unsigned long data)
+static int calc_max_overlaps_layer_cnt(struct dpu_context *ctx)
 {
-	struct dpu_context *ctx = (struct dpu_context *)data;
 	struct sprd_layer_state layer, layers[8];
 	int i, j, max_x, max_y, min_x, min_y;
 	int layer_en, max, maxs[8], count = 0;
-	u32 dvfs_freq;
-
-	if (!ctx->enabled) {
-		pr_err("dpu is not initialized\n");
-		return;
-	}
 
 	/*
 	 * Count the current total number of active layers
@@ -994,16 +987,36 @@ static void dpu_dvfs_task_func(unsigned long data)
 			max = maxs[i];
 	}
 
-	/*
-	 * Determine which frequency to use based on the
-	 * maximum number of overlaps.
-	 * Every IP here may be different, so need to modify it
-	 * according to the actual dpu core clock.
-	 */
-	if (max <= 3)
-		dvfs_freq = 307200000;
-	else
-		dvfs_freq = 384000000;
+	return max;
+}
+
+static void dpu_dvfs_task_func(unsigned long data)
+{
+	struct dpu_context *ctx = (struct dpu_context *)data;
+	int max;
+	u32 dvfs_freq;
+
+	if (!ctx->enabled) {
+		pr_err("dpu is not initialized\n");
+		return;
+	}
+
+	if (ctx->vrr_enabled)
+		dvfs_freq = 468000000;
+	else {
+		max = calc_max_overlaps_layer_cnt(ctx);
+
+		/*
+		 * Determine which frequency to use based on the
+		 * maximum number of overlaps.
+		 * Every IP here may be different, so need to modify it
+		 * according to the actual dpu core clock.
+		 */
+		if (max <= 3)
+			dvfs_freq = 307200000;
+		else
+			dvfs_freq = 384000000;
+	}
 
 #if IS_ENABLED(CONFIG_DVFS_APSYS_SPRD)
 	dpu_dvfs_notifier_call_chain(&dvfs_freq);
