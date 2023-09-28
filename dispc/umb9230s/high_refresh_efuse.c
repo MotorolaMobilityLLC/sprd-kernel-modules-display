@@ -2,7 +2,6 @@
 /*
  * Copyright (C) 2020 Unisoc Inc.
  */
-
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -23,7 +22,7 @@
 #define EFUSE_SEC_FLAG_CLR		SCI_ADDR(UMB9230S_EFUSE_BASE, 0x0048)
 #define EFUSE_SEC_MAGIC_NUM		SCI_ADDR(UMB9230S_EFUSE_BASE, 0x004c)
 #define EFUSE_PW_SWT			SCI_ADDR(UMB9230S_EFUSE_BASE, 0x0054)
-#define EFUSE_PW_ON_RD_END_FLAG		SCI_ADDR(UMB9230S_EFUSE_BASE, 0x006c)
+#define EFUSE_PW_ON_RD_END_FLAG		SCI_ADDR(UMB9230S_EFUSE_BASE, 0x0068)
 #define EFUSE_POR_READ_DATA(n)		SCI_ADDR(UMB9230S_EFUSE_BASE, n)
 
 #define EFUSE_MEM(index)		SCI_ADDR(UMB9230S_EFUSE_BASE,(0x1000 + (index << 2)))
@@ -86,7 +85,7 @@ static int efuse_i2c_write(u16 reg, u32 val)
 
 static void efuse_reg_conf(u16 reg, u32 bit, bool enable)
 {
-	u32 cfg0 = 0;
+	u32 cfg0;
 	int ret = 0;
 
 	ret = efuse_i2c_read(reg, &cfg0);
@@ -153,9 +152,9 @@ static void efuse_read_power_off(void)
 	efuse_reg_conf(EFUSE_SEC_EN, BIT_VDD_EN, FALSE);
 }
 
-u32 high_refresh_efuse_prog(int start_index, int end_index, bool isdouble, u32 val)
+u32 high_refresh_efuse_prog(int start_index, int end_index, bool isdouble, u32 *val)
 {
-	int blk_index;
+	int blk_index, i;
 	u32 err_flag = ERR_FLAG_MASK;
 
 	mutex_lock(&efuse_lock);
@@ -165,12 +164,13 @@ u32 high_refresh_efuse_prog(int start_index, int end_index, bool isdouble, u32 v
 	efuse_double(isdouble);
 
 	for (blk_index = start_index; blk_index <= end_index; blk_index++) {
-		efuse_i2c_write(EFUSE_MEM(blk_index), val);
+		i = blk_index - start_index;
+		efuse_i2c_write(EFUSE_MEM(blk_index), val[i]);
 		err_flag = efuse_check_status();
 		if (err_flag != 0)
 			pr_err("%s: efuse write failed, status:0x%08x\n", __func__, err_flag);
 
-		pr_info("%s: efuse write blk%d, val:0x%08x\n", __func__, blk_index, val);
+		pr_info("%s: efuse write blk%d, val:0x%08x\n", __func__, blk_index, val[i]);
 	}
 
 	efuse_double(FALSE);
@@ -183,7 +183,7 @@ u32 high_refresh_efuse_prog(int start_index, int end_index, bool isdouble, u32 v
 
 u32 high_refresh_efuse_read(int start_index, int end_index, bool isdouble, u32 *val)
 {
-	int blk_index, ret = 0;
+	int blk_index, i, ret = 0;
 	uint32_t err_flag = ERR_FLAG_MASK;
 
 	mutex_lock(&efuse_lock);
@@ -192,15 +192,18 @@ u32 high_refresh_efuse_read(int start_index, int end_index, bool isdouble, u32 *
 	efuse_double(isdouble);
 
 	for (blk_index = start_index; blk_index <= end_index; blk_index++) {
-		ret = efuse_i2c_read(EFUSE_MEM(blk_index), val);
+		i = blk_index - start_index;
+		ret = efuse_i2c_read(EFUSE_MEM(blk_index), &val[i]);
 		if (ret < 0) {
 			pr_err("%s: efuse read block error\n", __func__);
 		} else {
 			err_flag = efuse_check_status();
 			if (err_flag != 0)
 				pr_err("%s: efuse read failed, status:0x%08x\n", __func__,
-					err_flag);
-			pr_info("%s: efuse read blk%d, val:0x%08x\n", __func__, blk_index, *val);
+						err_flag);
+
+			pr_info("%s: efuse read blk%d, val:0x%08x\n", __func__, blk_index,
+					val[i]);
 		}
 	}
 
@@ -217,9 +220,9 @@ int high_refresh_efuse_power_on_read(int reg_offset, u32 *val)
 	u32 flag = 0;
 
 	ret = efuse_i2c_read(EFUSE_PW_ON_RD_END_FLAG, &flag);
-	if (ret == 0 && flag == 0x1) {
+	if (ret >= 0 && flag == 0x1) {
 		ret = efuse_i2c_read(EFUSE_POR_READ_DATA(reg_offset), val);
-		if (ret == 0)
+		if (ret >= 0)
 			pr_info("%s: reg %x, val: 0x%08x", __func__, reg_offset, *val);
 	}
 	return ret;
