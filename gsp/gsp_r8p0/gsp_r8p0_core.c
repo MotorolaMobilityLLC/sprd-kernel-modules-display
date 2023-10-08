@@ -733,11 +733,13 @@ int gsp_r8p0_core_enable(struct gsp_core *c)
 
 	core = (struct gsp_r8p0_core *)c;
 
-	clk_set_parent(core->dpu_clk, NULL);
-	ret = clk_set_parent(core->dpu_clk, core->dpu_clk_parent);
-	if (ret) {
-		GSP_ERR("select dpu clk fail !\n");
-		goto exit;
+	if (!c->vrr_enabled) {
+		clk_set_parent(core->dpu_clk, NULL);
+		ret = clk_set_parent(core->dpu_clk, core->dpu_clk_parent);
+		if (ret) {
+			GSP_ERR("select dpu clk fail !\n");
+			goto exit;
+		}
 	}
 
 	ret = clk_prepare_enable(core->dpu_clk);

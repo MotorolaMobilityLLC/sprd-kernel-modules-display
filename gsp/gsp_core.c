@@ -166,6 +166,38 @@ void gsp_core_reg_update(void __iomem *addr, u32 value, u32 mask)
 	gsp_core_reg_write(addr, tmp);
 }
 
+bool sprd_parse_vrr_gsp_config(struct gsp_core *core)
+{
+	struct device_node *lcd_node, *cmdline_node;
+	const char *cmd_line, *lcd_name_p;
+	char lcd_path[60];
+	char lcd_name[50];
+	int rc;
+
+	cmdline_node = of_find_node_by_path("/chosen");
+	rc = of_property_read_string(cmdline_node, "bootargs", &cmd_line);
+	if (!rc) {
+		lcd_name_p = strstr(cmd_line, "lcd_name=");
+		if (lcd_name_p) {
+			sscanf(lcd_name_p, "lcd_name=%s", lcd_name);
+		}
+	} else {
+		GSP_ERR("can't not parse bootargs property\n");
+		return rc;
+	}
+
+	sprintf(lcd_path, "/lcds/%s", lcd_name);
+	lcd_node = of_find_node_by_path(lcd_path);
+
+	if (of_property_read_bool(lcd_node, "sprd,vrr-enabled")) {
+		core->vrr_enabled = true;
+	} else {
+		core->vrr_enabled = false;
+	}
+
+	return core->vrr_enabled;
+}
+
 int gsp_core_enable(struct gsp_core *core)
 {
 	if (gsp_core_verify(core)) {
@@ -207,6 +239,8 @@ int gsp_core_parse_dt(struct gsp_core *core)
 		GSP_ERR("core[%d] parse specific dt failed\n", core->id);
 		return ret;
 	}
+
+	core->vrr_enabled = sprd_parse_vrr_gsp_config(core);
 
 	return ret;
 }

@@ -159,6 +159,8 @@ struct gsp_core {
 	struct timer_list timer;
 
 	struct semaphore gsp_hdr_lock;
+
+	bool vrr_enabled;
 };
 
 
