@@ -828,7 +828,7 @@ static int umb9230s_device_create(struct umb9230s_device *umb9230s,
     umb9230s->dev.class = display_class;
     umb9230s->dev.parent = parent;
     umb9230s->dev.of_node = parent->of_node;
-    dev_set_name(&umb9230s->dev, "umb9230s");
+    dev_set_name(&umb9230s->dev, "bridge");
     dev_set_drvdata(&umb9230s->dev, umb9230s);
 
     ret = device_register(&umb9230s->dev);
