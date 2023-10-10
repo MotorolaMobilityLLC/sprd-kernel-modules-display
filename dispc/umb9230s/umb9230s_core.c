@@ -144,6 +144,19 @@
 #define REG_COLOR_PATTERN_IDLE                  (REG_COLOR_PATTERN_BASE + 0x40)
 #define REG_COLOR_PATTERN_IS_COLOR_PATTERN_T    (REG_COLOR_PATTERN_BASE + 0x44)
 
+/*  deep sleep enable registers */
+#define REG_PG0_PIN_RF_BASE                      0x5000
+#define REG_PG1_PIN_RF_BASE                      0x5400
+#define REG_PMU_IO_DEEP_SLEEP_FORCE_EN           REG_TOP_BASE    /* top register 0x6000*/
+#define REG_CLK_AUX                              (REG_PG1_PIN_RF_BASE + 0xC8)
+#define REG_DSI_TE_O                             (REG_PG0_PIN_RF_BASE + 0xA0)
+#define REG_MTCK_ARM                             (REG_PG0_PIN_RF_BASE + 0x9C)
+#define REG_GPIO0                                (REG_PG1_PIN_RF_BASE + 0xAC)
+#define REG_GPIO3                                (REG_PG1_PIN_RF_BASE + 0xB0)
+#define REG_GPIO1                                (REG_PG1_PIN_RF_BASE + 0xB4)
+#define REG_GPIO2                                (REG_PG1_PIN_RF_BASE + 0xC0)
+#define REG_DSI_TE_I                             (REG_PG1_PIN_RF_BASE + 0xC4)
+
 int umb9230s_power_enable(struct umb9230s_device *umb9230s, int enable)
 {
     u32 buf[2];
@@ -186,6 +199,65 @@ int umb9230s_power_enable(struct umb9230s_device *umb9230s, int enable)
     }
 
     return 0;
+}
+
+void umb9230s_dslp_mode_enable(struct umb9230s_device *umb9230s)
+{
+	u32 buf[2] = {0};
+
+	/* IO_DEEP_SLEEP_MODE: 0x6000 bit10 set 1 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_PMU_IO_DEEP_SLEEP_FORCE_EN, &buf[1], 1);
+	buf[0] = REG_PMU_IO_DEEP_SLEEP_FORCE_EN;
+	buf[1] |= (1 << 10);
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* CLK_AUX: 0x54c8 bit2 set 1 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_CLK_AUX, &buf[1], 1);
+	buf[0] = REG_CLK_AUX;
+	buf[1] |= (1 << 2);
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* DSI_TE_O: 0x50a0 bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TE_O, &buf[1], 1);
+	buf[0] = REG_DSI_TE_O;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* MTCK_ARM: 0x509c bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_MTCK_ARM, &buf[1], 1);
+	buf[0] = REG_MTCK_ARM;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* GPIO0: 0x54ac bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_GPIO0, &buf[1], 1);
+	buf[0] = REG_GPIO0;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* GPIO3: 0x54b0 bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_GPIO3, &buf[1], 1);
+	buf[0] = REG_GPIO3;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* GPIO1: 0x54b4 bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_GPIO1, &buf[1], 1);
+	buf[0] = REG_GPIO1;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* GPIO2: 0x54c0 bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_GPIO2, &buf[1], 1);
+	buf[0] = REG_GPIO2;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+
+	/* DSI_TE_I: 0x54c4 bit13~bit18 set 0 */
+	iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TE_I, &buf[1], 1);
+	buf[0] = REG_DSI_TE_I;
+	buf[1] &= (~(0x3f << 13));
+	iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 }
 
 void umb9230s_videomode_copy(struct umb9230s_device *umb9230s, struct videomode *vm)
@@ -431,6 +503,8 @@ void umb9230s_enable(struct umb9230s_device *umb9230s)
     mutex_lock(&umb9230s->lock);
 
     umb9230s_power_enable(umb9230s, 1);
+
+    umb9230s_dslp_mode_enable(umb9230s);  //UMB9230s DEEP SLEEP MODE ENALBE
 
     umb9230s_phy_rx_init(umb9230s);
 
