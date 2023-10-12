@@ -3035,7 +3035,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		return;
 	}
 
-	if (!ctx->enabled || ctx->stopped) {
+	if (!ctx->enabled || (!ctx->cmd_dpi_mode && ctx->stopped)) {
 		dpu_enhance_backup(ctx, id, param);
 		return;
 	}
