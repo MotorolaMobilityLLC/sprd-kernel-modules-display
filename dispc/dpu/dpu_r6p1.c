@@ -1981,7 +1981,7 @@ static int dpu_vrr_cmd(struct dpu_context *ctx)
 	return 0;
 }
 
-static int dpu_vrr_video(struct dpu_context *ctx)
+static int dpu_vrr_video_hw(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 			struct sprd_dpu, ctx);
@@ -2006,6 +2006,70 @@ static int dpu_vrr_video(struct dpu_context *ctx)
 	reg_val = ctx->vm.vfront_porch;
 	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
 	DRM_INFO("dpu vrr changed, set vfp to %d\n", reg_val);
+	dpu->crtc->fps_mode_changed = false;
+
+	mutex_unlock(&ctx->vrr_lock);
+	if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+		schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+		dpu->crtc->mode_change_pending = false;
+		panel->esd_work_pending = true;
+		DRM_INFO("vrr finished, schedule esd work");
+	}
+
+	return 0;
+}
+
+static int dpu_vrr_video_sw(struct dpu_context *ctx)
+{
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+			struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	u32 reg_val;
+
+	if (ctx->stopped) {
+		pr_err("dpu is stoped\n");
+ 		dpu->crtc->fps_mode_changed = false;
+		if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+			schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+			dpu->crtc->mode_change_pending = false;
+			panel->esd_work_pending = true;
+			DRM_INFO("vrr exit, schedule esd work");
+		}
+		return 0;
+	}
+
+	mutex_lock(&ctx->vrr_lock);
+
+	dpu_stop(ctx);
+	reg_val = ctx->vm.hsync_len << 0 |
+			  ctx->vm.hback_porch << 8 |
+			  ctx->vm.hfront_porch << 20;
+	DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
+
+	reg_val = ctx->vm.vsync_len << 0 |
+			  ctx->vm.vback_porch << 8;
+	DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
+
+	reg_val = ctx->vm.vfront_porch;
+	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
+
+	if (panel->info.dsc_en) {
+		reg_val = (ctx->vm.hsync_len << 0) |
+				(ctx->vm.hback_porch  << 8) |
+				(ctx->vm.hfront_porch << 20);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_H_TIMING), reg_val);
+
+		reg_val = (ctx->vm.vsync_len << 0) |
+				(ctx->vm.vback_porch  << 8) |
+				(ctx->vm.vfront_porch << 20);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
+	}
+
+	sprd_dsi_vrr_timing(dpu->dsi);
+	dpu_wait_update_done(ctx);
+	ctx->stopped = false;
+	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
 	dpu->crtc->fps_mode_changed = false;
 
 	mutex_unlock(&ctx->vrr_lock);
@@ -2343,7 +2407,10 @@ static void dpu_flip(struct dpu_context *ctx,
 		dpu_vrr_cmd(ctx);
 		dpu->crtc->fps_mode_changed = false;
 	} else if (dpu->crtc->fps_mode_changed) {
-		dpu_vrr_video(ctx);
+		if (ctx->hw_vrr_en)
+			dpu_vrr_video_hw(ctx);
+		else
+			dpu_vrr_video_sw(ctx);
 	}
 
 	/* reset the bgcolor to black */

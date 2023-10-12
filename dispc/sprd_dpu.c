@@ -829,6 +829,13 @@ static int sprd_parse_vrr_config(struct sprd_dpu *dpu)
 		dpu->ctx.vrr_enabled = false;
 	}
 
+	if (of_property_read_bool(lcd_node, "sprd,hw-vrr-en")) {
+		DRM_INFO("use dpu hw vrr\n");
+		dpu->ctx.hw_vrr_en = true;
+	} else {
+		dpu->ctx.hw_vrr_en = false;
+	}
+
 	rc = of_property_read_u32(lcd_node, "sprd,dsi-work-mode", &val);
 	if (!rc) {
 		if (val == SPRD_DSI_MODE_CMD_DPI) {

@@ -724,7 +724,6 @@ static int of_parse_buildin_modes(struct panel_info *info,
 	int i, rc, num_timings;
 	struct device_node *timings_np;
 
-
 	timings_np = of_get_child_by_name(lcd_node, "display-timings");
 	if (!timings_np) {
 		DRM_ERROR("%s: can not find display-timings node\n",

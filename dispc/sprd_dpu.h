@@ -263,6 +263,7 @@ struct dpu_context {
 	/* vrr config parameters */
 	bool fps_mode_changed;
 	bool wb_size_changed;
+	bool hw_vrr_en;
 
 	/* dsc config parameters */
 	struct dsc_cfg dsc_cfg;
