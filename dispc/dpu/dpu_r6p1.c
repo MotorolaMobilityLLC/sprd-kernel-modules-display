@@ -1130,6 +1130,7 @@ static void dpu_run(struct dpu_context *ctx)
 static void dpu_cabc_work_func(struct work_struct *data)
 {
 	int ret;
+	unsigned long irq_flags;
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, cabc_work);
 	struct dpu_enhance *enhance = ctx->enhance;
@@ -1138,10 +1139,10 @@ static void dpu_cabc_work_func(struct work_struct *data)
 	if (ctx->enabled) {
 		dpu_cabc_trigger(ctx);
 		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
+			spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 			ctx->dpu_run_flag = true;
 			ctx->evt_te = false;
-			spin_unlock_irq(&ctx->irq_lock);
+			spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
 			if (!ret) {
@@ -1787,6 +1788,7 @@ static void dpu_clean_all(struct dpu_context *ctx)
 static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 {
 	int ret;
+	unsigned long irq_flags;
 
 	if (ctx->if_type == SPRD_DPU_IF_EDPI)
 		dpu_wait_stop_done(ctx);
@@ -1797,10 +1799,10 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 
 	if (ctx->is_single_run) {
 		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
+			spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 			ctx->dpu_run_flag = true;
 			ctx->evt_te = false;
-			spin_unlock_irq(&ctx->irq_lock);
+			spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
 			if (!ret) {
@@ -2328,21 +2330,22 @@ static int dpu_secure_detect(struct dpu_context *ctx, bool enter, bool secure_en
 static void dpu_update_and_wait(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
+	unsigned long irq_flags;
 	int ret;
 
 	if (ctx->is_single_run) {
 		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
+			spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 			ctx->dpu_run_flag = true;
 			ctx->evt_te_update = false;
-			spin_unlock_irq(&ctx->irq_lock);
+			spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 			ret = wait_event_interruptible_timeout(ctx->te_update_wq, ctx->evt_te_update,
 								msecs_to_jiffies(20));
 			if (!ret) {
-				spin_lock_irq(&ctx->irq_lock);
+				spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 				ctx->dpu_run_flag = false;
 				ctx->evt_te_update = false;
-				spin_unlock_irq(&ctx->irq_lock);
+				spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 				pr_err("dpu flip wait for te time out!\n");
 			} else if (ret == -ERESTARTSYS) {
 				pr_err("dpu flip wait for te process is interrupted by signal!\n");
@@ -2982,12 +2985,13 @@ static void enhance_config_mode(u32 *p32, struct dpu_enhance *enhance)
 
 static void enhance_update(struct dpu_context *ctx, u32 id, bool no_update) {
 	int ret = 0;
+	unsigned long irq_flags;
 
 	if (ctx->cmd_dpi_mode) {
-		spin_lock_irq(&ctx->irq_lock);
+		spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 		ctx->dpu_run_flag = true;
 		ctx->evt_te = false;
-		spin_unlock_irq(&ctx->irq_lock);
+		spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 							msecs_to_jiffies(20));
 		if (!ret) {
