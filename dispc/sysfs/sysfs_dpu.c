@@ -19,6 +19,7 @@
 #include "sprd_dsi_panel.h"
 #include "sprd_dsi.h"
 #include "sysfs_display.h"
+#include "../dsi/sprd_dsi_api.h"
 
 static uint32_t max_reg_length;
 
@@ -154,6 +155,20 @@ static ssize_t bg_color_store(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR_RW(bg_color);
+
+static ssize_t dpu_rst_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct sprd_dpu *dpu = dev_get_drvdata(dev);
+
+	DRM_INFO("enter dpu_rst_store\n");
+
+	sprd_dpu_dsc_reset(dpu);
+
+	return count;
+}
+static DEVICE_ATTR_WO(dpu_rst);
 
 static ssize_t te_int_gap_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -843,6 +858,7 @@ static struct attribute *dpu_attrs[] = {
 	&dev_attr_irq_register.attr,
 	&dev_attr_irq_unregister.attr,
 	&dev_attr_frame_count.attr,
+	&dev_attr_dpu_rst.attr,
 	NULL,
 };
 static const struct attribute_group dpu_group = {

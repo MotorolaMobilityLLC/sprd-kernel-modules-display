@@ -299,6 +299,8 @@ static enum drm_mode_status sprd_dpu_mode_valid(struct sprd_crtc *crtc,
 static void sprd_dpu_atomic_enable(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
+	struct sprd_panel *panel = (struct sprd_panel *)
+					container_of(dpu->dsi->panel, struct sprd_panel, base);
 	static bool is_enable = true;
 
 	DRM_INFO("%s()\n", __func__);
@@ -318,11 +320,16 @@ static void sprd_dpu_atomic_enable(struct sprd_crtc *crtc)
 	if (strcmp(dpu->ctx.version, "dpu-r6p0")) {
 		sprd_dpu_resume(dpu);
 	}
+
+	if (panel->info.dsc_en)
+		schedule_delayed_work(&dpu->dsc_check_work, msecs_to_jiffies(5000));
 }
 
 static void sprd_dpu_atomic_disable(struct sprd_crtc *crtc)
 {
 	struct sprd_dpu *dpu = crtc->priv;
+	struct sprd_panel *panel = (struct sprd_panel *)
+					container_of(dpu->dsi->panel, struct sprd_panel, base);
 
 	DRM_INFO("%s()\n", __func__);
 
@@ -331,6 +338,9 @@ static void sprd_dpu_atomic_disable(struct sprd_crtc *crtc)
 	disable_irq(dpu->ctx.irq);
 
 	sprd_dpu_disable(dpu);
+
+	if (panel->info.dsc_en)
+		cancel_delayed_work_sync(&dpu->dsc_check_work);
 
 	pm_runtime_put(dpu->dev.parent);
 }
@@ -578,6 +588,33 @@ void sprd_dpu_disable(struct sprd_dpu *dpu)
 	up(&ctx->lock);
 }
 
+void sprd_dpu_dsc_reset(struct sprd_dpu *dpu)
+{
+	struct dpu_context *ctx = &dpu->ctx;
+	struct sprd_dsi *dsi = dpu->dsi;
+	struct sprd_crtc *crtc = dpu->crtc;
+
+	sprd_dpu_stop(dpu);
+
+	dpu->glb->reset(ctx);
+
+	if (dpu->core->init)
+		dpu->core->init(ctx);
+
+	if (dpu->core->ifconfig)
+		dpu->core->ifconfig(ctx);
+
+	sprd_dsi_state_reset(dsi);
+
+	sprd_iommu_restore(&dpu->dev);
+
+	sprd_dpu_run(dpu);
+
+	ctx->flip_pending = false;
+
+	dpu->core->flip(ctx, crtc->planes, crtc->pending_planes);
+}
+
 static irqreturn_t sprd_dpu_isr(int irq, void *data)
 {
 	struct sprd_dpu *dpu = data;
@@ -654,6 +691,42 @@ static struct sprd_dsi *sprd_dpu_dsi_attach(struct sprd_dpu *dpu)
 	return dsi;
 }
 
+
+/*
+ * FIXME:
+ * When DSC module runs too much time and may cause some internal data process error.
+ * However, DSC module has no hardware int to notify CPU, so we need to loop DSC STS register to
+ * check if some abnomal status happened during working time.
+ * We continually poll the status register each five seconds, and if error occurs we will reset all 
+ * DPU/DSI/DSC modules because they are in same pipeline.
+ * We will introduce DSC error int in our later ASIC design,
+ * and will go on soft reset depends on isr handle.
+ */
+static void sprd_dsc_state_check_func(struct work_struct *work)
+{
+	struct sprd_dpu *dpu = container_of(work, struct sprd_dpu,
+						dsc_check_work.work);
+	struct dpu_context *ctx = &dpu->ctx;
+	struct sprd_panel *panel = (struct sprd_panel *)
+					container_of(dpu->dsi->panel, struct sprd_panel, base);
+
+	if (!panel->info.dsc_en)
+		return;
+
+	if (!sprd_check_crtc_active_state(dpu->crtc->base.dev, 0)) {
+		DRM_DEBUG("crtc is inactive, skip dsc check work\n");
+		schedule_delayed_work(&dpu->dsc_check_work, msecs_to_jiffies(5000));
+		return;
+	}
+
+	if (dpu->core->check_dsc_state && (!dpu->core->check_dsc_state(ctx))) {
+		DRM_INFO("dsc in abnormal state, reset dpu and dsc\n");
+		sprd_dpu_dsc_reset(dpu);
+	}
+
+	schedule_delayed_work(&dpu->dsc_check_work, msecs_to_jiffies(5000));
+}
+
 static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 {
 	struct drm_device *drm = data;
@@ -684,6 +757,8 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
         dpu->dsi = sprd_dpu_dsi_attach(dpu);
 	if (!dpu->dsi)
 		return -EINVAL;
+
+	INIT_DELAYED_WORK(&dpu->dsc_check_work, sprd_dsc_state_check_func);
 
 	return 0;
 }

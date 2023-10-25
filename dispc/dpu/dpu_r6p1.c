@@ -320,6 +320,10 @@
 #define DPU_LUTS_LUT3D_OFFSET				(4096 * 6)
 #define CABC_BL_COEF					1020
 
+#define REG_DSC_STS1			0x60
+#define BIT_DSC_UNDERFLOW_MASK		BIT(31)
+#define BIT_DSC_OVERFLOW_MASK		BIT(30)
+
 struct layer_info {
 	u16 dst_x;
 	u16 dst_y;
@@ -3779,6 +3783,22 @@ static void dpu_sr_config(struct dpu_context *ctx)
 	ctx->wb_pending = false;
 }
 
+static bool check_dsc_state(struct dpu_context *ctx)
+{
+	u32 reg_val;
+
+	reg_val = DPU_REG_RD(ctx->base + DSC_REG_OFFSET + REG_DSC_STS1);
+	if (reg_val & BIT_DSC_UNDERFLOW_MASK) {
+		pr_warn("dsc underflow occurred, need soft reset dsc\n");
+		return false;
+	} else if (reg_val & BIT_DSC_OVERFLOW_MASK) {
+		pr_warn("dsc overflow occurred, need soft reset dsc\n");
+		return false;
+	}
+
+	return true;
+}
+
 static int dpu_modeset(struct dpu_context *ctx,
 		struct drm_display_mode *mode)
 {
@@ -3850,4 +3870,5 @@ const struct dpu_core_ops dpu_r6p1_core_ops = {
 	.modeset = dpu_modeset,
 	.write_back = dpu_wb_trigger,
 	.reg_dump = dpu_dump,
+	.check_dsc_state = check_dsc_state,
 };
