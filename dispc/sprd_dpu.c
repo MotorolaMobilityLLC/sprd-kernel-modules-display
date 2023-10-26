@@ -476,7 +476,7 @@ void sprd_dpu_stop(struct sprd_dpu *dpu)
 {
 	struct dpu_context *ctx = &dpu->ctx;
 
-	if (ctx->wb_configed) {
+	if (ctx->wb_configed && ctx->max_vsync_count) {
 		ctx->need_wb_work = false;
 		cancel_work_sync(&ctx->wb_work);
 	}
