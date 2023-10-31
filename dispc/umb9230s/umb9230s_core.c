@@ -121,7 +121,7 @@
 #define REG_VIDEO2CMD_MODE          REG_VIDEO2CMD_BASE
 #define REG_VIDEO2CMD_SIZE_X        (REG_VIDEO2CMD_BASE + 0x4)
 #define REG_VIDEO2CMD_SIZE_Y        (REG_VIDEO2CMD_BASE + 0x8)
-#define REG_VIDEO2CMD_SIZE_IDLE     (REG_VIDEO2CMD_BASE + 0xC)
+#define REG_VIDEO2CMD_IDLE          (REG_VIDEO2CMD_BASE + 0xC)
 
 /* color pattern registers */
 #define REG_COLOR_PATTERN_BASE                  0xA400
@@ -635,44 +635,33 @@ void umb9230s_isr(void *data)
      if (reg_val & BIT_INTR_VIDEO2CMD_FIFO_UNDERFLOW)
         pr_err("VIDEO2CMD_FIFO_UNDERFLOW\n");
 }
-#if 0
-static int wait_umb9230s_idle(struct umb9230s_device *umb9230s)
+
+void umb9230s_wait_idle_state(struct umb9230s_device *umb9230s,
+                                    bool ulps_enable)
 {
-    union _dsi_rx_0x0C phy_state;
-    union _dsi_rx_0xA0 dsi_all_idle;
-    union _0x9C phy_status;
     int i;
+    u32 val;
 
-    for (i = 0; i < 5000; i++) {
-        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_STATE, &phy_state.val, 1);
-        if (!phy_state.bits.phy_stopstatedata0 || !phy_state.bits.phy_stopstatedata1 ||
-            !phy_state.bits.phy_stopstatedata2 || !phy_state.bits.phy_stopstatedata3) {
-            udelay(1);
-            continue;
+    if (!umb9230s)
+        return;
+
+    umb9230s_wait_phy_idle_state(umb9230s, ulps_enable);
+
+    umb9230s_wait_dsi_rx_idle_state(umb9230s);
+
+    if (umb9230s->dsi_ctx.work_mode == DSI_MODE_CMD) {
+        for (i = 0; i < 500; i++) {
+            iic2cmd_read(umb9230s->i2c_addr, REG_VIDEO2CMD_IDLE, &val, 1);
+            if (val & 0x1)
+                return;
+
+            udelay(10);
         }
 
-        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_DSI_ALL_IDLE, &dsi_all_idle.val, 1);
-        if (!dsi_all_idle.bits.dsi_all_idle) {
-            udelay(1);
-            continue;
-        }
-
-        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TX_PHY_STATUS, &phy_status.val, 1);
-        if (!phy_status.bits.phy_stopstate0lane || !phy_status.bits.phy_stopstate1lane ||
-            !phy_status.bits.phy_stopstate2lane || !phy_status.bits.phy_stopstate3lane) {
-            udelay(1);
-            continue;
-        }
-
-        break;
+        pr_err("wait umb9230s video2cmd idle time out\n");
     }
-
-    if (i < 5000)
-        return 0;
-
-    return -1;
 }
-#endif
+
 void umb9230s_disable(struct umb9230s_device *umb9230s)
 {
     if (!umb9230s)
@@ -683,9 +672,6 @@ void umb9230s_disable(struct umb9230s_device *umb9230s)
     mutex_lock(&umb9230s->lock);
 
     umb9230s_disable_irq(umb9230s);
-
-    //if (wait_umb9230s_idle(umb9230s))
-    //    pr_err("wait umb9230s idle timeout\n");
 
     umb9230s_dsi_tx_fini(umb9230s);
 

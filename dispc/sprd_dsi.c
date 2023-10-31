@@ -294,6 +294,7 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 				sprd_dphy_ulps_enter(dsi->phy);
 
 			umb9230s_phy_tx_ulps_enter(dsi->umb9230s);
+			umb9230s_wait_idle_state(dsi->umb9230s, dsi->phy->ctx.ulps_enable);
 
 			drm_panel_unprepare(dsi->panel);
 		}

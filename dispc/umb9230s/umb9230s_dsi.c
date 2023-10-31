@@ -222,6 +222,23 @@ void umb9230s_dsi_rx_init(struct umb9230s_device *umb9230s)
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 }
 
+int umb9230s_wait_dsi_rx_idle_state(struct umb9230s_device *umb9230s)
+{
+    u32 i = 0;
+    union _dsi_rx_0xA0 dsi_all_idle;
+
+    for (i = 0; i < 500; i++) {
+        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_DSI_ALL_IDLE, &dsi_all_idle.val, 1);
+        if (dsi_all_idle.bits.dsi_all_idle)
+            return 0;
+
+        udelay(10);
+    }
+
+    pr_err("wait umb9230s dsi rx idle state time out\n");
+    return -ETIMEDOUT;
+}
+
 static int umb9230s_dsi_tx_wait_tx_payload_fifo_empty(struct umb9230s_device *umb9230s)
 {
     int timeout;

@@ -117,6 +117,60 @@ int umb9230s_phy_rx_wait_clklane_stop_state(struct umb9230s_device *umb9230s)
     return -1;
 }
 
+static int umb9230s_phy_rx_wait_datalane_stop_state(struct umb9230s_device *umb9230s, u8 mask)
+{
+    u32 i = 0;
+    union _dsi_rx_0x0C phy_state;
+    u8 state = 0;
+
+    for (i = 0; i < 500; i++) {
+        /* is_stop_state_datalane */
+        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_STATE, &phy_state.val, 1);
+        if (phy_state.bits.phy_stopstatedata0)
+            state |= BIT(0);
+        if (phy_state.bits.phy_stopstatedata1)
+            state |= BIT(1);
+        if (phy_state.bits.phy_stopstatedata2)
+            state |= BIT(2);
+        if (phy_state.bits.phy_stopstatedata3)
+            state |= BIT(3);
+
+        if (state == mask)
+            return 0;
+        udelay(10);
+    }
+
+    pr_err("wait umb9230s phy rx datalane stop-state time out\n");
+    return -ETIMEDOUT;
+}
+
+static int umb9230s_phy_rx_wait_datalane_ulps_active(struct umb9230s_device *umb9230s, u8 mask)
+{
+    u32 i = 0;
+    union _dsi_rx_0x0C phy_state;
+    u8 state = 0;
+
+    for (i = 0; i < 500; i++) {
+        /* is_ulps_active_datalane */
+        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_STATE, &phy_state.val, 1);
+        if (phy_state.bits.phy_rxulpsesc0)
+            state |= BIT(0);
+        if (phy_state.bits.phy_rxulpsesc1)
+            state |= BIT(1);
+        if (phy_state.bits.phy_rxulpsesc2)
+            state |= BIT(2);
+        if (phy_state.bits.phy_rxulpsesc3)
+            state |= BIT(3);
+
+        if (state == mask)
+            return 0;
+        udelay(10);
+    }
+
+    pr_err("wait umb9230s phy rx datalane ulps-active time out\n");
+    return -ETIMEDOUT;
+}
+
 static int umb9230s_phy_tx_wait_pll_locked(struct umb9230s_device *umb9230s)
 {
     u32 i = 0;
@@ -451,4 +505,20 @@ void umb9230s_phy_tx_ulps_exit(struct umb9230s_device *umb9230s)
     buf[0] = REG_DSI_TX_PHY_INTERFACE_CTRL;
     buf[1] = phy_interface_ctrl.val;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
+}
+
+void umb9230s_wait_phy_idle_state(struct umb9230s_device *umb9230s,
+                                    bool ulps_enable)
+{
+    u8 lane_mask;
+
+    lane_mask = (1 << umb9230s->phy_ctx.lanes) - 1;
+
+    if (!umb9230s->phy_ctx.ulps_enable)
+        umb9230s_phy_tx_wait_datalane_stop_state(umb9230s, lane_mask);
+
+    if (ulps_enable)
+        umb9230s_phy_rx_wait_datalane_ulps_active(umb9230s, lane_mask);
+    else
+        umb9230s_phy_rx_wait_datalane_stop_state(umb9230s, lane_mask);
 }
