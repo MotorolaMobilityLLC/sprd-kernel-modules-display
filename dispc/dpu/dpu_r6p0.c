@@ -580,6 +580,27 @@ static const u32 format_ctrl[][4] = {
 	{FROMAT_YUV420_3P, FROMAT_YUV420_3P, ENDIAN_B0B1B2B3, SWITCH_OTHER_UV},
 };
 
+struct dpu_dsc_cfg {
+	char name[128];
+	bool dual_dsi_en;
+	bool dsc_en;
+	int  dsc_mode;
+};
+
+/*
+ * FIXME:
+ * We don't know what's the best binding to link the panel with dpu dsc.
+ * Fow now, we just add all panels that we support dsc, and search them
+ */
+static struct dpu_dsc_cfg dsc_cfg[] = {
+	{
+		.name = "lcd_td4375_dijin_4lane_mipi_fhd",
+		.dual_dsi_en = 0,
+		.dsc_en = 1,
+		.dsc_mode = 3,
+	},
+};
+
 static void dpu_sr_config(struct dpu_context *ctx);
 static void dpu_clean_all(struct dpu_context *ctx);
 static void dpu_layer(struct dpu_context *ctx,
@@ -1321,6 +1342,28 @@ static int dpu_write_back_config(struct dpu_context *ctx)
 	return 0;
 }
 
+/*
+ * FIXME:
+ * We don't know what's the best binding to link the panel with dpu dsc.
+ * Fow now, we just hunt for all panels that we support, and get dsc cfg
+ */
+static void dpu_get_dsc_cfg(struct dpu_context *ctx)
+{
+	int index;
+	struct sprd_dpu *dpu =
+		(struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
+
+	for (index = 0; index < ARRAY_SIZE(dsc_cfg); index++) {
+		if (!strcmp(dsc_cfg[index].name, dpu->dsi->ctx.lcd_name)) {
+			ctx->dual_dsi_en = dsc_cfg[index].dual_dsi_en;
+			ctx->dsc_en = dsc_cfg[index].dsc_en;
+			ctx->dsc_mode = dsc_cfg[index].dsc_mode;
+			return;
+		}
+	}
+	pr_info("no found compatible, use dsc off\n");
+}
+
 static int dpu_config_dsc_param(struct dpu_context *ctx)
 {
 	u32 reg_val;
@@ -1362,13 +1405,21 @@ static int dpu_config_dsc_param(struct dpu_context *ctx)
 			(vm.vfront_porch << 20);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
 
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_GRP_SIZE), ctx->dsc_cfg.reg.dsc_grp_size);
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_SLICE_SIZE), ctx->dsc_cfg.reg.dsc_slice_size);
-
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG0), ctx->dsc_cfg.reg.dsc_cfg0);
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG1), ctx->dsc_cfg.reg.dsc_cfg1);
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG2), ctx->dsc_cfg.reg.dsc_cfg2);
-	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG3), ctx->dsc_cfg.reg.dsc_cfg3);
+	if (3 == ctx->dsc_mode) {
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_GRP_SIZE), 0x000000b4);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_SLICE_SIZE), 0x04069780);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG0), 0x306c8200);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG1), 0x0007e13f);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG2), 0x000b000b);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG3), 0x10f01800);
+	} else {
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_GRP_SIZE), ctx->dsc_cfg.reg.dsc_grp_size);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_SLICE_SIZE), ctx->dsc_cfg.reg.dsc_slice_size);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG0), ctx->dsc_cfg.reg.dsc_cfg0);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG1), ctx->dsc_cfg.reg.dsc_cfg1);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG2), ctx->dsc_cfg.reg.dsc_cfg2);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG3), ctx->dsc_cfg.reg.dsc_cfg3);
+	}
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG4), ctx->dsc_cfg.reg.dsc_cfg4);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG5), ctx->dsc_cfg.reg.dsc_cfg5);
 	DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG6), ctx->dsc_cfg.reg.dsc_cfg6);
@@ -1594,6 +1645,8 @@ static int dpu_init(struct dpu_context *ctx)
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx, struct sprd_dpu, ctx);
 	struct sprd_panel *panel = to_sprd_panel(dpu->dsi->panel);
 	struct dpu_enhance *enhance = ctx->enhance;
+
+	dpu_get_dsc_cfg(ctx);
 
 	if (panel->info.dual_dsi_en)
 		DPU_REG_WR(ctx->base + REG_DPU_MODE, BIT(0));
