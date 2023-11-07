@@ -632,6 +632,8 @@ struct umb9230s_device {
     bool enabled;
 
     u8 i2c_addr;
+
+    struct work_struct irq_work;
 };
 
 extern const struct dphy_tx_pll_ops umb9230s_dphy_tx_pll_ops;
@@ -672,6 +674,8 @@ void umb9230s_wait_phy_idle_state(struct umb9230s_device *umb9230s, bool ulps_en
 
 int umb9230s_sysfs_init(struct device *dev);
 void umb9230s_sysfs_deinit(struct device *dev);
+
+struct sprd_dpu *sprd_disp_pipe_get_dpu(struct umb9230s_device *umb9230s);
 #else
 static inline int umb9230s_dsi_tx_wr_pkt(struct umb9230s_device *umb9230s, u8 vc, u8 type,
             const u8 *param, u16 len)

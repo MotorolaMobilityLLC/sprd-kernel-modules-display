@@ -8,6 +8,7 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 
+#include "../sprd_dpu.h"
 #include "../sprd_dsi.h"
 #include "../sprd_dsi_panel.h"
 #include "../sysfs/sysfs_display.h"
@@ -156,6 +157,31 @@
 #define REG_GPIO1                                (REG_PG1_PIN_RF_BASE + 0xB4)
 #define REG_GPIO2                                (REG_PG1_PIN_RF_BASE + 0xC0)
 #define REG_DSI_TE_I                             (REG_PG1_PIN_RF_BASE + 0xC4)
+
+struct sprd_dpu *sprd_disp_pipe_get_dpu(struct umb9230s_device *umb9230s)
+{
+    struct device *dev;
+    struct sprd_dphy *dphy;
+    struct sprd_dsi *dsi;
+
+    dev = sprd_disp_pipe_get_input(&umb9230s->dev);
+    if (!dev)
+        return NULL;
+
+    dphy = dev_get_drvdata(dev);
+    if (!dphy)
+        return NULL;
+
+    dev = sprd_disp_pipe_get_input(dphy->dev.parent);
+    if (!dev)
+        return NULL;
+
+    dsi = dev_get_drvdata(dev);
+    if (!dsi)
+        return NULL;
+
+    return dsi->dpu;
+}
 
 int umb9230s_power_enable(struct umb9230s_device *umb9230s, int enable)
 {
@@ -481,7 +507,7 @@ void umb9230s_disable_irq(struct umb9230s_device *umb9230s)
     intr_irq_switch(false);
 
     buf[0] = REG_IIC2APB_INT_EN;
-    buf[1] = 0xff;
+    buf[1] = 0;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     buf[0] = REG_IIC2APB_INT_CLR;
@@ -532,12 +558,31 @@ void umb9230s_enable(struct umb9230s_device *umb9230s)
     mutex_unlock(&umb9230s->lock);
 }
 
-void umb9230s_isr(void *data)
+static void umb9230s_irq_handle_func(struct work_struct *data)
 {
-    struct umb9230s_device *umb9230s = data;
     u32 reg_val;
     u32 status;
     u32 buf[2];
+    struct sprd_dpu *dpu;
+    struct umb9230s_device *umb9230s =
+                container_of(data, struct umb9230s_device, irq_work);
+
+    mutex_lock(&umb9230s->lock);
+
+    if (!umb9230s->enabled) {
+        mutex_unlock(&umb9230s->lock);
+        pr_err("umb9230s is off, skip irq handle\n");
+        return;
+    }
+
+    dpu = sprd_disp_pipe_get_dpu(umb9230s);
+    if (!dpu) {
+        mutex_unlock(&umb9230s->lock);
+        pr_err("get dpu failed\n");
+        return;
+    }
+
+    mutex_lock(&dpu->ctx.vrr_lock);
 
     iic2cmd_read(umb9230s->i2c_addr, REG_INTR_MASKED_STATUS, &reg_val, 1);
 
@@ -591,7 +636,6 @@ void umb9230s_isr(void *data)
         buf[0] = REG_DSI_TX_INT_PLL_CLR;
         buf[1] = status;
         iic2cmd_write(umb9230s->i2c_addr, buf, 2);
-
     }
 
     if (reg_val & BIT_INTR_DSI_RX_CAL_FAILED) {
@@ -632,8 +676,19 @@ void umb9230s_isr(void *data)
 
     }
 
-     if (reg_val & BIT_INTR_VIDEO2CMD_FIFO_UNDERFLOW)
+    if (reg_val & BIT_INTR_VIDEO2CMD_FIFO_UNDERFLOW)
         pr_err("VIDEO2CMD_FIFO_UNDERFLOW\n");
+
+    mutex_unlock(&dpu->ctx.vrr_lock);
+    mutex_unlock(&umb9230s->lock);
+}
+
+void umb9230s_isr(void *data)
+{
+    struct umb9230s_device *umb9230s = data;
+
+    schedule_work(&umb9230s->irq_work);
+    pr_err("umb9230s error detected\n");
 }
 
 void umb9230s_wait_idle_state(struct umb9230s_device *umb9230s,
@@ -867,6 +922,8 @@ static int umb9230s_probe(struct platform_device *pdev)
     umb9230s->pll = &umb9230s_dphy_tx_pll_ops;
 
     mutex_init(&umb9230s->lock);
+
+    INIT_WORK(&umb9230s->irq_work, umb9230s_irq_handle_func);
 
     umb9230s->enabled = true;
 

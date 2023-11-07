@@ -11,9 +11,7 @@
 #include <linux/sysfs.h>
 
 #include "disp_lib.h"
-#include "sprd_dphy.h"
 #include "sprd_dpu.h"
-#include "sprd_dsi.h"
 #include "umb9230s.h"
 
 struct umb9230_sysfs {
@@ -138,31 +136,6 @@ static ssize_t ssc_show(struct device *dev,
 	return ret;
 }
 
-static struct sprd_dpu *sprd_disp_pipe_get_dpu(struct device *umb9230s_dev)
-{
-	struct device *dev;
-	struct sprd_dphy *dphy;
-	struct sprd_dsi *dsi;
-
-	dev = sprd_disp_pipe_get_input(umb9230s_dev);
-	if (!dev)
-		return NULL;
-
-	dphy = dev_get_drvdata(dev);
-	if (!dphy)
-		return NULL;
-
-	dev = sprd_disp_pipe_get_input(dphy->dev.parent);
-	if (!dev)
-		return NULL;
-
-	dsi = dev_get_drvdata(dev);
-	if (!dsi)
-		return NULL;
-
-	return dsi->dpu;
-}
-
 static ssize_t ssc_store(struct device *dev,
 			struct device_attribute *attr,
 			const char *buf, size_t count)
@@ -187,7 +160,7 @@ static ssize_t ssc_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	dpu = sprd_disp_pipe_get_dpu(dev);
+	dpu = sprd_disp_pipe_get_dpu(umb9230s);
 	if (!dpu) {
 		mutex_unlock(&umb9230s->lock);
 		pr_err("get dpu failed\n");
@@ -241,7 +214,7 @@ static ssize_t hop_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	dpu = sprd_disp_pipe_get_dpu(dev);
+	dpu = sprd_disp_pipe_get_dpu(umb9230s);
 	if (!dpu) {
 		mutex_unlock(&umb9230s->lock);
 		pr_err("get dpu failed\n");

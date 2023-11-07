@@ -119,6 +119,20 @@ static void dphy_hs_clk_enable_for_umb9230s(struct sprd_dsi *dsi)
 	sprd_dphy_hs_clk_en(dsi->phy, true);
 }
 
+static void cancel_esd_work_for_umb9230s(struct sprd_dsi *dsi)
+{
+	struct sprd_panel *panel;
+
+	if (!dsi->umb9230s)
+		return;
+
+	panel = container_of(dsi->panel, struct sprd_panel, base);
+	if (panel->esd_work_pending) {
+		cancel_delayed_work_sync(&panel->esd_work);
+		panel->esd_work_pending = false;
+	}
+}
+
 static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
@@ -263,6 +277,8 @@ static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
 		mutex_unlock(&dsi->lock);
 		return;
 	}
+
+	cancel_esd_work_for_umb9230s(dsi);
 
 	sprd_dpu_stop(dpu);
 	if (dsi->ctx.dpi_clk_div) {
