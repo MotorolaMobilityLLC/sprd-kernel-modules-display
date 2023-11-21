@@ -213,7 +213,6 @@ static ssize_t max_vsync_count_show(struct device *dev,
 
 	if (!dpu->ctx.enabled) {
 		pr_err("dpu is not initialized\n");
-		up(&dpu->ctx.lock);
 		return -EINVAL;
 	}
 
@@ -235,7 +234,6 @@ static ssize_t max_vsync_count_store(struct device *dev,
 
 	if (!dpu->ctx.enabled) {
 		pr_err("dpu is not initialized\n");
-		up(&dpu->ctx.lock);
 		return -EINVAL;
 	}
 

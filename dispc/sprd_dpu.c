@@ -595,7 +595,10 @@ void sprd_dpu_dsc_reset(struct sprd_dpu *dpu)
 	struct sprd_dsi *dsi = dpu->dsi;
 	struct sprd_crtc *crtc = dpu->crtc;
 
-	sprd_dpu_stop(dpu);
+	down(&dpu->ctx.lock);
+
+	if (dpu->core->stop)
+		dpu->core->stop(ctx);
 
 	dpu->glb->reset(ctx);
 
@@ -609,11 +612,13 @@ void sprd_dpu_dsc_reset(struct sprd_dpu *dpu)
 
 	sprd_iommu_restore(&dpu->dev);
 
-	sprd_dpu_run(dpu);
+	if (dpu->core->run)
+		dpu->core->run(ctx);
 
-	ctx->flip_pending = false;
+	if (dpu->core->flip)
+		dpu->core->flip(ctx, crtc->planes, crtc->pending_planes);
 
-	dpu->core->flip(ctx, crtc->planes, crtc->pending_planes);
+	up(&dpu->ctx.lock);
 }
 
 static irqreturn_t sprd_dpu_isr(int irq, void *data)
