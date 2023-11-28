@@ -323,6 +323,7 @@
 #define REG_DSC_STS1			0x60
 #define BIT_DSC_UNDERFLOW_MASK		BIT(31)
 #define BIT_DSC_OVERFLOW_MASK		BIT(30)
+#define BIT_DSC_EN		BIT(0)
 
 struct layer_info {
 	u16 dst_x;
@@ -2061,6 +2062,17 @@ static int dpu_vrr_video_sw(struct dpu_context *ctx)
 	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
 
 	if (panel->info.dsc_en) {
+		/*
+		 * FIXME:
+		 * DSC releated registers must be configed after DSC in disabled state.
+		 * If DSC is enabled and config it may cause DSC timing setup & hold problem.
+		 * DSC occurs timing problem may cause unpredictable errors.
+		 * So we add force DSC disable procedure to avoid potential risks.
+		 * And enable DSC module when software finish config DSC registers.
+		 */
+		reg_val = DPU_REG_RD(ctx->base + DSC_REG(REG_DSC_CTRL));
+		reg_val &= (~BIT_DSC_EN);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CTRL), reg_val);
 		reg_val = (ctx->vm.hsync_len << 0) |
 				(ctx->vm.hback_porch  << 8) |
 				(ctx->vm.hfront_porch << 20);
@@ -2070,6 +2082,9 @@ static int dpu_vrr_video_sw(struct dpu_context *ctx)
 				(ctx->vm.vback_porch  << 8) |
 				(ctx->vm.vfront_porch << 20);
 		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
+		reg_val = DPU_REG_RD(ctx->base + DSC_REG(REG_DSC_CTRL));
+		reg_val |= BIT_DSC_EN;
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CTRL), reg_val);
 	}
 
 	sprd_dsi_vrr_timing(dpu->dsi);
