@@ -125,6 +125,7 @@ struct dpu_core_ops {
 	void (*dma_request)(struct dpu_context *ctx);
 	void (*get_gsp_base)(struct dpu_context *ctx, struct device_node *np);
 	void (*reg_dump)(struct dpu_context *ctx);
+	bool (*check_dsc_state)(struct dpu_context *ctx);
 };
 
 struct dpu_clk_ops {
@@ -263,6 +264,7 @@ struct dpu_context {
 	/* vrr config parameters */
 	bool fps_mode_changed;
 	bool wb_size_changed;
+	bool hw_vrr_en;
 
 	/* dsc config parameters */
 	struct dsc_cfg dsc_cfg;
@@ -324,12 +326,14 @@ struct sprd_dpu {
 	struct drm_display_mode mode;
 	struct drm_display_mode actual_mode;
 	struct sprd_dsi *dsi;
+	struct delayed_work dsc_check_work;
 };
 
 int dpu_wait_te_flush(struct dpu_context *ctx);
 void sprd_drm_mode_copy(struct drm_display_mode *dst, const struct drm_display_mode *src);
 void sprd_dpu_enable(struct sprd_dpu *dpu);
 void sprd_dpu_disable(struct sprd_dpu *dpu);
+void sprd_dpu_dsc_reset(struct sprd_dpu *dpu);
 void sprd_dpu_run(struct sprd_dpu *dpu);
 void sprd_dpu_stop(struct sprd_dpu *dpu);
 void sprd_dpu_resume(struct sprd_dpu *dpu);

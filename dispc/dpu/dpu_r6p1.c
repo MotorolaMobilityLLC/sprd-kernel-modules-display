@@ -320,6 +320,10 @@
 #define DPU_LUTS_LUT3D_OFFSET				(4096 * 6)
 #define CABC_BL_COEF					1020
 
+#define REG_DSC_STS1			0x60
+#define BIT_DSC_UNDERFLOW_MASK		BIT(31)
+#define BIT_DSC_OVERFLOW_MASK		BIT(30)
+
 struct layer_info {
 	u16 dst_x;
 	u16 dst_y;
@@ -1130,6 +1134,7 @@ static void dpu_run(struct dpu_context *ctx)
 static void dpu_cabc_work_func(struct work_struct *data)
 {
 	int ret;
+	unsigned long irq_flags;
 	struct dpu_context *ctx =
 		container_of(data, struct dpu_context, cabc_work);
 	struct dpu_enhance *enhance = ctx->enhance;
@@ -1138,10 +1143,10 @@ static void dpu_cabc_work_func(struct work_struct *data)
 	if (ctx->enabled) {
 		dpu_cabc_trigger(ctx);
 		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
+			spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 			ctx->dpu_run_flag = true;
 			ctx->evt_te = false;
-			spin_unlock_irq(&ctx->irq_lock);
+			spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
 			if (!ret) {
@@ -1787,6 +1792,7 @@ static void dpu_clean_all(struct dpu_context *ctx)
 static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 {
 	int ret;
+	unsigned long irq_flags;
 
 	if (ctx->if_type == SPRD_DPU_IF_EDPI)
 		dpu_wait_stop_done(ctx);
@@ -1797,10 +1803,10 @@ static void dpu_bgcolor(struct dpu_context *ctx, u32 color)
 
 	if (ctx->is_single_run) {
 		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
+			spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 			ctx->dpu_run_flag = true;
 			ctx->evt_te = false;
-			spin_unlock_irq(&ctx->irq_lock);
+			spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 			ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 								msecs_to_jiffies(20));
 			if (!ret) {
@@ -1981,7 +1987,7 @@ static int dpu_vrr_cmd(struct dpu_context *ctx)
 	return 0;
 }
 
-static int dpu_vrr_video(struct dpu_context *ctx)
+static int dpu_vrr_video_hw(struct dpu_context *ctx)
 {
 	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
 			struct sprd_dpu, ctx);
@@ -2006,6 +2012,70 @@ static int dpu_vrr_video(struct dpu_context *ctx)
 	reg_val = ctx->vm.vfront_porch;
 	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
 	DRM_INFO("dpu vrr changed, set vfp to %d\n", reg_val);
+	dpu->crtc->fps_mode_changed = false;
+
+	mutex_unlock(&ctx->vrr_lock);
+	if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+		schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+		dpu->crtc->mode_change_pending = false;
+		panel->esd_work_pending = true;
+		DRM_INFO("vrr finished, schedule esd work");
+	}
+
+	return 0;
+}
+
+static int dpu_vrr_video_sw(struct dpu_context *ctx)
+{
+	struct sprd_dpu *dpu = (struct sprd_dpu *)container_of(ctx,
+			struct sprd_dpu, ctx);
+	struct sprd_panel *panel =
+		(struct sprd_panel *)container_of(dpu->dsi->panel, struct sprd_panel, base);
+	u32 reg_val;
+
+	if (ctx->stopped) {
+		pr_err("dpu is stoped\n");
+ 		dpu->crtc->fps_mode_changed = false;
+		if (panel->info.esd_check_en && dpu->crtc->mode_change_pending) {
+			schedule_delayed_work(&panel->esd_work, msecs_to_jiffies(1000));
+			dpu->crtc->mode_change_pending = false;
+			panel->esd_work_pending = true;
+			DRM_INFO("vrr exit, schedule esd work");
+		}
+		return 0;
+	}
+
+	mutex_lock(&ctx->vrr_lock);
+
+	dpu_stop(ctx);
+	reg_val = ctx->vm.hsync_len << 0 |
+			  ctx->vm.hback_porch << 8 |
+			  ctx->vm.hfront_porch << 20;
+	DPU_REG_WR(ctx->base + REG_DPI_H_TIMING, reg_val);
+
+	reg_val = ctx->vm.vsync_len << 0 |
+			  ctx->vm.vback_porch << 8;
+	DPU_REG_WR(ctx->base + REG_DPI_V_TIMING, reg_val);
+
+	reg_val = ctx->vm.vfront_porch;
+	DPU_REG_WR(ctx->base + REG_DPI_VFP, reg_val);
+
+	if (panel->info.dsc_en) {
+		reg_val = (ctx->vm.hsync_len << 0) |
+				(ctx->vm.hback_porch  << 8) |
+				(ctx->vm.hfront_porch << 20);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_H_TIMING), reg_val);
+
+		reg_val = (ctx->vm.vsync_len << 0) |
+				(ctx->vm.vback_porch  << 8) |
+				(ctx->vm.vfront_porch << 20);
+		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_V_TIMING), reg_val);
+	}
+
+	sprd_dsi_vrr_timing(dpu->dsi);
+	dpu_wait_update_done(ctx);
+	ctx->stopped = false;
+	DPU_REG_WR(ctx->base + REG_DPU_MMU0_UPDATE, 1);
 	dpu->crtc->fps_mode_changed = false;
 
 	mutex_unlock(&ctx->vrr_lock);
@@ -2264,21 +2334,22 @@ static int dpu_secure_detect(struct dpu_context *ctx, bool enter, bool secure_en
 static void dpu_update_and_wait(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
+	unsigned long irq_flags;
 	int ret;
 
 	if (ctx->is_single_run) {
 		if (ctx->cmd_dpi_mode) {
-			spin_lock_irq(&ctx->irq_lock);
+			spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 			ctx->dpu_run_flag = true;
 			ctx->evt_te_update = false;
-			spin_unlock_irq(&ctx->irq_lock);
+			spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 			ret = wait_event_interruptible_timeout(ctx->te_update_wq, ctx->evt_te_update,
 								msecs_to_jiffies(20));
 			if (!ret) {
-				spin_lock_irq(&ctx->irq_lock);
+				spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 				ctx->dpu_run_flag = false;
 				ctx->evt_te_update = false;
-				spin_unlock_irq(&ctx->irq_lock);
+				spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 				pr_err("dpu flip wait for te time out!\n");
 			} else if (ret == -ERESTARTSYS) {
 				pr_err("dpu flip wait for te process is interrupted by signal!\n");
@@ -2343,7 +2414,10 @@ static void dpu_flip(struct dpu_context *ctx,
 		dpu_vrr_cmd(ctx);
 		dpu->crtc->fps_mode_changed = false;
 	} else if (dpu->crtc->fps_mode_changed) {
-		dpu_vrr_video(ctx);
+		if (ctx->hw_vrr_en)
+			dpu_vrr_video_hw(ctx);
+		else
+			dpu_vrr_video_sw(ctx);
 	}
 
 	/* reset the bgcolor to black */
@@ -2915,12 +2989,13 @@ static void enhance_config_mode(u32 *p32, struct dpu_enhance *enhance)
 
 static void enhance_update(struct dpu_context *ctx, u32 id, bool no_update) {
 	int ret = 0;
+	unsigned long irq_flags;
 
 	if (ctx->cmd_dpi_mode) {
-		spin_lock_irq(&ctx->irq_lock);
+		spin_lock_irqsave(&ctx->irq_lock, irq_flags);
 		ctx->dpu_run_flag = true;
 		ctx->evt_te = false;
-		spin_unlock_irq(&ctx->irq_lock);
+		spin_unlock_irqrestore(&ctx->irq_lock, irq_flags);
 		ret = wait_event_interruptible_timeout(ctx->te_wq, ctx->evt_te,
 							msecs_to_jiffies(20));
 		if (!ret) {
@@ -2968,7 +3043,7 @@ static void dpu_enhance_set(struct dpu_context *ctx, u32 id, void *param, size_t
 		return;
 	}
 
-	if (!ctx->enabled || ctx->stopped) {
+	if (!ctx->enabled || (!ctx->cmd_dpi_mode && ctx->stopped)) {
 		dpu_enhance_backup(ctx, id, param);
 		return;
 	}
@@ -3708,6 +3783,22 @@ static void dpu_sr_config(struct dpu_context *ctx)
 	ctx->wb_pending = false;
 }
 
+static bool check_dsc_state(struct dpu_context *ctx)
+{
+	u32 reg_val;
+
+	reg_val = DPU_REG_RD(ctx->base + DSC_REG_OFFSET + REG_DSC_STS1);
+	if (reg_val & BIT_DSC_UNDERFLOW_MASK) {
+		pr_warn("dsc underflow occurred, need soft reset dsc\n");
+		return false;
+	} else if (reg_val & BIT_DSC_OVERFLOW_MASK) {
+		pr_warn("dsc overflow occurred, need soft reset dsc\n");
+		return false;
+	}
+
+	return true;
+}
+
 static int dpu_modeset(struct dpu_context *ctx,
 		struct drm_display_mode *mode)
 {
@@ -3779,4 +3870,5 @@ const struct dpu_core_ops dpu_r6p1_core_ops = {
 	.modeset = dpu_modeset,
 	.write_back = dpu_wb_trigger,
 	.reg_dump = dpu_dump,
+	.check_dsc_state = check_dsc_state,
 };

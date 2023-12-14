@@ -166,7 +166,7 @@ void gsp_core_reg_update(void __iomem *addr, u32 value, u32 mask)
 	gsp_core_reg_write(addr, tmp);
 }
 
-bool sprd_parse_vrr_gsp_config(struct gsp_core *core)
+int sprd_parse_vrr_gsp_config(struct gsp_core *core)
 {
 	struct device_node *lcd_node, *cmdline_node;
 	const char *cmd_line, *lcd_name_p;
@@ -195,7 +195,7 @@ bool sprd_parse_vrr_gsp_config(struct gsp_core *core)
 		core->vrr_enabled = false;
 	}
 
-	return core->vrr_enabled;
+	return rc;
 }
 
 int gsp_core_enable(struct gsp_core *core)
@@ -240,7 +240,11 @@ int gsp_core_parse_dt(struct gsp_core *core)
 		return ret;
 	}
 
-	core->vrr_enabled = sprd_parse_vrr_gsp_config(core);
+	ret = sprd_parse_vrr_gsp_config(core);
+	if (ret) {
+		GSP_ERR("core[%d] parse vrr config failed\n", core->id);
+		return ret;
+	}
 
 	return ret;
 }

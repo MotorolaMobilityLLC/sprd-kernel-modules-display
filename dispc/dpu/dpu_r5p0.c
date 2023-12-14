@@ -1027,6 +1027,7 @@ static int dpu_init(struct dpu_context *ctx)
 {
 	struct dpu_enhance *enhance = ctx->enhance;
 	u32 reg_val, size;
+	u32 dvfs_freq;
 
 	DPU_REG_WR(ctx->base + REG_BG_COLOR, 0x00);
 
@@ -1056,6 +1057,13 @@ static int dpu_init(struct dpu_context *ctx)
 	dpu_write_back_config(ctx);
 
 	enhance->frame_no = 0;
+
+	if (ctx->vrr_enabled) {
+		dvfs_freq = 468000000;
+#if IS_ENABLED(CONFIG_DVFS_APSYS_SPRD)
+		dpu_dvfs_notifier_call_chain(&dvfs_freq);
+#endif
+	}
 
 	return 0;
 }

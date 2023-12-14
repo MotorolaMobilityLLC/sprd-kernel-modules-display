@@ -8,6 +8,7 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 
+#include "../sprd_dpu.h"
 #include "../sprd_dsi.h"
 #include "../sprd_dsi_panel.h"
 #include "../sysfs/sysfs_display.h"
@@ -121,7 +122,7 @@
 #define REG_VIDEO2CMD_MODE          REG_VIDEO2CMD_BASE
 #define REG_VIDEO2CMD_SIZE_X        (REG_VIDEO2CMD_BASE + 0x4)
 #define REG_VIDEO2CMD_SIZE_Y        (REG_VIDEO2CMD_BASE + 0x8)
-#define REG_VIDEO2CMD_SIZE_IDLE     (REG_VIDEO2CMD_BASE + 0xC)
+#define REG_VIDEO2CMD_IDLE          (REG_VIDEO2CMD_BASE + 0xC)
 
 /* color pattern registers */
 #define REG_COLOR_PATTERN_BASE                  0xA400
@@ -156,6 +157,31 @@
 #define REG_GPIO1                                (REG_PG1_PIN_RF_BASE + 0xB4)
 #define REG_GPIO2                                (REG_PG1_PIN_RF_BASE + 0xC0)
 #define REG_DSI_TE_I                             (REG_PG1_PIN_RF_BASE + 0xC4)
+
+struct sprd_dpu *sprd_disp_pipe_get_dpu(struct umb9230s_device *umb9230s)
+{
+    struct device *dev;
+    struct sprd_dphy *dphy;
+    struct sprd_dsi *dsi;
+
+    dev = sprd_disp_pipe_get_input(&umb9230s->dev);
+    if (!dev)
+        return NULL;
+
+    dphy = dev_get_drvdata(dev);
+    if (!dphy)
+        return NULL;
+
+    dev = sprd_disp_pipe_get_input(dphy->dev.parent);
+    if (!dev)
+        return NULL;
+
+    dsi = dev_get_drvdata(dev);
+    if (!dsi)
+        return NULL;
+
+    return dsi->dpu;
+}
 
 int umb9230s_power_enable(struct umb9230s_device *umb9230s, int enable)
 {
@@ -481,7 +507,7 @@ void umb9230s_disable_irq(struct umb9230s_device *umb9230s)
     intr_irq_switch(false);
 
     buf[0] = REG_IIC2APB_INT_EN;
-    buf[1] = 0xff;
+    buf[1] = 0;
     iic2cmd_write(umb9230s->i2c_addr, buf, 2);
 
     buf[0] = REG_IIC2APB_INT_CLR;
@@ -532,12 +558,31 @@ void umb9230s_enable(struct umb9230s_device *umb9230s)
     mutex_unlock(&umb9230s->lock);
 }
 
-void umb9230s_isr(void *data)
+static void umb9230s_irq_handle_func(struct work_struct *data)
 {
-    struct umb9230s_device *umb9230s = data;
     u32 reg_val;
     u32 status;
     u32 buf[2];
+    struct sprd_dpu *dpu;
+    struct umb9230s_device *umb9230s =
+                container_of(data, struct umb9230s_device, irq_work);
+
+    mutex_lock(&umb9230s->lock);
+
+    if (!umb9230s->enabled) {
+        mutex_unlock(&umb9230s->lock);
+        pr_err("umb9230s is off, skip irq handle\n");
+        return;
+    }
+
+    dpu = sprd_disp_pipe_get_dpu(umb9230s);
+    if (!dpu) {
+        mutex_unlock(&umb9230s->lock);
+        pr_err("get dpu failed\n");
+        return;
+    }
+
+    mutex_lock(&dpu->ctx.vrr_lock);
 
     iic2cmd_read(umb9230s->i2c_addr, REG_INTR_MASKED_STATUS, &reg_val, 1);
 
@@ -591,7 +636,6 @@ void umb9230s_isr(void *data)
         buf[0] = REG_DSI_TX_INT_PLL_CLR;
         buf[1] = status;
         iic2cmd_write(umb9230s->i2c_addr, buf, 2);
-
     }
 
     if (reg_val & BIT_INTR_DSI_RX_CAL_FAILED) {
@@ -632,47 +676,47 @@ void umb9230s_isr(void *data)
 
     }
 
-     if (reg_val & BIT_INTR_VIDEO2CMD_FIFO_UNDERFLOW)
+    if (reg_val & BIT_INTR_VIDEO2CMD_FIFO_UNDERFLOW)
         pr_err("VIDEO2CMD_FIFO_UNDERFLOW\n");
+
+    mutex_unlock(&dpu->ctx.vrr_lock);
+    mutex_unlock(&umb9230s->lock);
 }
-#if 0
-static int wait_umb9230s_idle(struct umb9230s_device *umb9230s)
+
+void umb9230s_isr(void *data)
 {
-    union _dsi_rx_0x0C phy_state;
-    union _dsi_rx_0xA0 dsi_all_idle;
-    union _0x9C phy_status;
-    int i;
+    struct umb9230s_device *umb9230s = data;
 
-    for (i = 0; i < 5000; i++) {
-        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_PHY_STATE, &phy_state.val, 1);
-        if (!phy_state.bits.phy_stopstatedata0 || !phy_state.bits.phy_stopstatedata1 ||
-            !phy_state.bits.phy_stopstatedata2 || !phy_state.bits.phy_stopstatedata3) {
-            udelay(1);
-            continue;
-        }
-
-        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_RX_DSI_ALL_IDLE, &dsi_all_idle.val, 1);
-        if (!dsi_all_idle.bits.dsi_all_idle) {
-            udelay(1);
-            continue;
-        }
-
-        iic2cmd_read(umb9230s->i2c_addr, REG_DSI_TX_PHY_STATUS, &phy_status.val, 1);
-        if (!phy_status.bits.phy_stopstate0lane || !phy_status.bits.phy_stopstate1lane ||
-            !phy_status.bits.phy_stopstate2lane || !phy_status.bits.phy_stopstate3lane) {
-            udelay(1);
-            continue;
-        }
-
-        break;
-    }
-
-    if (i < 5000)
-        return 0;
-
-    return -1;
+    schedule_work(&umb9230s->irq_work);
+    pr_err("umb9230s error detected\n");
 }
-#endif
+
+void umb9230s_wait_idle_state(struct umb9230s_device *umb9230s,
+                                    bool ulps_enable)
+{
+    int i;
+    u32 val;
+
+    if (!umb9230s)
+        return;
+
+    umb9230s_wait_phy_idle_state(umb9230s, ulps_enable);
+
+    umb9230s_wait_dsi_rx_idle_state(umb9230s);
+
+    if (umb9230s->dsi_ctx.work_mode == DSI_MODE_CMD) {
+        for (i = 0; i < 500; i++) {
+            iic2cmd_read(umb9230s->i2c_addr, REG_VIDEO2CMD_IDLE, &val, 1);
+            if (val & 0x1)
+                return;
+
+            udelay(10);
+        }
+
+        pr_err("wait umb9230s video2cmd idle time out\n");
+    }
+}
+
 void umb9230s_disable(struct umb9230s_device *umb9230s)
 {
     if (!umb9230s)
@@ -683,9 +727,6 @@ void umb9230s_disable(struct umb9230s_device *umb9230s)
     mutex_lock(&umb9230s->lock);
 
     umb9230s_disable_irq(umb9230s);
-
-    //if (wait_umb9230s_idle(umb9230s))
-    //    pr_err("wait umb9230s idle timeout\n");
 
     umb9230s_dsi_tx_fini(umb9230s);
 
@@ -828,7 +869,7 @@ static int umb9230s_device_create(struct umb9230s_device *umb9230s,
     umb9230s->dev.class = display_class;
     umb9230s->dev.parent = parent;
     umb9230s->dev.of_node = parent->of_node;
-    dev_set_name(&umb9230s->dev, "umb9230s");
+    dev_set_name(&umb9230s->dev, "bridge");
     dev_set_drvdata(&umb9230s->dev, umb9230s);
 
     ret = device_register(&umb9230s->dev);
@@ -881,6 +922,8 @@ static int umb9230s_probe(struct platform_device *pdev)
     umb9230s->pll = &umb9230s_dphy_tx_pll_ops;
 
     mutex_init(&umb9230s->lock);
+
+    INIT_WORK(&umb9230s->irq_work, umb9230s_irq_handle_func);
 
     umb9230s->enabled = true;
 

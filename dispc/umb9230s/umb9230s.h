@@ -632,6 +632,8 @@ struct umb9230s_device {
     bool enabled;
 
     u8 i2c_addr;
+
+    struct work_struct irq_work;
 };
 
 extern const struct dphy_tx_pll_ops umb9230s_dphy_tx_pll_ops;
@@ -653,6 +655,7 @@ void umb9230s_dsi_tx_configure(struct umb9230s_device *umb9230s);
 void umb9230s_dsi_rx_init(struct umb9230s_device *umb9230s);
 void umb9230s_dsi_rx_state_reset(struct umb9230s_device *umb9230s);
 void umb9230s_dsi_rx_vrr_timing(struct umb9230s_device *umb9230s);
+int umb9230s_wait_dsi_rx_idle_state(struct umb9230s_device *umb9230s);
 
 void umb9230s_enable(struct umb9230s_device *umb9230s);
 void umb9230s_disable(struct umb9230s_device *umb9230s);
@@ -660,14 +663,19 @@ int umb9230s_vrr_timing(struct umb9230s_device *umb9230s);
 void umb9230s_isr(void *data);
 void umb9230s_parse_lcd_info(struct umb9230s_device *umb9230s, struct device_node *lcd_node);
 void umb9230s_videomode_copy(struct umb9230s_device *umb9230s, struct videomode *vm);
+void umb9230s_wait_idle_state(struct umb9230s_device *umb9230s, bool ulps_enable);
 
 void umb9230s_phy_rx_init(struct umb9230s_device *umb9230s);
 int umb9230s_phy_rx_wait_clklane_stop_state(struct umb9230s_device *umb9230s);
 int umb9230s_phy_tx_enable(struct umb9230s_device *umb9230s);
 void umb9230s_phy_tx_hs_clk_en(struct umb9230s_device *umb9230s, bool enable);
 void umb9230s_phy_tx_ulps_enter(struct umb9230s_device *umb9230s);
+void umb9230s_wait_phy_idle_state(struct umb9230s_device *umb9230s, bool ulps_enable);
+
 int umb9230s_sysfs_init(struct device *dev);
 void umb9230s_sysfs_deinit(struct device *dev);
+
+struct sprd_dpu *sprd_disp_pipe_get_dpu(struct umb9230s_device *umb9230s);
 #else
 static inline int umb9230s_dsi_tx_wr_pkt(struct umb9230s_device *umb9230s, u8 vc, u8 type,
             const u8 *param, u16 len)
@@ -743,6 +751,10 @@ static inline void umb9230s_dsi_tx_configure(struct umb9230s_device *umb9230s)
     return;
 }
 
+static inline void umb9230s_wait_idle_state(struct umb9230s_device *umb9230s, bool ulps_enable)
+{
+    return;
+}
 #endif
 
 #endif /* _UMB9230S_H_ */
