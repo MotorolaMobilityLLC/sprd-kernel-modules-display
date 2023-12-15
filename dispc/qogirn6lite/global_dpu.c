@@ -473,16 +473,24 @@ static int dpu_clk_disable(struct dpu_context *ctx)
 	struct sprd_panel *panel =
 				(struct sprd_panel *)container_of(dpu->dsi->panel,
 				struct sprd_panel, base);
+	int ret;
 
 	clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
 	clk_disable_unprepare(clk_ctx->clk_dpu_core);
 
 	clk_set_parent(clk_ctx->clk_dpu_dpi, clk_ctx->clk_src_256m);
+	ret = clk_set_rate(clk_ctx->clk_dpu_dpi, 256000000);
+	if (ret)
+		pr_err("dpu set dpi clk rate to default failed\n");
+
 	clk_set_parent(clk_ctx->clk_dpu_core, clk_ctx->clk_src_307m2);
 
 	if (panel->info.dsc_en) {
 		clk_disable_unprepare(clk_ctx->clk_dpu_dsc);
 		clk_set_parent(clk_ctx->clk_dpu_dsc, clk_ctx->clk_src_256m);
+		ret = clk_set_rate(clk_ctx->clk_dpu_dsc, 256000000);
+		if (ret)
+			pr_err("dpu set dsc clk rate to default failed\n");
 	}
 
 	return 0;

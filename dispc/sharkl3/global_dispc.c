@@ -192,11 +192,16 @@ static int dpu_clk_enable(struct dpu_context *ctx)
 static int dpu_clk_disable(struct dpu_context *ctx)
 {
 	struct dpu_clk_context *clk_ctx = &dpu_clk_ctx;
+	int ret;
 
 	clk_disable_unprepare(clk_ctx->clk_dpu_dpi);
 	clk_disable_unprepare(clk_ctx->clk_dpu_core);
 
 	clk_set_parent(clk_ctx->clk_dpu_dpi, clk_ctx->clk_src_128m);
+	ret = clk_set_rate(clk_ctx->clk_dpu_dpi, 128000000);
+	if (ret)
+		pr_err("dpu set dpi clk rate to default failed\n");
+
 	clk_set_parent(clk_ctx->clk_dpu_core, clk_ctx->clk_src_153m6);
 
 	return 0;
