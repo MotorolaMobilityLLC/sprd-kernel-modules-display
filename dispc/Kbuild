@@ -85,6 +85,7 @@ CONFIG_DRM_SPRD_DSI := y
 CONFIG_DRM_SPRD_DUMMY := n
 CONFIG_DRM_SPRD_WB_DEBUG := n
 CONFIG_UNISOC_GSP := m
+CONFIG_BL_I2C_CTRL := m
 endif
 
 
@@ -190,6 +191,12 @@ endif
 
 ifeq ($(CONFIG_COMPAT),y)
     sprd-drm-y += sprd_ioc32.o
+endif
+
+ifeq ($(CONFIG_BL_I2C_CTRL),m)
+    $(warning CONFIG_BL_I2C_CTRL: $(CONFIG_BL_I2C_CTRL))
+    ccflags-y += -DCONFIG_BL_I2C_CTRL
+    export KBUILD_EXTRA_SYMBOLS += $(BSP_MODULES_OUT)/bl_aw99703/Module.symvers
 endif
 
 include $(INCLUDE_SUBDIR)

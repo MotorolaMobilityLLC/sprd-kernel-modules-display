@@ -20,6 +20,12 @@
 #include "dsi/sprd_dsi_api.h"
 #include "sysfs/sysfs_display.h"
 
+#ifdef CONFIG_BL_I2C_CTRL
+extern bool check_aw99703_probed(void);
+extern int aw99703_sleepin(void);
+extern int aw99703_sleepout(void);
+#endif
+
 #define SPRD_MIPI_DSI_FMT_DSC 0xff
 
 #define host_to_dsi(host) \
@@ -262,6 +268,10 @@ static int sprd_panel_disable(struct drm_panel *p)
 			     panel->info.cmds[CMD_CODE_SLEEP_IN],
 			     panel->info.cmds_len[CMD_CODE_SLEEP_IN]);
 
+#ifdef CONFIG_BL_I2C_CTRL
+	if (true == check_aw99703_probed())
+		aw99703_sleepin();
+#endif
 	panel->enabled = false;
 	mutex_unlock(&panel->lock);
 
@@ -275,6 +285,10 @@ static int sprd_panel_enable(struct drm_panel *p)
 	DRM_INFO("%s()\n", __func__);
 
 	mutex_lock(&panel->lock);
+#ifdef CONFIG_BL_I2C_CTRL
+	if (true == check_aw99703_probed())
+		aw99703_sleepout();
+#endif
 	sprd_panel_send_cmds(panel->slave,
 			     panel->info.cmds[CMD_CODE_INIT],
 			     panel->info.cmds_len[CMD_CODE_INIT]);
