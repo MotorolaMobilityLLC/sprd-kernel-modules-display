@@ -25,7 +25,10 @@ extern bool check_aw99703_probed(void);
 extern int aw99703_sleepin(void);
 extern int aw99703_sleepout(void);
 #endif
-
+#ifdef CONFIG_HBM_SUPPORT
+extern bool g_hbm_enable;
+extern u16 g_last_level;
+#endif
 #define SPRD_MIPI_DSI_FMT_DSC 0xff
 
 #define host_to_dsi(host) \
@@ -835,11 +838,23 @@ static int sprd_oled_set_brightness(struct backlight_device *bdev)
 		DRM_WARN("oled panel has been powered off\n");
 		return -ENXIO;
 	}
-
+#ifdef CONFIG_HBM_SUPPORT
+	if (unlikely(g_hbm_enable)) {
+		if (bdev->props.brightness)
+			brightness = 255;
+		else
+			brightness = bdev->props.brightness;
+		DRM_INFO("Now hbm enable, set brightness level: %d\n", brightness);
+	} else {
+		brightness = ((bdev->props.brightness * 36)+50)/51;
+		g_last_level  = bdev->props.brightness;
+		DRM_INFO("%s brightness: %d, g_last_level: %d\n", __func__, brightness, g_last_level);
+	}
+#else
 	brightness = bdev->props.brightness;
 
 	DRM_INFO("%s brightness: %d\n", __func__, brightness);
-
+#endif
 	sprd_panel_send_cmds(panel->slave,
 			     panel->info.cmds[CMD_OLED_REG_LOCK],
 			     panel->info.cmds_len[CMD_OLED_REG_LOCK]);
