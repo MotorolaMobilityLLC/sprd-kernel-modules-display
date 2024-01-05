@@ -157,4 +157,7 @@ struct device_node *sprd_get_panel_node_by_name(void);
 #define to_sprd_panel(panel) \
 	container_of(panel, struct sprd_panel, base)
 
+#ifdef CONFIG_TOUCH_GESTURE_CTRL
+void touch_set_state(int state);
+#endif
 #endif /* _SPRD_DSI_PANEL_H_ */
