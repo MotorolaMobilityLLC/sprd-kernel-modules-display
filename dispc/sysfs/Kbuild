@@ -8,3 +8,8 @@ sprd-drm-y += \
 	sysfs/sysfs_dsi.o \
 	sysfs/sysfs_panel.o \
 	sysfs/sysfs_backlight.o
+
+ifeq ($(CONFIG_HBM_SUPPORT),y)
+sprd-drm-y += \
+	sysfs/sysfs_backlight_hbm.o
+endif

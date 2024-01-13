@@ -20,6 +20,9 @@ static inline int sprd_display_class_init(void)
 #endif
 
 int sprd_backlight_sysfs_init(struct device *dev);
+#ifdef CONFIG_HBM_SUPPORT
+int sprd_backlight_hbm_sysfs_init(struct device *dev);
+#endif
 int sprd_dpu_sysfs_init(struct device *dev);
 int sprd_dsi_sysfs_init(struct device *dev);
 int sprd_dphy_sysfs_init(struct device *dev);

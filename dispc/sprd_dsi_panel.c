@@ -26,8 +26,10 @@ extern int aw99703_sleepin(void);
 extern int aw99703_sleepout(void);
 #endif
 #ifdef CONFIG_HBM_SUPPORT
-extern bool g_hbm_enable;
-extern u16 g_last_level;
+bool g_hbm_enable = false;
+EXPORT_SYMBOL(g_hbm_enable);
+unsigned int g_last_level = 32;
+struct backlight_device *g_bdev;
 #endif
 #define SPRD_MIPI_DSI_FMT_DSC 0xff
 
@@ -898,6 +900,37 @@ static const struct backlight_ops sprd_oled_backlight_ops = {
 	.update_status = sprd_oled_set_brightness,
 };
 
+#ifdef CONFIG_HBM_SUPPORT
+int hbm_set_backlight_level(unsigned int level)
+{
+	if (g_bdev != NULL) {
+		g_hbm_enable = true;
+		g_bdev->props.brightness = level;
+		sprd_oled_set_brightness(g_bdev);
+		return 0;
+	} else {
+		DRM_INFO("hbm g_bdev is null, please register sprd backlight\n");
+		return -1;
+	}
+}
+EXPORT_SYMBOL(hbm_set_backlight_level);
+
+int hbm_exit_set_backlight_level(void)
+{
+	if (g_bdev != NULL) {
+		g_hbm_enable = false;
+		DRM_INFO("hbm mode exit, g_last_level = %d\n", g_last_level);
+		g_bdev->props.brightness = g_last_level;
+		sprd_oled_set_brightness(g_bdev);
+		return 0;
+	} else {
+		DRM_INFO("hbm g_bdev is null, please register sprd backlight\n");
+		return -1;
+	}
+}
+EXPORT_SYMBOL(hbm_exit_set_backlight_level);
+#endif
+
 static int sprd_oled_backlight_init(struct sprd_panel *panel,
 					struct device_node *oled_node)
 {
@@ -960,7 +993,14 @@ static int sprd_oled_backlight_init(struct sprd_panel *panel,
 	of_parse_oled_cmds(oled,
 			panel->info.cmds[CMD_OLED_BRIGHTNESS],
 			panel->info.cmds_len[CMD_OLED_BRIGHTNESS]);
-
+#ifdef CONFIG_HBM_SUPPORT
+	g_bdev = oled->bdev;
+	rc = sprd_backlight_hbm_sysfs_init(&oled->bdev->dev);
+	if (rc) {
+		DRM_ERROR("sprd backlight hbm sysfs init fail\n", __func__);
+		return rc;
+	}
+#endif
 	DRM_INFO("%s() ok\n", __func__);
 
 	return 0;
