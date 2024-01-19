@@ -38,6 +38,18 @@ struct backlight_device *g_bdev;
 
 static int sprd_oled_set_brightness(struct backlight_device *bdev);
 
+#ifdef CONFIG_TOUCH_GESTURE_CTRL
+static bool touch_gesture_disable = true;
+void touch_set_state(int state)
+{
+    if (state)
+        touch_gesture_disable = false;
+    else
+        touch_gesture_disable = true;
+}
+EXPORT_SYMBOL(touch_set_state);
+#endif
+
 struct device_node *sprd_get_panel_node_by_name(void)
 {
 	struct device_node *lcd_node, *cmdline_node;
@@ -128,27 +140,33 @@ static int sprd_panel_unprepare(struct drm_panel *p)
 			}
 		}
 	} else {
-		if (panel->info.reset_gpio) {
-			items = panel->info.rst_off_seq.items;
-			timing = panel->info.rst_off_seq.timing;
-			for (i = 0; i < items; i++) {
-				gpiod_direction_output(panel->info.reset_gpio,
-							timing[i].level);
-				mdelay(timing[i].delay);
+#ifdef CONFIG_TOUCH_GESTURE_CTRL
+		if (touch_gesture_disable) {
+#endif
+			if (panel->info.reset_gpio) {
+				items = panel->info.rst_off_seq.items;
+				timing = panel->info.rst_off_seq.timing;
+				for (i = 0; i < items; i++) {
+					gpiod_direction_output(panel->info.reset_gpio,
+								timing[i].level);
+					mdelay(timing[i].delay);
+				}
 			}
-		}
 
-		if (panel->info.avee_gpio) {
-			gpiod_direction_output(panel->info.avee_gpio, 0);
-			mdelay(5);
-		}
+			if (panel->info.avee_gpio) {
+				gpiod_direction_output(panel->info.avee_gpio, 0);
+				mdelay(5);
+			}
 
-		if (panel->info.avdd_gpio) {
-			gpiod_direction_output(panel->info.avdd_gpio, 0);
-			mdelay(5);
-		}
+			if (panel->info.avdd_gpio) {
+				gpiod_direction_output(panel->info.avdd_gpio, 0);
+				mdelay(5);
+			}
 
-		regulator_disable(panel->supply);
+			regulator_disable(panel->supply);
+#ifdef CONFIG_TOUCH_GESTURE_CTRL
+		}
+#endif
 	}
 
 	return 0;
