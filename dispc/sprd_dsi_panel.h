@@ -139,6 +139,7 @@ struct sprd_panel {
 };
 
 struct sprd_oled {
+	struct device oled_dev;
 	struct backlight_device *bdev;
 	struct sprd_panel *panel;
 	struct dsi_cmd_desc *cmds[256];

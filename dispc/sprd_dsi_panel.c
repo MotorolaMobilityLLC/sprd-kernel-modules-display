@@ -949,13 +949,32 @@ int hbm_exit_set_backlight_level(void)
 EXPORT_SYMBOL(hbm_exit_set_backlight_level);
 #endif
 
+static int sprd_oled_backlight_device_create(struct sprd_oled *oled,
+					struct device_node *oled_node)
+{
+	int ret;
+
+	oled->oled_dev.class = display_class;
+	oled->oled_dev.of_node = oled_node;
+	oled->oled_dev.parent = &oled->bdev->dev;
+	dev_set_name(&oled->oled_dev, "backlight");
+	dev_set_drvdata(&oled->oled_dev, oled->bdev);
+	ret = device_register(&oled->oled_dev);
+	if (ret) {
+		DRM_ERROR("oled backlight device register failed\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int sprd_oled_backlight_init(struct sprd_panel *panel,
 					struct device_node *oled_node)
 {
 	struct sprd_oled *oled;
 	struct panel_info *info = &panel->info;
 	const void *p;
-	int bytes, rc;
+	int bytes, rc, ret;
 	u32 temp;
 
 	oled = devm_kzalloc(&panel->dev,
@@ -970,6 +989,14 @@ static int sprd_oled_backlight_init(struct sprd_panel *panel,
 		DRM_ERROR("failed to register oled backlight ops\n");
 		return PTR_ERR(oled->bdev);
 	}
+
+	ret = sprd_oled_backlight_device_create(oled, oled_node);
+	if (ret)
+		return ret;
+
+	ret = sprd_backlight_sysfs_init(&oled->oled_dev);
+	if (ret)
+		return ret;
 
 	p = of_get_property(oled_node, "brightness-levels", &bytes);
 	if (p) {
