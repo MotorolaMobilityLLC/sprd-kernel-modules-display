@@ -17,35 +17,32 @@ extern int hbm_exit_set_backlight_level(void);
 static ssize_t hbm_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct backlight_device *bd = dev_get_drvdata(dev);
-
-	if (bd->ops) {
+	pr_info("hbm set buf:%s\n", buf);
 #ifdef SMT_VERSION
-		pr_info("SMT version,No hbm");
+	pr_info("SMT version,No hbm");
 #else
-		switch (buf[0]){
-			case 'n':
-			case 'N':
-				if (!g_hbm_enable) {
-					pr_info("Have been disabled hbm, exit!\n");
-					break;
-				}
-				hbm_exit_set_backlight_level();
+	switch (buf[0]){
+		case 'n':
+		case 'N':
+			if (!g_hbm_enable) {
+				pr_info("Have been disabled hbm, exit!\n");
 				break;
-			case 'y':
-			case 'Y':
-				if (g_hbm_enable) {
-					pr_info("Have been enabled hbm, exit!\n");
-					break;
-				}
-				hbm_set_backlight_level(255);
+			}
+			hbm_exit_set_backlight_level();
+			break;
+		case 'y':
+		case 'Y':
+			if (g_hbm_enable) {
+				pr_info("Have been enabled hbm, exit!\n");
 				break;
-			default:
-				pr_info("pls echo Y/y/N/n open or off hbm!\n");
-				break;
-		}
-#endif
+			}
+			hbm_set_backlight_level(255);
+			break;
+		default:
+			pr_info("pls echo Y/y/N/n open or off hbm!\n");
+			break;
 	}
+#endif
 
 	return count;
 }
