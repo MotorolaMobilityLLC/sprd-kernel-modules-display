@@ -30,6 +30,7 @@ bool g_hbm_enable = false;
 EXPORT_SYMBOL(g_hbm_enable);
 unsigned int g_last_level = 32;
 struct backlight_device *g_bdev;
+char panel_name[50] = {0};
 #endif
 #define SPRD_MIPI_DSI_FMT_DSC 0xff
 
@@ -64,6 +65,9 @@ struct device_node *sprd_get_panel_node_by_name(void)
 		lcd_name_p = strstr(cmd_line, "lcd_name=");
 		if (lcd_name_p) {
 			sscanf(lcd_name_p, "lcd_name=%s", lcd_name);
+#ifdef CONFIG_HBM_SUPPORT
+			snprintf(panel_name, sizeof(panel_name),"%s", lcd_name);
+#endif
 			DRM_INFO("lcd name: %s\n", lcd_name);
 		}
 	} else {
@@ -280,7 +284,10 @@ static int sprd_panel_disable(struct drm_panel *p)
 	}
 
 	mutex_lock(&panel->lock);
-
+#ifdef CONFIG_BL_I2C_CTRL
+	if (true == check_aw99703_probed())
+		aw99703_sleepin();
+#endif
 	if (panel->backlight && !panel->sprd_bl_mipi_type) {
 		panel->backlight->props.power = FB_BLANK_POWERDOWN;
 		panel->backlight->props.state |= BL_CORE_FBBLANK;
@@ -291,10 +298,6 @@ static int sprd_panel_disable(struct drm_panel *p)
 			     panel->info.cmds[CMD_CODE_SLEEP_IN],
 			     panel->info.cmds_len[CMD_CODE_SLEEP_IN]);
 
-#ifdef CONFIG_BL_I2C_CTRL
-	if (true == check_aw99703_probed())
-		aw99703_sleepin();
-#endif
 	panel->enabled = false;
 	mutex_unlock(&panel->lock);
 
@@ -866,7 +869,14 @@ static int sprd_oled_set_brightness(struct backlight_device *bdev)
 			brightness = bdev->props.brightness;
 		DRM_INFO("Now hbm enable, set brightness level: %d\n", brightness);
 	} else {
-		brightness = ((bdev->props.brightness * 36)+50)/51;
+		if (strncmp(panel_name, "lcd_ili9883c_txd_120hz_mipi_hd", strlen(panel_name)) == 0)
+			brightness = ((bdev->props.brightness * 38)+50)/51;
+		else if(strncmp(panel_name, "lcd_td4160_tcl_120hz_mipi_hd", strlen(panel_name)) == 0)
+			brightness = ((bdev->props.brightness * 41)+50)/51;
+		else if(strncmp(panel_name, "lcd_nt36528_dj_120hz_mipi_hd", strlen(panel_name)) == 0)
+			brightness = ((bdev->props.brightness * 41)+50)/51;
+		else
+			brightness = ((bdev->props.brightness*80)+21)/100;
 		g_last_level  = bdev->props.brightness;
 		DRM_INFO("%s brightness: %d, g_last_level: %d\n", __func__, brightness, g_last_level);
 	}
