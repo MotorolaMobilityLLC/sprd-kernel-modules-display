@@ -311,10 +311,6 @@ static int sprd_panel_enable(struct drm_panel *p)
 	DRM_INFO("%s()\n", __func__);
 
 	mutex_lock(&panel->lock);
-#ifdef CONFIG_BL_I2C_CTRL
-	if (true == check_aw99703_probed())
-		aw99703_sleepout();
-#endif
 	sprd_panel_send_cmds(panel->slave,
 			     panel->info.cmds[CMD_CODE_INIT],
 			     panel->info.cmds_len[CMD_CODE_INIT]);
@@ -324,6 +320,10 @@ static int sprd_panel_enable(struct drm_panel *p)
 		panel->backlight->props.state &= ~BL_CORE_FBBLANK;
 		backlight_update_status(panel->backlight);
 	}
+#ifdef CONFIG_BL_I2C_CTRL
+	if (true == check_aw99703_probed())
+		aw99703_sleepout();
+#endif
 
 	if (panel->info.esd_check_en) {
 		schedule_delayed_work(&panel->esd_work,
