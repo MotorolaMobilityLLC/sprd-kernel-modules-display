@@ -25,6 +25,11 @@ extern bool check_aw99703_probed(void);
 extern int aw99703_sleepin(void);
 extern int aw99703_sleepout(void);
 #endif
+
+#ifdef CONFIG_GOODIX_FINGERPRINT_CTRL
+extern void gf_fb_set_screen_status(bool st);
+#endif
+
 #ifdef CONFIG_HBM_SUPPORT
 bool g_hbm_enable = false;
 EXPORT_SYMBOL(g_hbm_enable);
@@ -299,6 +304,9 @@ static int sprd_panel_disable(struct drm_panel *p)
 			     panel->info.cmds_len[CMD_CODE_SLEEP_IN]);
 
 	panel->enabled = false;
+#ifdef CONFIG_GOODIX_FINGERPRINT_CTRL
+	gf_fb_set_screen_status(false);
+#endif
 	mutex_unlock(&panel->lock);
 
 	return 0;
@@ -333,6 +341,9 @@ static int sprd_panel_enable(struct drm_panel *p)
 
 	panel->enabled = true;
 	panel->info.vrefresh_cmd_changed = true;
+#ifdef CONFIG_GOODIX_FINGERPRINT_CTRL
+	gf_fb_set_screen_status(true);
+#endif
 	mutex_unlock(&panel->lock);
 
 	return 0;
