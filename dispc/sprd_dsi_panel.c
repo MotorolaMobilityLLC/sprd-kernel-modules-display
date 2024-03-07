@@ -883,7 +883,7 @@ static int sprd_oled_set_brightness(struct backlight_device *bdev)
 		if (strncmp(panel_name, "lcd_ili9883c_txd_120hz_mipi_hd", strlen(panel_name)) == 0)
 			brightness = ((bdev->props.brightness * 40)+50)/51;
 		else if(strncmp(panel_name, "lcd_td4160_tcl_120hz_mipi_hd", strlen(panel_name)) == 0)
-			brightness = ((bdev->props.brightness * 41)+50)/51;
+			brightness = ((bdev->props.brightness * 40)+50)/51;
 		else if(strncmp(panel_name, "lcd_nt36528_dj_120hz_mipi_hd", strlen(panel_name)) == 0)
 			brightness = ((bdev->props.brightness * 41)+50)/51;
 		else
