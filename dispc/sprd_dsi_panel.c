@@ -1235,6 +1235,11 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	else
 		info->use_dcs = false;
 
+	if (of_property_read_bool(lcd_node, "sprd,need-execute-shutdown"))
+		info->need_execute_shutdown = true;
+	else
+		info->need_execute_shutdown = false;
+
 	rc = of_parse_reset_seq(lcd_node, info);
 	if (rc)
 		DRM_ERROR("parse lcd reset sequence failed\n");

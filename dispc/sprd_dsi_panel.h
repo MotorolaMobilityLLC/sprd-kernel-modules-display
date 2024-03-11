@@ -120,6 +120,8 @@ struct panel_info {
 
 	/* pixelpll config parameters */
 	bool dpi_clk_pixelpll;
+	/* shutdown config parameters */
+	bool need_execute_shutdown;
 };
 
 struct sprd_panel {

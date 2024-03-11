@@ -15,6 +15,7 @@
 #include <linux/timer.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
+#include <linux/gpio/consumer.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc_helper.h>
@@ -1065,6 +1066,44 @@ static int sprd_dpu_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void sprd_dpu_shutdown(struct platform_device *pdev)
+{
+	struct sprd_dpu *dpu;
+	struct sprd_panel *panel;
+	DRM_INFO("%s() start\n", __func__);
+	if (!pdev) {
+		DRM_ERROR("pdev Invalid device!\n");
+		return;
+	}
+	dpu = platform_get_drvdata(pdev);
+	if (dpu == NULL || dpu->dsi->panel == NULL) {
+		DRM_ERROR("Invalid device!\n");
+		return;
+	}
+	panel = container_of(dpu->dsi->panel, struct sprd_panel, base);
+	DRM_INFO("%s():need_execute_shutdown=%d\n", __func__, panel->info.need_execute_shutdown);
+	if (!panel->info.need_execute_shutdown) {
+		return;
+	}
+	if (panel->info.reset_gpio) {
+		gpiod_direction_output(panel->info.reset_gpio, 0);
+		mdelay(3);
+	}
+
+	if (panel->info.avee_gpio) {
+		gpiod_direction_output(panel->info.avee_gpio, 0);
+		mdelay(5);
+	}
+
+	if (panel->info.avdd_gpio) {
+		gpiod_direction_output(panel->info.avdd_gpio, 0);
+		mdelay(5);
+	}
+
+	regulator_disable(panel->supply);
+	DRM_INFO("%s() end\n", __func__);
+}
+
 struct platform_driver sprd_dpu_driver = {
 	.probe = sprd_dpu_probe,
 	.remove = sprd_dpu_remove,
@@ -1072,6 +1111,7 @@ struct platform_driver sprd_dpu_driver = {
 		.name = "sprd-dpu-drv",
 		.of_match_table = dpu_match_table,
 	},
+	.shutdown = sprd_dpu_shutdown,
 };
 
 MODULE_AUTHOR("Leon He <leon.he@unisoc.com>");
