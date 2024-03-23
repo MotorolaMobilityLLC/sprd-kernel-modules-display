@@ -20,6 +20,7 @@
 #define MIN_OUTPUT_FREQ			(100)
 
 #define AVERAGE(a, b) (min(a, b) + abs((b) - (a)) / 2)
+extern char panel_name[50];
 
 enum TIMING {
 	NONE,
@@ -316,6 +317,20 @@ FAIL:
 	return -1;
 }
 
+static void mipi_drive_capability_config(struct regmap *regmap, struct dphy_context *ctx)
+{
+	if(ctx->capability){
+		if(strncmp(panel_name, "lcd_nt36528_dj_120hz_mipi_hd", strlen(panel_name)) == 0)
+			regs._25.bits.ldoop4_sel = 6;
+		else
+			regs._25.bits.ldoop4_sel = ctx->capability;
+		regmap_write(regmap, 0x25, regs._25.val);
+		pr_info("set mipi drive capability to %x\n", regs._25.bits.ldoop4_sel);
+	} else
+		pr_info("set mipi drive capability to default");
+}
+
+
 static int dphy_pll_config(struct dphy_context *ctx)
 {
 	int ret;
@@ -331,6 +346,9 @@ static int dphy_pll_config(struct dphy_context *ctx)
 	if (ret)
 		goto FAIL;
 
+	if(strncmp(panel_name, "lcd_nt36528_dj_120hz_mipi_hd", strlen(panel_name)) == 0) {
+		mipi_drive_capability_config(regmap, ctx);
+	}
 	return 0;
 
 FAIL:

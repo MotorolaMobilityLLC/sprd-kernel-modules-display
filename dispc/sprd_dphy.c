@@ -215,6 +215,9 @@ static int sprd_dphy_context_init(struct sprd_dphy *dphy,
 	if (!of_property_read_u32(np, "dev-id", &tmp))
 		dphy->ctx.id = tmp;
 
+	if (!of_property_read_u32(np, "sprd,mipi-drive-capability", &tmp))
+		dphy->ctx.capability = tmp;
+
 	if (of_property_read_bool(np, "sprd,ulps-disabled"))
 		dphy->ctx.ulps_enable = false;
 	else

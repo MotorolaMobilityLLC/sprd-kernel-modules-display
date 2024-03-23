@@ -35,8 +35,9 @@ bool g_hbm_enable = false;
 EXPORT_SYMBOL(g_hbm_enable);
 unsigned int g_last_level = 32;
 struct backlight_device *g_bdev;
-char panel_name[50] = {0};
 #endif
+char panel_name[50] = {0};
+EXPORT_SYMBOL(panel_name);
 #define SPRD_MIPI_DSI_FMT_DSC 0xff
 
 #define host_to_dsi(host) \
