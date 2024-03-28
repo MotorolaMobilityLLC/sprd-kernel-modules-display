@@ -1089,6 +1089,10 @@ static void sprd_dpu_shutdown(struct platform_device *pdev)
 		gpiod_direction_output(panel->info.reset_gpio, 0);
 		mdelay(3);
 	}
+	if (panel->info.tp_pull_flag) {
+		gpiod_direction_output(panel->info.tp_reset_gpio, 0);
+		mdelay(2);
+	}
 
 	if (panel->info.avee_gpio) {
 		gpiod_direction_output(panel->info.avee_gpio, 0);

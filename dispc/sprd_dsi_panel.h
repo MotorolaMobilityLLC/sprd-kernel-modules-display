@@ -122,6 +122,9 @@ struct panel_info {
 	bool dpi_clk_pixelpll;
 	/* shutdown config parameters */
 	bool need_execute_shutdown;
+	/* tp reset config */
+	bool tp_pull_flag;
+	struct gpio_desc *tp_reset_gpio;
 };
 
 struct sprd_panel {

@@ -163,6 +163,11 @@ static int sprd_panel_unprepare(struct drm_panel *p)
 				}
 			}
 
+			if (panel->info.tp_pull_flag) {
+				gpiod_direction_output(panel->info.tp_reset_gpio, 0);
+				mdelay(2);
+			}
+
 			if (panel->info.avee_gpio) {
 				gpiod_direction_output(panel->info.avee_gpio, 0);
 				mdelay(5);
@@ -254,6 +259,11 @@ static int sprd_panel_prepare(struct drm_panel *p)
 		if (panel->info.avee_gpio) {
 			gpiod_direction_output(panel->info.avee_gpio, 1);
 			mdelay(5);
+		}
+
+		if (panel->info.tp_pull_flag) {
+			gpiod_direction_output(panel->info.tp_reset_gpio, 1);
+			mdelay(2);
 		}
 
 		if (panel->info.reset_gpio) {
@@ -718,6 +728,13 @@ static int sprd_panel_gpio_request(struct device *dev,
 	if (IS_ERR_OR_NULL(panel->info.reset_gpio))
 		DRM_WARN("can't get panel reset gpio: %ld\n",
 				 PTR_ERR(panel->info.reset_gpio));
+	if (panel->info.tp_pull_flag) {
+		panel->info.tp_reset_gpio = devm_gpiod_get_optional(dev,
+						"tp-reset", GPIOD_ASIS);
+		if (IS_ERR_OR_NULL(panel->info.tp_reset_gpio))
+			DRM_WARN("can't get panel tp reset gpio: %ld\n",
+					PTR_ERR(panel->info.tp_reset_gpio));
+	}
 
 	return 0;
 }
@@ -1240,6 +1257,11 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 		info->need_execute_shutdown = true;
 	else
 		info->need_execute_shutdown = false;
+
+	if (of_property_read_bool(lcd_node, "ontim,tp-reset-flag"))
+		info->tp_pull_flag = true;
+	else
+		info->tp_pull_flag = false;
 
 	rc = of_parse_reset_seq(lcd_node, info);
 	if (rc)
