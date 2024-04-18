@@ -423,6 +423,24 @@ static ssize_t resume_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(resume);
 
+#ifdef CONFIG_PANEL_QRCODE_READ
+static ssize_t panel_qrcode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sprd_panel *panel = dev_get_drvdata(dev);
+	struct panel_info *info = &panel->info;
+	int ret;
+
+	if (!info->panel_qrcode)
+		return snprintf(buf, PAGE_SIZE, "%s\n", "null");
+
+	ret = snprintf(buf, PAGE_SIZE, "%s\n", info->panel_qrcode);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(panel_qrcode);
+#endif
+
 static struct attribute *panel_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_lane_num.attr,
@@ -439,6 +457,9 @@ static struct attribute *panel_attrs[] = {
 	&dev_attr_esd_check_value.attr,
 	&dev_attr_suspend.attr,
 	&dev_attr_resume.attr,
+#ifdef CONFIG_PANEL_QRCODE_READ
+	&dev_attr_panel_qrcode.attr,
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(panel);

@@ -31,6 +31,9 @@ enum {
 	CMD_CODE_RESERVED3,
 	CMD_CODE_RESERVED4,
 	CMD_CODE_RESERVED5,
+#ifdef CONFIG_PANEL_QRCODE_READ
+	CMD_QRCODE_CODE,
+#endif
 	CMD_CODE_MAX,
 };
 
@@ -70,6 +73,18 @@ struct reset_sequence {
 	u32 items;
 	struct gpio_timing *timing;
 };
+
+#ifdef CONFIG_PANEL_QRCODE_READ
+struct qrcode_content {
+	u32 reg;
+	u32 num;
+};
+
+struct qrcode_reg {
+	u32 items;
+	struct qrcode_content *content;
+};
+#endif
 
 struct panel_info {
 	/* common parameters */
@@ -125,6 +140,11 @@ struct panel_info {
 	/* tp reset config */
 	bool tp_pull_flag;
 	struct gpio_desc *tp_reset_gpio;
+#ifdef CONFIG_PANEL_QRCODE_READ
+	struct qrcode_reg qrcode_reg_read;
+	bool qrcode_read_flag;
+	char *panel_qrcode;
+#endif
 };
 
 struct sprd_panel {
@@ -138,6 +158,9 @@ struct sprd_panel {
 	struct regulator *supply;
 	struct delayed_work esd_work;
 	bool esd_work_pending;
+#ifdef CONFIG_PANEL_QRCODE_READ
+	struct delayed_work qrcode_work;
+#endif
 	struct mutex lock;
 	bool enabled;
 	bool is_esd_rst;

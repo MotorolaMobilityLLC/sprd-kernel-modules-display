@@ -473,6 +473,125 @@ static const struct drm_panel_funcs sprd_panel_funcs = {
 	.unprepare = sprd_panel_unprepare,
 };
 
+#ifdef CONFIG_PANEL_QRCODE_READ
+static int of_parse_qrcode_reg(struct device_node *np, struct panel_info *info)
+{
+	struct property *prop;
+	int bytes, rc;
+	u32 *p;
+
+	prop = of_find_property(np, "sprd,qrcode-reg", &bytes);
+	if (!prop) {
+		DRM_ERROR("sprd,qrcode-reg property not found\n");
+		return -EINVAL;
+	}
+
+	p = kzalloc(bytes, GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
+	rc = of_property_read_u32_array(np, "sprd,qrcode-reg", p, bytes / 4);
+	if (rc) {
+		DRM_ERROR("parse sprd,qrcode-reg failed\n");
+		kfree(p);
+		return rc;
+	}
+
+	info->qrcode_reg_read.items = bytes / 8;
+	info->qrcode_reg_read.content = (struct qrcode_content *)p;
+
+	return 0;
+}
+
+static void sprd_panel_qrcode_func(struct work_struct *work)
+{
+	struct sprd_panel *panel = container_of(work, struct sprd_panel, qrcode_work.work);
+	struct mipi_dsi_host *host = panel->slave->host;
+	struct sprd_dsi *dsi = host_to_dsi(host);
+	struct drm_connector *connector = &dsi->connector;
+	struct panel_info *info = &panel->info;
+	struct sprd_dpu *dpu;
+	struct qrcode_content *content;
+	bool crtc_active_state;
+	u8 *read_buf = NULL;
+	int i, items;
+	int count = 0, len = 0;
+	char *buf = NULL;
+
+	crtc_active_state = sprd_check_crtc_active_state(connector->dev, 0);
+	if (!crtc_active_state) {
+		DRM_INFO("skip qrcode read during panel suspend\n");
+		return;
+	}
+
+	if (!dsi->ctx.enabled) {
+		DRM_WARN("dsi is not initialized，skip qrcode read\n");
+		return;
+	}
+
+	mutex_lock(&panel->lock);
+	if (!panel->enabled) {
+		DRM_INFO("panel is not enabled, skip qrcode read");
+		mutex_unlock(&panel->lock);
+		return;
+	}
+
+	dpu = dsi->dpu;
+	mutex_lock(&dpu->ctx.vrr_lock);
+
+	items = info->qrcode_reg_read.items;
+	content = info->qrcode_reg_read.content;
+	for (i = 0; i < items; i++) {
+		len += content[i].num;
+	}
+	len = (len + 1) * sizeof(char);
+
+	buf = kzalloc(len, GFP_KERNEL);
+	if (!buf) {
+		DRM_ERROR("Failed to allocate memory for qrcode buffer (len = %d)\n", len);
+		goto unlock_and_return;
+	}
+
+	read_buf = kzalloc(len * sizeof(u8), GFP_KERNEL);
+	if (!read_buf) {
+		DRM_ERROR("Failed to allocate memory for read_buf (len = %d)\n", len);
+		goto free_buf_and_return;
+	}
+
+	DRM_INFO("qrcode kmalloc buf len = %d\n", len);
+	if (info->cmds[CMD_QRCODE_CODE] != NULL) {
+		DRM_INFO("qrcode sprd_panel_send_cmds run\n");
+		sprd_panel_send_cmds(panel->slave,
+				info->cmds[CMD_QRCODE_CODE],
+				info->cmds_len[CMD_QRCODE_CODE]);
+	}
+
+	DRM_INFO("qrcode read_buf size = %ld\n", len * sizeof(u8));
+	for (i = 0; i < items; i++) {
+		mipi_dsi_set_maximum_return_packet_size(panel->slave, content[i].num);
+		mipi_dsi_dcs_read(panel->slave, content[i].reg, read_buf, content[i].num);
+		memcpy(buf + count, read_buf, content[i].num);
+		count += content[i].num;
+	}
+	buf[count] = '\0';
+	DRM_INFO("qrcode count = %d, buf = %s\n", count, buf);
+	if (strncmp(panel_name, "lcd_td4376_tm_120hz_mipi_fhd", strlen(panel_name)) == 0)
+		info->panel_qrcode = buf+4;
+	else
+		info->panel_qrcode = buf;
+
+	kfree(read_buf);
+	mutex_unlock(&dpu->ctx.vrr_lock);
+	mutex_unlock(&panel->lock);
+	return;
+
+free_buf_and_return:
+	kfree(buf);
+unlock_and_return:
+	mutex_unlock(&dpu->ctx.vrr_lock);
+	mutex_unlock(&panel->lock);
+}
+#endif
+
 static int sprd_panel_esd_check(struct sprd_panel *panel)
 {
 	struct mipi_dsi_host *host = panel->slave->host;
@@ -1267,6 +1386,24 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	if (rc)
 		DRM_ERROR("parse lcd reset sequence failed\n");
 
+#ifdef CONFIG_PANEL_QRCODE_READ
+	if (of_property_read_bool(lcd_node, "ontim,qrcode-read-flag"))
+		info->qrcode_read_flag = true;
+	else
+		info->qrcode_read_flag = false;
+
+	if (info->qrcode_read_flag) {
+		rc = of_parse_qrcode_reg(lcd_node, info);
+		if (rc)
+			DRM_ERROR("parse lcd qrcode reg failed\n");
+		p = of_get_property(lcd_node, "sprd,qrcode-read-command", &bytes);
+		if (p) {
+			info->cmds[CMD_QRCODE_CODE] = p;
+			info->cmds_len[CMD_QRCODE_CODE] = bytes;
+		} else
+			DRM_WARN("can't find sprd,qrcode-read-command property\n");
+	}
+#endif
 	p = of_get_property(lcd_node, "sprd,initial-command", &bytes);
 	if (p) {
 		info->cmds[CMD_CODE_INIT] = p;
@@ -1467,6 +1604,11 @@ static int sprd_panel_probe(struct mipi_dsi_device *slave)
 		return ret;
 	}
 
+#ifdef CONFIG_PANEL_QRCODE_READ
+	if (panel->info.qrcode_read_flag)
+		INIT_DELAYED_WORK(&panel->qrcode_work, sprd_panel_qrcode_func);
+#endif
+
 	ret = sprd_panel_gpio_request(&slave->dev, panel);
 	if (ret) {
 		DRM_WARN("gpio is not ready, panel probe deferred\n");
@@ -1523,7 +1665,11 @@ static int sprd_panel_probe(struct mipi_dsi_device *slave)
 		panel->esd_work_pending = true;
 	}
 	panel->enabled = true;
-
+#ifdef CONFIG_PANEL_QRCODE_READ
+	if (panel->info.qrcode_read_flag)
+		schedule_delayed_work(&panel->qrcode_work,
+				      msecs_to_jiffies(15000));
+#endif
 	mutex_init(&panel->lock);
 
 	return 0;
