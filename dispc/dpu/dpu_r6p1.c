@@ -307,17 +307,17 @@
 
 /* enhance config bits */
 #define BIT_DPU_ENHANCE_EN				BIT(0)
-#define GAMMA_LUT_MODE					2
+#define GAMMA_LUT_MODE					5
 #define HSV_LUT_MODE					3
-#define LUT3D_MODE					5
+#define LUT3D_MODE					8
 #define LUT3D_MAX_INDEX					8
 #define LUTS_SIZE_4K					(GAMMA_LUT_MODE + HSV_LUT_MODE + LUT3D_MODE * 6)
 #define LUTS_COPY_TIME					(LUTS_SIZE_4K * 2)
 #define DPU_LUTS_SIZE					(LUTS_SIZE_4K * 4096)
 #define DPU_LUTS_SLP_OFFSET				0
 #define DPU_LUTS_GAMMA_OFFSET				4096
-#define DPU_LUTS_HSV_OFFSET				(4096 * 3)
-#define DPU_LUTS_LUT3D_OFFSET				(4096 * 6)
+#define DPU_LUTS_HSV_OFFSET				(DPU_LUTS_GAMMA_OFFSET + 4096 * (GAMMA_LUT_MODE))
+#define DPU_LUTS_LUT3D_OFFSET				(DPU_LUTS_HSV_OFFSET + 4096 * (HSV_LUT_MODE))
 #define CABC_BL_COEF					1020
 
 #define REG_DSC_STS1			0x60
