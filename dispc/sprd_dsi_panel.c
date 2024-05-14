@@ -905,7 +905,7 @@ static int sprd_oled_set_brightness(struct backlight_device *bdev)
 		else if(strncmp(panel_name, "lcd_nt36528_dj_120hz_mipi_hd", strlen(panel_name)) == 0)
 			brightness = ((bdev->props.brightness * 41)+50)/51;
 		else
-			brightness = ((bdev->props.brightness*80)+21)/100;
+			brightness = bdev->props.brightness;
 		g_last_level  = bdev->props.brightness;
 		DRM_INFO("%s brightness: %d, g_last_level: %d\n", __func__, brightness, g_last_level);
 	}

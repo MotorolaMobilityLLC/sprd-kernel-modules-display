@@ -604,6 +604,12 @@ static struct dpu_dsc_cfg dsc_cfg[] = {
 		.dsc_en = 1,
 		.dsc_mode = 3,
 	},
+	{
+		.name = "lcd_icnl9922c_boe_120hz_mipi_fhd",
+		.dual_dsi_en = 0,
+		.dsc_en = 1,
+		.dsc_mode = 4,
+	},
 };
 
 static void dpu_sr_config(struct dpu_context *ctx);
@@ -1538,10 +1544,6 @@ static int dpu_config_dsc_param(struct dpu_context *ctx)
 		break;
 
 	default:
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_GRP_SIZE), 0x000000f0);
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_SLICE_SIZE), 0x04096000);
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG1), 0x000ae4bd);
-		DPU_REG_WR(ctx->base + DSC_REG(REG_DSC_CFG2), 0x0008000a);
 		break;
 	}
 
