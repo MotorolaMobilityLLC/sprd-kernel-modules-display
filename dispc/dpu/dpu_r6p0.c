@@ -610,6 +610,12 @@ static struct dpu_dsc_cfg dsc_cfg[] = {
 		.dsc_en = 1,
 		.dsc_mode = 4,
 	},
+	{
+		.name = "lcd_td4376_tm_120hz_mipi_fhd",
+		.dual_dsi_en = 0,
+		.dsc_en = 1,
+		.dsc_mode = 4,
+	},
 };
 
 static void dpu_sr_config(struct dpu_context *ctx);
