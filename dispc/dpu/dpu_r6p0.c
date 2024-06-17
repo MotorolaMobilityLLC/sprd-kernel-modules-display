@@ -3945,7 +3945,7 @@ static int dpu_modeset(struct dpu_context *ctx,
 static void dpu_capability(struct dpu_context *ctx,
 			struct sprd_crtc_capability *cap)
 {
-	cap->max_layers = 6;
+	cap->max_layers = 4;
 	cap->fmts_ptr = primary_fmts;
 	cap->fmts_cnt = ARRAY_SIZE(primary_fmts);
 }
