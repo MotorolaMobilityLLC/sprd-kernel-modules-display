@@ -76,6 +76,32 @@ static ssize_t panel_fps_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(panel_fps);
 
+static ssize_t max_fps_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    struct sprd_panel *panel = dev_get_drvdata(dev);
+    struct panel_info *info = &panel->info;
+    int ret, i;
+    u32 fps, max_fps;
+
+    if (!info->num_buildin_modes) {
+        ret = snprintf(buf, PAGE_SIZE, "%u\n", 0);
+        return ret;
+    }
+
+    max_fps = drm_mode_vrefresh(&info->buildin_modes[0]);
+    for (i = 1; i < info->num_buildin_modes; i++) {
+        fps = drm_mode_vrefresh(&info->buildin_modes[i]);
+        if (max_fps < fps)
+            max_fps = fps;
+    }
+
+    ret = snprintf(buf, PAGE_SIZE, "%u\n", max_fps);
+
+    return ret;
+}
+static DEVICE_ATTR_RO(max_fps);
+
 static ssize_t pixel_clock_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -447,6 +473,7 @@ static struct attribute *panel_attrs[] = {
 	&dev_attr_resolution.attr,
 	&dev_attr_screen_size.attr,
 	&dev_attr_panel_fps.attr,
+	&dev_attr_max_fps.attr,
 	&dev_attr_pixel_clock.attr,
 	&dev_attr_hporch.attr,
 	&dev_attr_vporch.attr,
