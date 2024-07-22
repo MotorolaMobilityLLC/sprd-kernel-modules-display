@@ -145,6 +145,8 @@ struct panel_info {
 	bool qrcode_read_flag;
 	char *panel_qrcode;
 #endif
+	bool need_vblank_adj;
+	uint32_t vblank_adj_val;
 };
 
 struct sprd_panel {

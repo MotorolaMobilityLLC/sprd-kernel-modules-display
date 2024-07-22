@@ -1439,6 +1439,19 @@ int sprd_panel_parse_lcddtb(struct device_node *lcd_node,
 	} else
 		DRM_INFO("can't find sprd,doze-out-command property\n");
 
+	if (of_property_read_bool(lcd_node, "sprd,need-vblank-adj")) {
+		info->need_vblank_adj = true;
+	} else {
+		info->need_vblank_adj = false;
+	}
+
+	rc = of_property_read_u32(lcd_node, "sprd,vblank-adj-val", &val);
+	if (!rc) {
+		info->vblank_adj_val = val;
+	} else {
+		info->vblank_adj_val = 0;
+	}
+
 	rc = of_get_drm_display_mode(lcd_node, &info->mode, 0,
 				     OF_USE_NATIVE_MODE);
 	if (rc) {

@@ -2609,6 +2609,9 @@ static void dpu_dpi_init(struct dpu_context *ctx)
 		if (ctx->is_single_run)
 			DPU_REG_SET(ctx->base + REG_DPI_CTRL, (BIT(0)));
 
+		if (panel->info.need_vblank_adj)
+			DPU_REG_SET(ctx->base + REG_DPI_CTRL, (BIT(20) | ((panel->info.vblank_adj_val) << 24)));
+
 		/* set dpi timing */
 		reg_val = vm.hsync_len << 0 |
 			  vm.hback_porch << 8 |
