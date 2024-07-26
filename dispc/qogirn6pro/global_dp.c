@@ -30,6 +30,7 @@
 
 #define REG_TCA_SIZE 0x20
 #define REG_DPU1_DPI_SIZE 0x4
+#define PD_DPU_DP_STATE 0x1F0000
 
 #define MASK_USB_DP_AUX_PHY_PWDNB 0x400
 #define MASK_USB_DP_PHY0_SRAM_INIT_DONE 0x4
@@ -142,11 +143,26 @@ static void dp_reset(struct dp_context *ctx)
 static void dp_detect(struct dp_context *ctx, int hpd_status)
 {
 	u32 reg = 0, mask;
+	int count = 0;
 	struct sprd_dp *dp = container_of(ctx, struct sprd_dp, ctx);
 
 	if (hpd_status == DP_HOT_PLUG) {
 		mask = MASK_PMU_APB_PD_DPU_DP_FORCE_SHUTDOWN;
 		regmap_update_bits(ctx->force_shutdown, REG_PMU_APB_PD_DPU_DP_CFG_0, mask, 0);
+
+		while (1) {
+			regmap_read(ctx->force_shutdown, REG_PMU_APB_PWR_STATUS_DBG_22, &reg);
+			if (!(reg & PD_DPU_DP_STATE))
+				break;
+
+			count++;
+			if (count > 50000) {
+				pr_err("PD_DPU_DP_STATE is 1\n");
+				return;
+			}
+
+			udelay(1);
+		}
 
 		/* bypass hdcp */
 		regmap_write(ctx->ipa_dispc1_glb_apb, REG_DISPC1_GLB_APB_DPTX_CTRL, 0x1);
